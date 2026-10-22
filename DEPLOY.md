@@ -43,6 +43,7 @@ It is interactive; answer: region **asia-southeast1**, GitHub repo **qa-statusq/
 (if it is not offered, add the repo to the Firebase GitHub app's allowed repositories first),
 root directory **/**, branch **main**, backend id **factotasks**, automatic rollouts **yes**.
 The panel's URL becomes `https://factotasks--pf-balance-vspl.asia-southeast1.hosted.app`.
+Backend `factotasks` was created on 2026-10-22; rollouts run automatically on every push to `main`.
 
 ## 4. Secrets (run once each; paste the value from `.env.local`)
 ```powershell
