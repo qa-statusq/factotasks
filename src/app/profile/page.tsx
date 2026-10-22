@@ -39,9 +39,11 @@ export default function ProfilePage() {
 function AccountCard() {
   const { me } = useSession();
   const { toast } = useToast();
-  const [first, setFirst] = useState("");
-  const [last, setLast] = useState("");
-  const [title, setTitle] = useState("");
+  // Start from the loaded profile (the page only renders this card once the
+  // session is in), and follow later changes to it.
+  const [first, setFirst] = useState(me?.first_name || "");
+  const [last, setLast] = useState(me?.last_name || "");
+  const [title, setTitle] = useState(me?.title || "");
   const [busy, setBusy] = useState(false);
   useOnChange(`${me?.first_name}|${me?.last_name}|${me?.title}`, () => {
     setFirst(me?.first_name || "");
