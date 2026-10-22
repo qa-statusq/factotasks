@@ -1,0 +1,54 @@
+import { NextRequest, NextResponse, after } from "next/server";
+import { requireAccessUser } from "@/lib/guard";
+import { getSupabase } from "@/lib/supabase";
+import { ok, fail, serverError, readJsonObject } from "@/lib/api";
+import { logActivity } from "@/lib/activity";
+import { cleanLine, isUniqueViolation, isUuid, parseUuidList } from "@/lib/validate";
+import { SERIES_NAME_MAX } from "@/lib/meetings";
+
+export const dynamic = "force-dynamic";
+
+/** Rename / change the scope (admin). Colours are automatic. */
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const u = await requireAccessUser();
+  if (u instanceof NextResponse) return u;
+  if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
+  const { id } = await params;
+  if (!isUuid(id)) return fail("Series not found", 404);
+  const b = await readJsonObject(req);
+  const patch: Record<string, unknown> = {};
+  if ("name" in b) {
+    const name = cleanLine(b.name, SERIES_NAME_MAX);
+    if (!name) return fail("Name can't be empty");
+    patch.name = name;
+  }
+  if ("include_general" in b) patch.include_general = b.include_general === true;
+  if ("app_ids" in b) {
+    const ids = parseUuidList(b.app_ids, 50);
+    if (ids === null) return fail("Invalid app list");
+    patch.app_ids = ids;
+  }
+  if (!Object.keys(patch).length) return fail("Nothing to update");
+  const { data, error } = await getSupabase().from("meeting_series").update(patch).eq("id", id).select("id, name").maybeSingle();
+  if (error) return isUniqueViolation(error) ? fail("A series with that name already exists", 409) : serverError(error);
+  if (!data) return fail("Series not found", 404);
+  after(() => logActivity({ action: "meeting.series.update", entityType: "meeting_series", entityId: id, summary: `Updated meeting series “${data.name}”` }));
+  return ok();
+}
+
+/** Delete a series (admin). Its meetings are kept and simply lose the series. */
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const u = await requireAccessUser();
+  if (u instanceof NextResponse) return u;
+  if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
+  const { id } = await params;
+  if (!isUuid(id)) return fail("Series not found", 404);
+  const sb = getSupabase();
+  const { count } = await sb.from("meeting_series").select("id", { count: "exact", head: true });
+  if ((count ?? 0) <= 1) return fail("Keep at least one series");
+  const { data, error } = await sb.from("meeting_series").delete().eq("id", id).select("id, name").maybeSingle();
+  if (error) return serverError(error);
+  if (!data) return fail("Series not found", 404);
+  await logActivity({ action: "meeting.series.delete", entityType: "meeting_series", entityId: id, summary: `Deleted meeting series “${data.name}”` });
+  return ok();
+}

@@ -1,0 +1,18 @@
+{
+  // Standalone type-check config for `npm run typecheck`.
+  //
+  // The base tsconfig.json includes ".next/types/**/*.ts" because Next needs it
+  // (and rewrites tsconfig.json to re-add it if removed, so editing that file
+  // is not an option). Those files are GENERATED from the route tree and are
+  // NOT purged on rebuild — delete a route, rebuild, and `tsc --noEmit` still
+  // reports errors about the route's vanished source file. That is a stale
+  // build artifact reporting on code that no longer exists, and it cost real
+  // confusion once already.
+  //
+  // This config is identical to the base one except that it type-checks the
+  // SOURCE only. Route-signature validation is not lost — `next build` still
+  // performs it against the freshly generated types during its own check.
+  "extends": "./tsconfig.json",
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", ".next", "out", "build"]
+}

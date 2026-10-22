@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#ffffff" />
+<title>You're offline · FactoTasks</title>
+<!-- Everything on this page is inlined (images as data: URIs) — it must render
+     perfectly with ZERO network, on any browser or device. The favicon is the
+     grayscale brand mark, matching the in-app offline favicon swap. -->
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAADsOAAA7DgHMtqGDAAAEK0lEQVR42u1bW08TQRTeNzVR30wwvpnomyb+GG8/xxdNjC8kRoHu0rJbQDd0lwpWSiyBKi20IJdSCFgESgG3LcRESaRVxjkLlNZe9hrYne0kJxCS0vm+OdeZcyhK5eK4wNUOTnhMs4KLZsWYixOzNCcWsKBzloK8F9gTK3bQrO8RTfdfocxaHV3CbfyPGZoT9i0AVqUI+y5OoDu7+27pBs7z/CV82i+wFO0DvIZ2sOJzt9t9URN4YA6rVcLGwCuFFaPtnO+6KvB0V/+9Y/tGRAkrbro8/rtqTp488GUkuN18S03wYCcY/Cyx4E9JmAL/Vq364PBIB39KwpOqUGdzb6+VgJ8VpnAU5x0C/lRelTI8eyU55ghOlH7JGaOc3jrv9I9I8IoPKTm3dygBWNopKCLM+GdnvYrFPyib20OR2Bxy9/h1Z4igATk7ElC+8ns/UI/vg559SxABDuxOwAkJ2jVB+E2ZZU9WWGAOWvdNFAFSbtfZBBSKRYcTUCg2TcDRBDjaCUIY7Oz2O5MAA4mQfQkAjy9ld2W113Py506AVQqiJgFNApoENAmwTRSAS5Dv2TwaG59GjLffeQSUr43NHf03QaQkQgtLKWcT8PfwEPX6hpxLAKxwZNrZBMRnkk0NcLQP0FsFEhcFuLeDKBSO4epwHg2PRFWHSNsSsJ7eLpXBfQMhtI7zgq2dXEmWVzcQx78niwC4A9iR8mj081QpE+TFYTkpKgd/IrEvSbJrAcgBvm1s1wQPAsQQS4CXD6DUWqYueKIJYLHDAxtvBJ5YE/D0DqCllTVF8Km1TWs7wfLPMl4/+jg2ieaTX2WB3+Fv/38HeP3E0qoiePALamuEcycAvPnswkoViMRiqiKWMxj8bGJZETzYPUSGM0+EIETpecMbDIbrgjkhAUiKzywqgk9nJOR7F9KWCZrVIJHN7+l6wxvH9/qNQAEJE9MJRfCZbQn5A6M6GiRMapGBBwo9b3hwvaUEThl8Fg0Of9LXImNWkxSoKjxRaX3De+MLosyWZIiAYCiqv0lKHjMxyQ9AZdaIhHpveMGRiG7woXDcQMus0EbJMzYmXjPD6YKKg52DY1T7hjeESQBV1gI+HJkx2DMs3Kde8vxluW3UAnf0UMaqBR+NzxtulQXsR83SeMDIKg8VajQBQqLRdwEw/YpJEYuMwCmSMJdcqZklagR/wHT33ayYGYDpKiv18Q6FIlXRATJGI70AZd7/Wc2RGQgLViIBQiTkCeOTc3LGaMZzGB4LirS2Bi7UmRviW1yskCa2PZ4VtjyegRsNJ8dgtAymqwgEn+70indUzQ4yDH8Nf2CMnOkQMVJ3XK7eAjuB6Sqr5Ah6vT3++bSuzatZwBwMGNmJiOO9tleFOiNLzhjxjA3kz/gLJqCSMquUNuGUJdgTVvXXDCc8KGV4KtY/gwoP5h7dp+gAAAAASUVORK5CYII=" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    background: #ffffff; color: #1f2937; padding: 24px;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; text-align: center; user-select: none;
+  }
+  .wrap { display: flex; flex-direction: column; align-items: center; }
+  .logo { width: 72px; height: 72px; border-radius: 22%; display: block; }
+  .line {
+    display: flex; align-items: center; gap: 10px; margin-top: 44px;
+    font-size: 21px; font-weight: 400; letter-spacing: -0.01em; color: #1f2937;
+  }
+  .line svg { flex: none; color: #5f6b7c; }
+  .hint { margin-top: 14px; font-size: 13px; color: #94a3b8; }
+  @media (max-width: 480px) { .line { font-size: 18px; margin-top: 36px; } .logo { width: 64px; height: 64px; } }
+</style>
+</head>
+<body>
+  <main class="wrap" role="status" aria-live="polite">
+    <img class="logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAADsOAAA7DgHMtqGDAAAEK0lEQVR42u1bW08TQRTeNzVR30wwvpnomyb+GG8/xxdNjC8kRoHu0rJbQDd0lwpWSiyBKi20IJdSCFgESgG3LcRESaRVxjkLlNZe9hrYne0kJxCS0vm+OdeZcyhK5eK4wNUOTnhMs4KLZsWYixOzNCcWsKBzloK8F9gTK3bQrO8RTfdfocxaHV3CbfyPGZoT9i0AVqUI+y5OoDu7+27pBs7z/CV82i+wFO0DvIZ2sOJzt9t9URN4YA6rVcLGwCuFFaPtnO+6KvB0V/+9Y/tGRAkrbro8/rtqTp488GUkuN18S03wYCcY/Cyx4E9JmAL/Vq364PBIB39KwpOqUGdzb6+VgJ8VpnAU5x0C/lRelTI8eyU55ghOlH7JGaOc3jrv9I9I8IoPKTm3dygBWNopKCLM+GdnvYrFPyib20OR2Bxy9/h1Z4igATk7ElC+8ns/UI/vg559SxABDuxOwAkJ2jVB+E2ZZU9WWGAOWvdNFAFSbtfZBBSKRYcTUCg2TcDRBDjaCUIY7Oz2O5MAA4mQfQkAjy9ld2W113Py506AVQqiJgFNApoENAmwTRSAS5Dv2TwaG59GjLffeQSUr43NHf03QaQkQgtLKWcT8PfwEPX6hpxLAKxwZNrZBMRnkk0NcLQP0FsFEhcFuLeDKBSO4epwHg2PRFWHSNsSsJ7eLpXBfQMhtI7zgq2dXEmWVzcQx78niwC4A9iR8mj081QpE+TFYTkpKgd/IrEvSbJrAcgBvm1s1wQPAsQQS4CXD6DUWqYueKIJYLHDAxtvBJ5YE/D0DqCllTVF8Km1TWs7wfLPMl4/+jg2ieaTX2WB3+Fv/38HeP3E0qoiePALamuEcycAvPnswkoViMRiqiKWMxj8bGJZETzYPUSGM0+EIETpecMbDIbrgjkhAUiKzywqgk9nJOR7F9KWCZrVIJHN7+l6wxvH9/qNQAEJE9MJRfCZbQn5A6M6GiRMapGBBwo9b3hwvaUEThl8Fg0Of9LXImNWkxSoKjxRaX3De+MLosyWZIiAYCiqv0lKHjMxyQ9AZdaIhHpveMGRiG7woXDcQMus0EbJMzYmXjPD6YKKg52DY1T7hjeESQBV1gI+HJkx2DMs3Kde8vxluW3UAnf0UMaqBR+NzxtulQXsR83SeMDIKg8VajQBQqLRdwEw/YpJEYuMwCmSMJdcqZklagR/wHT33ayYGYDpKiv18Q6FIlXRATJGI70AZd7/Wc2RGQgLViIBQiTkCeOTc3LGaMZzGB4LirS2Bi7UmRviW1yskCa2PZ4VtjyegRsNJ8dgtAymqwgEn+70indUzQ4yDH8Nf2CMnOkQMVJ3XK7eAjuB6Sqr5Ah6vT3++bSuzatZwBwMGNmJiOO9tleFOiNLzhjxjA3kz/gLJqCSMquUNuGUJdgTVvXXDCc8KGV4KtY/gwoP5h7dp+gAAAAASUVORK5CYII=" alt="FactoTasks" />
+    <div class="line">
+      <svg id="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M1 1l22 22M9.36 5.05A7 7 0 0 1 18 11h1a4 4 0 0 1 2.33 7.25M6.16 6.16A7 7 0 0 0 6 11a4.5 4.5 0 0 0-1.4 8.77c.45.15.93.23 1.4.23h10" />
+      </svg>
+      <span id="msg">You&rsquo;re offline</span>
+    </div>
+    <p class="hint" id="hint">This page will refresh automatically when your connection returns.</p>
+  </main>
+
+<script>
+  // Auto-recovery, cross-browser and loop-safe. Two ways to land here:
+  //  1. The browser is offline  → the `online` event (or the onLine poll on
+  //     engines that drop the event) fires when connectivity returns.
+  //  2. The browser is online but the SERVER was unreachable → onLine never
+  //     changes, so we probe the server itself on a timer.
+  // Either way we reload ONLY after a real fetch to the app succeeds — a
+  // reload can never loop back to this page. One more guard: when the SW
+  // serves this page the URL stays the page the user WANTED (/apps, …), so
+  // reload re-fetches that page. But on a DIRECT visit to /offline.html the
+  // URL is this file itself — reloading would fetch it again forever, so
+  // direct visits leave for the dashboard instead.
+  (function () {
+    var msg = document.getElementById("msg"), hint = document.getElementById("hint"), ic = document.getElementById("ic");
+    var reloading = false, checking = false;
+    var direct = location.pathname.indexOf("/offline.html") === 0;
+
+    // Two ways to land here, with different truthful wording:
+    //  - the BROWSER is offline               → "You're offline"
+    //  - the browser is fine, the SERVER died → "Can't reach FactoTasks"
+    //    (network failure or a 5xx the service worker intercepted)
+    function wording() {
+      if (reloading) return;
+      if (navigator.onLine === false) {
+        msg.innerHTML = "You&rsquo;re offline";
+        hint.textContent = "This page will refresh automatically when your connection returns.";
+      } else {
+        msg.innerHTML = "Can&rsquo;t reach FactoTasks";
+        hint.textContent = "We're having a temporary hiccup. This page keeps retrying and will refresh by itself.";
+      }
+    }
+
+    function goodbye() {
+      if (reloading) return;
+      reloading = true;
+      msg.innerHTML = "Back online &mdash; refreshing&hellip;";
+      ic.style.display = "none";
+      hint.textContent = "";
+      setTimeout(function () {
+        if (direct) location.replace("/");
+        else location.reload();
+      }, 500);
+    }
+
+    // Probe the ACTUAL page the user wanted (not a synthetic path): we reload
+    // only once it answers with something below 500 — a 200, a login redirect,
+    // even a 404 all mean the app is alive and will render its own branded
+    // screen. A persistent 5xx keeps us here retrying, so the reload can never
+    // loop back into the service worker's fallback.
+    function probe() {
+      if (reloading || checking) return;
+      if (typeof fetch !== "function") return; // ancient engine: message-only, no auto-refresh
+      wording();
+      if (navigator.onLine === false) return; // radio is off — a fetch can't succeed
+      checking = true;
+      var ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+      var kill = ctl && setTimeout(function () { ctl.abort(); }, 4000);
+      fetch(location.pathname + location.search, { method: "HEAD", cache: "no-store", signal: ctl && ctl.signal })
+        .then(function (res) { if (res && res.status < 500) goodbye(); })
+        .catch(function () {})                     // still unreachable — keep waiting
+        .then(function () { checking = false; if (kill) clearTimeout(kill); });
+    }
+
+    window.addEventListener("online", probe);
+    window.addEventListener("offline", wording);
+    setInterval(probe, 4000);
+    probe();
+  })();
+</script>
+</body>
+</html>

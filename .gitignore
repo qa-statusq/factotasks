@@ -1,0 +1,32 @@
+node_modules
+.next
+out
+build
+.DS_Store
+*.pem
+
+# Secrets. The old rules were `.env` + `.env*.local`, which left real gaps:
+# `.env.production`, `.env.development` and — the one that actually happened —
+# `.env.local.bak` were all UNIGNORED, so a `git add -A` would have committed
+# a file containing every key. `.env.*` covers every suffix and every backup
+# of one; .env.example is the documented template and is re-included below.
+.env
+.env.*
+!.env.example
+
+# Editor / tooling backups and merge leftovers. Same reasoning: these are
+# copies of real files, so they carry whatever the original held.
+*.bak
+*.orig
+*.rej
+*~
+
+# Firebase CLI working state (deploy cache, emulator data, debug logs).
+.firebase
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+*.tsbuildinfo
+next-env.d.ts
+*.docx

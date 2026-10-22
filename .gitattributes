@@ -1,0 +1,22 @@
+# Line endings are declared by the repo, not by each machine's git config.
+#
+# Without this, `core.autocrlf=true` (the Windows default) converts LF to CRLF
+# on checkout, and every single `git add` prints
+#   "warning: in the working copy of '<file>', LF will be replaced by CRLF"
+# for every file it touches — pure noise that buries real warnings.
+#
+# LF everywhere: the repo already stores LF, this keeps the working copy the
+# same so there is nothing to convert and nothing to warn about. It also stops
+# line endings from depending on who checked the file out.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary

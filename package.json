@@ -1,0 +1,50 @@
+{
+  "name": "factotasks",
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
+    "verify": "npm run typecheck && npm run lint && npm run build",
+    "check": "node --env-file=.env.local scripts/check-setup.mjs",
+    "create-admin": "node --env-file=.env.local scripts/create-admin.mjs",
+    "favicon": "node scripts/make-icons.mjs",
+    "test-schema": "node scripts/test-schema.mjs",
+    "e2e": "node --env-file=.env.local scripts/e2e-api.mjs http://localhost:3000"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
+    "jose": "^6.2.12",
+    "next": "^16.3.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "web-push": "^3.6.7",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.3",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.1",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.4",
+    "postcss": "^8.5.28",
+    "sharp": "^0.35.3",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "postcss": "$postcss",
+    "sharp": "$sharp"
+  }
+}

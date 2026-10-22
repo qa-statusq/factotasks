@@ -1,0 +1,113 @@
+import { NextRequest, NextResponse, after } from "next/server";
+import { invalidateAuthCache, type SessionUser } from "@/lib/auth";
+import { passwordChangeRequired, resolveUser } from "@/lib/guard";
+import { getSupabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity";
+import { rateLimited } from "@/lib/rate-limit";
+import { serverError, readJsonObject } from "@/lib/api";
+import { cleanName, displayName } from "@/lib/name";
+import { cleanLine, isHexColor } from "@/lib/validate";
+import { LIMITS, USER_COLORS } from "@/lib/domain";
+
+export const dynamic = "force-dynamic";
+
+// If a valid session has been idle at least this long, the next visit counts
+// as a fresh "return" — recorded in Activity + last sign-in.
+const RETURN_AFTER_MS = 30 * 60 * 1000;
+
+const publicMe = (u: SessionUser) => ({
+  id: u.uid,
+  email: u.email,
+  role: u.role,
+  first_name: u.firstName ?? null,
+  last_name: u.lastName ?? null,
+  department: u.department ?? "other",
+  title: u.title ?? null,
+  color: u.color ?? USER_COLORS[0],
+});
+
+export async function GET() {
+  // A verification OUTAGE is a 503, never a 401: /me runs on every page load,
+  // and the client treats a 401 as proof the session is dead.
+  const { user: u, outage } = await resolveUser();
+  if (outage) return outage;
+  if (!u) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Record a return visit AFTER the response is sent — never on the latency
+  // path of every page load. The conditional update is race-safe.
+  const user = { uid: u.uid, email: u.email };
+  after(async () => {
+    try {
+      const sb = getSupabase();
+      const cutoff = new Date(Date.now() - RETURN_AFTER_MS).toISOString();
+      const { data: bumped } = await sb
+        .from("users")
+        .update({ last_login_at: new Date().toISOString() })
+        .eq("id", user.uid)
+        .lt("last_login_at", cutoff)
+        .select("id");
+      if (bumped && bumped.length) {
+        await logActivity({
+          action: "auth.login",
+          actor: { id: user.uid, email: user.email },
+          summary: "Returned to the panel (existing session)",
+          metadata: { kind: "session_resume" },
+        });
+      }
+    } catch {
+      /* best-effort */
+    }
+  });
+
+  return NextResponse.json({ user: publicMe(u) });
+}
+
+/**
+ * Self-service profile update: name, designation and avatar colour. The target
+ * row is ALWAYS the verified session's own uid; the update object is a fixed
+ * allowlist (role/email/department/password are unreachable here).
+ */
+export async function PATCH(req: NextRequest) {
+  const { user: u, outage } = await resolveUser();
+  if (outage) return outage;
+  if (!u) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (u.mc) return passwordChangeRequired();
+
+  const limited = await rateLimited(u.uid, "profile", 10, 60);
+  if (limited) return limited;
+
+  const b = await readJsonObject(req);
+  const update: Record<string, unknown> = {};
+  if ("first_name" in b || "last_name" in b) {
+    const first = cleanName(b.first_name);
+    const last = cleanName(b.last_name);
+    if (!first) return NextResponse.json({ error: "Enter your first name" }, { status: 400 });
+    update.first_name = first;
+    update.last_name = last || null;
+  }
+  if ("title" in b) update.title = cleanLine(b.title, LIMITS.userTitle) || null;
+  if ("color" in b) {
+    if (!isHexColor(b.color)) return NextResponse.json({ error: "Pick a valid colour" }, { status: 400 });
+    update.color = String(b.color).toLowerCase();
+  }
+  if (Object.keys(update).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+
+  const { error } = await getSupabase().from("users").update(update).eq("id", u.uid);
+  if (error) return serverError(error);
+  // The next /me (and every guard) must see the change immediately.
+  invalidateAuthCache(u.uid);
+  const merged: SessionUser = {
+    ...u,
+    firstName: (update.first_name as string | undefined) ?? u.firstName,
+    lastName: "last_name" in update ? (update.last_name as string | null) : u.lastName,
+    title: "title" in update ? (update.title as string | null) : u.title,
+    color: (update.color as string | undefined) ?? u.color,
+  };
+  await logActivity({
+    action: "user.profile",
+    entityType: "user",
+    entityId: u.uid,
+    summary: `Updated their profile${update.first_name ? ` (${displayName(merged.firstName, merged.lastName)})` : ""}`,
+  });
+  return NextResponse.json({ user: publicMe(merged) });
+}

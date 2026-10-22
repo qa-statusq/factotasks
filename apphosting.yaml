@@ -1,0 +1,64 @@
+# Firebase App Hosting configuration for FactoTasks (Next.js SSR).
+# Docs: https://firebase.google.com/docs/app-hosting/configure
+#
+# Non-sensitive values live inline below. Every SECRET is stored in Google
+# Cloud Secret Manager and referenced by name — set each one with:
+#   firebase apphosting:secrets:set <NAME>
+# then grant BOTH App Hosting service accounts access in one shot:
+#   firebase apphosting:secrets:grantaccess SUPABASE_SERVICE_ROLE_KEY,AUTH_SECRET,CRON_SECRET --backend factotasks
+# (see DEPLOY.md for the full, ordered checklist).
+#
+# NODE RUNTIME: App Hosting picks it from package.json "engines.node" (>=22).
+# Node 22.4+ ships a native global WebSocket, which is the only reason the
+# "ws" package exists in this project (supabase-js's constructor needs one);
+# src/instrumentation.ts loads it only when the global is absent (local Node 20).
+
+runConfig:
+  cpu: 1
+  memoryMiB: 1024
+  minInstances: 0   # scale to zero when idle = no idle cost (cold start on first hit)
+  maxInstances: 2
+  concurrency: 80
+
+env:
+  # ---- Non-sensitive (safe to commit) ----
+  - variable: NODE_ENV
+    value: production
+    availability:
+      - RUNTIME
+  - variable: SUPABASE_URL
+    value: https://twpmkrwnaygutevhqjpe.supabase.co
+    availability:
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_VAPID_PUBLIC_KEY
+    value: BGI0W230rulRmjiSwKMKGNWmAymaDQXzPluaqElvOsHYyQ8DF_OAvDqF_akrKaji-e_lRVS47QgSdACJeSgTUT8
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: VAPID_SUBJECT
+    value: mailto:admin@factohr.com
+    availability:
+      - RUNTIME
+
+  # ---- Secrets (stored in Secret Manager; names must match the secrets you create) ----
+  - variable: SUPABASE_SERVICE_ROLE_KEY
+    secret: SUPABASE_SERVICE_ROLE_KEY
+    availability:
+      - RUNTIME
+  - variable: AUTH_SECRET
+    secret: AUTH_SECRET
+    availability:
+      - RUNTIME
+  - variable: CRON_SECRET
+    secret: CRON_SECRET
+    availability:
+      - RUNTIME
+  - variable: VAPID_PRIVATE_KEY
+    secret: VAPID_PRIVATE_KEY
+    availability:
+      - RUNTIME
+
+# APP_PASSWORD / ADMIN_EMAIL / ADMIN_PASSWORD are deliberately NOT deployed:
+# the admin account is created once (locally via `npm run create-admin`, or the
+# first sign-in bootstrap), after which they are not needed anywhere.

@@ -1,0 +1,514 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   THEME — Tailwind v4 is configured in CSS, not tailwind.config.ts (which the
+   v4 engine no longer reads and which this migration deleted). Every token
+   below is a verbatim carry-over of what that file declared under
+   theme.extend, so the rendered design is unchanged; only where it lives moved.
+   @theme EXTENDS the default theme, exactly like theme.extend did, so the
+   stock palette (emerald, amber, red…) is still available.
+--------------------------------------------------------------------------- */
+@theme {
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: #f7f7f5; /* warm off-white workspace */
+  --color-surface: #ffffff;
+  --color-line: #e7e6e2;
+
+  --color-ink: #1c1c1a;
+  --color-ink-muted: #5c5c57;
+  --color-ink-subtle: #8c8c85;
+
+  /* Brand = ink. Primary actions are near-black, selection is a soft warm
+     grey, links are ink underlined — the calm, professional register of a
+     well-designed internal tool. Semantic colour (status, danger, success)
+     is the ONLY colour on the page, so it always means something. */
+  --color-brand-50: #f1f1ee;
+  --color-brand-100: #e6e6e1;
+  --color-brand-200: #d3d3cc;
+  --color-brand-300: #b4b4ab;
+  --color-brand-400: #8c8c85;
+  --color-brand-500: #5c5c57;
+  --color-brand-600: #1c1c1a;
+  --color-brand-700: #111110;
+  --color-brand-800: #0b0b0a;
+  --color-brand-900: #141413;
+
+  /* Layered, ambient "SaaS-grade" elevation scale. --shadow-xs deliberately
+     REPLACES v4's built-in xs, the same way theme.extend.boxShadow.xs did in
+     v3, so shadow-xs keeps meaning this exact value panel-wide. */
+  --shadow-xs: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
+  --shadow-card: 0 1px 2px 0 rgba(16, 24, 40, 0.04);
+  --shadow-card-hover: 0 4px 14px -6px rgba(16, 24, 40, 0.12);
+  --shadow-pop: 0 28px 64px -20px rgba(16, 24, 40, 0.25), 0 10px 24px -10px rgba(16, 24, 40, 0.1);
+
+  --radius-lg: 0.75rem;  /* 2.0: softer geometry panel-wide (was .625) */
+  --radius-xl: 1rem;     /* (was .875) */
+  --radius-2xl: 1.25rem; /* (was 1.125) */
+
+  --animate-fade-in: fade-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-pop-in: pop-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-scale-in: scale-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-slide-up: slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-toast-out: toast-out 0.22s ease-in forwards;
+  --animate-toast-in: toast-in 0.42s cubic-bezier(0.34, 1.4, 0.64, 1);
+  --animate-toast-rail: toast-rail linear forwards;
+  --animate-shimmer: shimmer 1.6s infinite;
+  --animate-slide-in-left: slide-in-left 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-slide-in-right: slide-in-right 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-offline-marquee: offline-marquee 16s linear infinite;
+  --animate-nav-progress: nav-progress 1s ease-in-out infinite;
+  --animate-card-in: card-in 2s ease-out;
+
+  @keyframes pop-in {
+    0% { opacity: 0; transform: scale(0.96); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes fade-in {
+    0% { opacity: 0; transform: translateY(4px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  /* Dialogs / popovers: subtle scale + fade from their origin. */
+  @keyframes scale-in {
+    0% { opacity: 0; transform: scale(0.96) translateY(6px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  /* Toasts rising from the bottom edge. */
+  @keyframes slide-up {
+    0% { opacity: 0; transform: translateY(12px) scale(0.98); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  /* Toast leaving: the exact mirror of slide-up, so dismissal reads as the
+     same motion in reverse instead of an abrupt vanish. */
+  @keyframes toast-out {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(10px) scale(0.96); }
+  }
+  /* Toast arriving: rises with a little overshoot, then settles. */
+  @keyframes toast-in {
+    0% { opacity: 0; transform: translateY(18px) scale(0.94); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  /* The time-left rail drains from full to empty over the toast's life. */
+  @keyframes toast-rail {
+    0% { transform: scaleX(1); }
+    100% { transform: scaleX(0); }
+  }
+  /* Sweeping highlight for skeleton placeholders (premium loading feel). */
+  @keyframes shimmer {
+    100% { transform: translateX(100%); }
+  }
+  /* Mobile nav drawer. */
+  @keyframes slide-in-left {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(0); }
+  }
+  /* Desktop side sheet (forms). */
+  @keyframes slide-in-right {
+    0% { transform: translateX(40px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+  }
+  /* Connection-strip message when it overflows small screens: hold briefly
+     (the 0-12% plateau = the "short break"), then roll right-to-left. The row
+     holds TWO copies in identical padded slots, so the -50% end frame is
+     pixel-identical to the start — a seamless loop. */
+  @keyframes offline-marquee {
+    0%, 12% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  /* Top-edge navigation progress: a 1/3-width bar sweeping left-to-right.
+     300% of its own width puts its left edge at the container's right edge —
+     fully off-screen — before the loop restarts. */
+  @keyframes nav-progress {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+  }
+  /* A freshly-arrived card: NO movement at all (any translate made the
+     list feel like it jerked) — just a gentle fade-in plus a soft teal outline
+     glow + faint tint that quietly dissolve to the resting style. */
+  @keyframes card-in {
+    0% { opacity: 0; background-color: #eef2ff; outline-color: rgba(79, 70, 229, 0.35); }
+    22% { opacity: 1; }
+    55% { background-color: #eef2ff; outline-color: rgba(79, 70, 229, 0.25); }
+    100% { background-color: #ffffff; outline-color: rgba(79, 70, 229, 0); }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   PREFLIGHT COMPAT — two v4 base-style changes that would otherwise be visible
+   regressions here, restored deliberately rather than absorbed.
+--------------------------------------------------------------------------- */
+@layer base {
+  /* v4 sets cursor: default on buttons; v3 left the browser's pointer. With 57
+     <button> elements in this panel, absorbing that would make every control
+     feel dead under the mouse. Disabled controls keep the not-allowed cursor
+     the disabled: variants already imply. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  /* v4 renders placeholders in currentColor at 50%; v3 used a fixed grey. Field
+     inputs set their own placeholder colour, but any bare input would other-
+     wise inherit near-black text at half opacity instead of a soft grey. */
+  ::placeholder {
+    color: var(--color-ink-subtle);
+    opacity: 1;
+  }
+}
+
+:root {
+  color-scheme: light;
+}
+
+/* God-level feel, cross-device:
+   - scrollbar-gutter: the classic jank where the desktop scrollbar appears/
+     disappears between short and long pages (and when a modal locks the body)
+     shifted the whole layout ~10px. Reserving the gutter kills BOTH shifts.
+     Safari ignores it harmlessly.
+   - tap-highlight: Android/iOS painted a gray flash rectangle over every tap;
+     our own press tints are the feedback now.
+   - touch-action manipulation on interactive elements removes the browser's
+     double-tap-zoom wait, so taps respond immediately. Pinch zoom still works. */
+html {
+  scrollbar-gutter: stable;
+  -webkit-tap-highlight-color: transparent;
+}
+a,
+button,
+input,
+select,
+textarea,
+[role="button"],
+[role="menuitem"],
+[role="option"],
+[role="switch"] {
+  touch-action: manipulation;
+}
+
+/* Brand caret while typing, and Chrome's yellow autofill wash replaced with a
+   clean surface fill so the login form never flashes amber. */
+input,
+textarea {
+  caret-color: #1c1c1a;
+}
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #1c1c1a;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  transition: background-color 9999s ease-out;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+/* Long unbroken strings (URLs, package ids, pasted logs) wrap inside their
+   box everywhere instead of pushing a card wider than its column. */
+p, li, td, h1, h2, h3, dd, dt, blockquote {
+  overflow-wrap: anywhere;
+}
+
+body {
+  /* Flat, calm workspace background — like Play Console. No decorative washes. */
+  @apply bg-canvas text-ink antialiased;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Teal text selection */
+::selection {
+  background-color: rgba(28, 28, 26, 0.12);
+}
+
+/* Keyboard-only focus ring (accessibility): visible when tabbing, never on
+   mouse/touch clicks. Brand-colored, consistent across every control.
+   Layered for old engines (pre-Chrome 86 / Safari 15.4) that don't know
+   :focus-visible: rule 1 gives EVERY focus a ring there (the two rules below
+   are invalid to them and get dropped, exactly where the fallback is needed);
+   modern engines strip the mouse/touch case via :not(:focus-visible) — its
+   higher specificity beats rule 1 regardless of order — and keep the keyboard
+   ring via :focus-visible. Without the fallback, old browsers had NO visible
+   keyboard focus at all. */
+:focus {
+  outline: 2px solid #1c1c1a;
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid #1c1c1a;
+  outline-offset: 2px;
+}
+/* An input that lives INSIDE a composite control (the label-chips field, a
+   token picker): the wrapper shows focus through :focus-within, so the inner
+   box must never draw its own ring. Unlayered on purpose — it has to beat the
+   unlayered rules above, which Tailwind's layered utilities cannot. */
+[data-nested-input]:focus,
+[data-nested-input]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* iOS Safari AUTO-ZOOMS the whole page whenever a focused form control's text
+   is smaller than 16px — and never zooms back out, so the layout stays blown
+   up and horizontally scrolled for the rest of the session. Every control in
+   the panel uses the 14px `controlClass`, so every form did this on iPhone and
+   iPad. Bump to exactly 16px on COARSE pointers only: phones and tablets get
+   no zoom, and the desktop type rhythm is untouched.
+   The :not() is there for specificity, not filtering — it lifts these rules to
+   (0,1,1) so they beat Tailwind's own `.text-sm` (0,1,0) without !important
+   (checkboxes/radios have no text to size anyway). */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea:not([hidden]),
+  select:not([hidden]) {
+    font-size: 16px;
+  }
+}
+
+/* Below sm, `truncate` must not silently eat content.
+   -----------------------------------------------------------------------
+   The panel uses `truncate` in 58 places to keep one-line rows tidy. That is
+   right on a wide screen, where the text nearly always fits and the ellipsis is
+   a rare safety net. On a phone it inverts: the text almost never fits, so the
+   ellipsis becomes the normal case and real information disappears. Measured at
+   320px, the worst offenders lost 244px of a service-account email, 153px of a
+   reviewer name, 136px of device details and 135px of a team member's
+   "last sign-in" line — all of it unreachable, because an ellipsis cannot be
+   scrolled, tapped or copied.
+
+   Below 640px the same elements wrap instead. `overflow-wrap: anywhere` is what
+   makes that safe for the strings that have no space to break at — emails,
+   package ids like com.example.app — so they fold onto the next line rather
+   than pushing the layout sideways. Rows get taller, which a phone has room
+   for; nothing is hidden, and nothing overflows.
+
+   Scoped to a media query rather than edited into 58 class lists so the
+   behaviour is one rule with one rationale, and so every screen at 640px and
+   above renders byte-identically to before. */
+@media (width < 40rem) {
+  .truncate {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Thumb-sized hit areas for ICON-ONLY controls, on touch devices only.
+   Measured at a 390px viewport, the panel's icon buttons rendered 15-34px:
+   "Remove member" 15x15, the copy buttons 21x21, the analytics open-review
+   links 28x28, the app-row actions 32x32, the nav hamburger 34x34. WCAG 2.2 AA
+   asks for 24px and every platform guideline asks for 44 — several of these
+   failed even the 24.
+
+   A transparent centred overlay rather than padding, so NOTHING moves and
+   nothing looks different: the control keeps its exact size and position on
+   every screen, and only the area that responds to a thumb grows. Desktop is
+   untouched — the whole block is behind pointer: coarse.
+
+   --tap is per-control because some of these sit close to a neighbour and a
+   blanket 44px box would swallow the neighbour's taps. Each call site passes
+   the largest size that still clears its measured gap (e.g. the hamburger sits
+   4px from the logo link, so it gets 40, not 44). */
+@media (pointer: coarse) {
+  .tap {
+    position: relative;
+  }
+  .tap::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--tap, 44px);
+    height: var(--tap, 44px);
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* Header/floating-chrome surface. Deliberately SOLID, not frosted: a sticky
+   backdrop-filter re-blurs on every scrolled frame (the single biggest scroll
+   cost on mid-range phones), and at 56px tall a near-opaque solid reads the
+   same. Matches the quiet-solid design language (and Play Console). */
+.glass {
+  background-color: rgba(247, 247, 245, 0.96);
+}
+
+/* Long review lists (dialogs, dashboard, app page, reports): offscreen cards
+   skip layout + paint entirely while scrolling. `auto` height remembers each
+   card's real size after first render, so the scrollbar stays stable; 260px is
+   only the pre-render estimate. */
+.cv-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 260px;
+}
+
+/* While a scroll restore is applying (lib/cv-restore.ts holds this class),
+   estimates are not good enough: the saved offset was measured against real
+   heights, so restoring against 260px placeholders lands slightly past the
+   card the user left. Force real layout for the restore, then let `auto`
+   re-skip with the just-memoized sizes — no shift on release. */
+.cv-restoring .cv-card {
+  content-visibility: visible;
+}
+
+/* Reduced-motion: disable only the DECORATIVE infinite loops (the AI shimmer
+   glint), not everything. The old blanket kill (`* { animation: 0.001ms }`)
+   made the panel look broken-in-places on machines that report reduced motion
+   without the user ever choosing it (old Windows with "Show animations" off):
+   loading spinners froze mid-spin, dialogs popped in with no entrance, and
+   behavior differed device-to-device. Functional motion — spinners, 150ms
+   one-shot entrances, transitions — now runs identically everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  .ai-shimmer-text {
+    animation: none !important;
+  }
+  html {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Marquee for a placeholder too long for its input: the text (rendered twice,
+   back to back) holds at the sentence start for a beat, glides right-to-left
+   by exactly one copy's width (-50%), and the loop restart lands pixel-perfect
+   on the second copy — so it reads as: pause at the start, scroll through,
+   start again. Applied only when the text actually overflows. */
+@keyframes ph-marquee {
+  0%,
+  18% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+.ph-marquee {
+  /* Finite, not infinite: the marquee lives inside an always-visible sticky
+     toolbar, so an infinite loop kept the compositor busy for the whole
+     session. Three passes communicate the full placeholder, then it rests. */
+  animation: ph-marquee 9s linear 3;
+}
+
+/* AI shimmer text (the "AI reasoning" label): at rest it reads as normal
+   solid brand text; every ~6s ONE light glint sweeps through the letters,
+   then it rests — the Apple Intelligence / Gemini loading-text look. The
+   glint sits outside the visible window at both loop ends, so the restart is
+   invisible. (The reduced-motion guard above disables it.) */
+@keyframes ai-shine-sweep {
+  0%,
+  62% {
+    background-position: 0% 0; /* resting — glint parked off-screen left */
+  }
+  88%,
+  100% {
+    background-position: 100% 0; /* swept through — parked off-screen right */
+  }
+}
+.ai-shimmer-text {
+  color: transparent;
+  background-image: linear-gradient(100deg, #4338ca 0%, #4338ca 40%, #818cf8 50%, #4338ca 60%, #4338ca 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  /* Finite (4 glints), not infinite: background-position is NOT a compositor
+     property, so every chip was an active main-thread animation for the whole
+     session — one per review card on screen. Each card still glints on
+     arrival (cv-cards start when first rendered), then rests as solid text. */
+  animation: ai-shine-sweep 6s ease-in-out 4;
+}
+
+/* Scrollable but no visible scrollbar (used by the sidebar nav). */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+/* ---------------------------------------------------------------------------
+   PRESENTATION DECK (/meetings/[id]/present) — printing. On screen one slide
+   fills the viewport; on paper every slide prints, one per page, in order.
+--------------------------------------------------------------------------- */
+/* Each slide is a 16:9 container; every size inside is in cqw so the slide
+   looks identical on a laptop, a projector and paper. */
+.deck-slide {
+  container-type: inline-size;
+}
+@media print {
+  /* @page can't be scoped by selector, so each printable screen sets its own
+     (the deck: landscape, no margin; the minutes document: A4 portrait). */
+  .deck-root {
+    position: static !important;
+    display: block !important;
+    background: #fff !important;
+  }
+  .deck-stage {
+    position: static !important;
+    width: 100vw !important;
+    height: auto !important;
+    box-shadow: none !important;
+  }
+  .deck-slide {
+    display: flex !important;
+    position: relative !important;
+    inset: auto !important;
+    width: 100vw;
+    aspect-ratio: 16 / 9;
+    opacity: 1 !important;
+    transform: none !important;
+    page-break-after: always;
+    break-after: page;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .deck-chrome {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   MINUTES DOCUMENT (/meetings/[id]/print) — A4, one running flow.
+--------------------------------------------------------------------------- */
+@media print {
+  .print-root {
+    background: #fff !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+  }
+  .print-chrome {
+    display: none !important;
+  }
+  .print-doc {
+    width: auto !important;
+    max-width: none !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
