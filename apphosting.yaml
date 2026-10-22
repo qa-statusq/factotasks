@@ -41,21 +41,22 @@ env:
     availability:
       - RUNTIME
 
-  # ---- Secrets (stored in Secret Manager; names must match the secrets you create) ----
+  # ---- Secrets (Secret Manager). Prefixed FACTOTASKS_ because the project is shared
+  # with FactoReviews / ledger, whose AUTH_SECRET etc. hold THEIR values. ----
   - variable: SUPABASE_SERVICE_ROLE_KEY
-    secret: SUPABASE_SERVICE_ROLE_KEY
+    secret: FACTOTASKS_SUPABASE_SERVICE_ROLE_KEY
     availability:
       - RUNTIME
   - variable: AUTH_SECRET
-    secret: AUTH_SECRET
+    secret: FACTOTASKS_AUTH_SECRET
     availability:
       - RUNTIME
   - variable: CRON_SECRET
-    secret: CRON_SECRET
+    secret: FACTOTASKS_CRON_SECRET
     availability:
       - RUNTIME
   - variable: VAPID_PRIVATE_KEY
-    secret: VAPID_PRIVATE_KEY
+    secret: FACTOTASKS_VAPID_PRIVATE_KEY
     availability:
       - RUNTIME
 

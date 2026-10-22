@@ -46,19 +46,20 @@ The panel's URL becomes `https://factotasks--pf-balance-vspl.asia-southeast1.hos
 
 ## 4. Secrets (run once each; paste the value from `.env.local`)
 ```powershell
-# Each prompts for the value — paste it from .env.local.
-firebase apphosting:secrets:set SUPABASE_SERVICE_ROLE_KEY --project pf-balance-vspl
-firebase apphosting:secrets:set AUTH_SECRET --project pf-balance-vspl
+# Each prompts for the value — paste it from .env.local. The FACTOTASKS_ prefix keeps them
+# apart from the other panels' secrets in the same Firebase project.
+firebase apphosting:secrets:set FACTOTASKS_SUPABASE_SERVICE_ROLE_KEY --project pf-balance-vspl
+firebase apphosting:secrets:set FACTOTASKS_AUTH_SECRET --project pf-balance-vspl
 # Optional: XFF_TRUSTED_HOPS=1 if a load balancer in front of App Hosting appends
 # its own address to X-Forwarded-For (the login throttle keys on the client IP;
 # default 0 = the last entry is the client).
-firebase apphosting:secrets:set CRON_SECRET --project pf-balance-vspl
-firebase apphosting:secrets:set VAPID_PRIVATE_KEY --project pf-balance-vspl
+firebase apphosting:secrets:set FACTOTASKS_CRON_SECRET --project pf-balance-vspl
+firebase apphosting:secrets:set FACTOTASKS_VAPID_PRIVATE_KEY --project pf-balance-vspl
 ```
 Then grant BOTH App Hosting service accounts access in one shot (the account running this
 needs `roles/secretmanager.admin`):
 ```powershell
-firebase apphosting:secrets:grantaccess SUPABASE_SERVICE_ROLE_KEY,AUTH_SECRET,CRON_SECRET,VAPID_PRIVATE_KEY --backend factotasks --project pf-balance-vspl
+firebase apphosting:secrets:grantaccess FACTOTASKS_SUPABASE_SERVICE_ROLE_KEY,FACTOTASKS_AUTH_SECRET,FACTOTASKS_CRON_SECRET,FACTOTASKS_VAPID_PRIVATE_KEY --backend factotasks --project pf-balance-vspl
 ```
 Look for `Successfully set IAM bindings on secret …` for all four. Missing this step makes
 every build fail with *"Error resolving secret version … versions/latest"*.
