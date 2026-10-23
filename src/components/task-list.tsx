@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { istToday } from "@/lib/ist";
 import { taskRef } from "@/lib/domain";
 import { AvatarStack } from "@/components/ui/avatar";
-import { PlatformBadge, PriorityBadge, TargetChips, ReleaseProgress, SeriesChip } from "@/components/ui/task-chips";
+import { PlatformBadge, PriorityBadge, TargetChips, ReleaseProgress, SeriesChip, AppTile } from "@/components/ui/task-chips";
 import { StatusMenu } from "@/components/status-menu";
 import { EmptyState } from "@/components/ui/misc";
 import { useNeedsApproval } from "@/lib/use-policy";
@@ -52,9 +52,13 @@ export function DueChip({ task, className }: { task: TaskCard; className?: strin
   );
 }
 
+/** Status pills share one width so a column of rows lines up; the rare "requested" pill may grow. */
+export const PILL_WIDTH = "sm:min-w-[8.5rem]";
+
 /**
  * One task = one row: title (wraps, never truncates), one line of quiet
- * context, people, and the status pill that changes status in place.
+ * context, then two fixed columns — people, and the status pill that changes
+ * status in place — so every row's controls sit on the same vertical line.
  */
 export function TaskRow({ task, showApp = true, showDescription = false, trailing, below, needsApproval, canChange = true }: { task: TaskCard; showApp?: boolean; showDescription?: boolean; trailing?: React.ReactNode; below?: React.ReactNode; needsApproval: boolean; canChange?: boolean }) {
   return (
@@ -71,7 +75,7 @@ export function TaskRow({ task, showApp = true, showDescription = false, trailin
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-[22px] text-[11.5px] text-ink-subtle">
             <span className="tabular-nums">{taskRef(task.number)}</span>
             {showApp || (task.targets?.length ?? 0) > 1 ? (
-              <TargetChips targets={task.targets} app={task.app} platform={task.platform} max={showApp ? 3 : 4} />
+              <TargetChips targets={task.targets} app={task.app} platform={task.platform} max={showApp ? 3 : 4} compact />
             ) : (
               <PlatformBadge platform={task.platform} label={false} className="px-1 py-0 ring-0 bg-transparent" />
             )}
@@ -94,8 +98,10 @@ export function TaskRow({ task, showApp = true, showDescription = false, trailin
           </div>
         </Link>
         <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-          <AvatarStack users={task.assignees} size="sm" />
-          <StatusMenu task={task} needsApproval={needsApproval} canChange={canChange} />
+          <span className="flex justify-end sm:w-[5rem]">
+            <AvatarStack users={task.assignees} size="sm" />
+          </span>
+          <StatusMenu task={task} needsApproval={needsApproval} canChange={canChange} className={PILL_WIDTH} />
           {trailing}
         </div>
       </div>
@@ -108,6 +114,7 @@ interface Group {
   key: string;
   name: string;
   color: string;
+  iconUrl: string | null;
   tasks: TaskCard[];
 }
 
@@ -118,7 +125,7 @@ export function groupByApp(tasks: TaskCard[]): Group[] {
     const key = t.app?.id ?? "general";
     let g = map.get(key);
     if (!g) {
-      g = { key, name: t.app?.name ?? "General", color: t.app?.color ?? "#94a3b8", tasks: [] };
+      g = { key, name: t.app?.name ?? "General", color: t.app?.color ?? "#94a3b8", iconUrl: t.app?.icon_url ?? null, tasks: [] };
       map.set(key, g);
     }
     g.tasks.push(t);
@@ -164,7 +171,7 @@ export function TaskList({
         {groups.map((g) => (
           <section key={g.key} className="overflow-hidden rounded-xl border border-line bg-surface">
             <header className="flex items-center gap-2 border-b border-line/80 bg-canvas/60 px-3 py-2 sm:px-4">
-              <span className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: g.color }} />
+              <AppTile name={g.name} color={g.color} iconUrl={g.iconUrl} className="h-6 w-6 rounded-md text-[10px]" />
               <span className="text-[13px] font-semibold text-ink">{g.name}</span>
               <span className="text-xs text-ink-subtle">{g.tasks.length}</span>
             </header>

@@ -93,14 +93,16 @@ export function StatusMenu({ task, size = "sm", className, canChange = true, nee
         className
       )}
     >
-      <span className={cn("h-1.5 w-1.5 rounded-full", m.dot)} />
-      {m.label}
-      {pending && (
-        <span className="ml-0.5 rounded-full bg-amber-100/80 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-amber-800" title={`${STATUS_META[pending].label} requested — waiting for an admin`}>
-          {STATUS_META[pending].label} requested
-        </span>
-      )}
-      {canChange && <IconChevronDown size={11} className="opacity-60" />}
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", m.dot)} />
+        <span className="truncate">{m.label}</span>
+        {pending && (
+          <span className="ml-0.5 rounded-full bg-amber-100/80 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-amber-800" title={`${STATUS_META[pending].label} requested — waiting for an admin`}>
+            {STATUS_META[pending].label} requested
+          </span>
+        )}
+      </span>
+      {canChange && <IconChevronDown size={11} className="ml-auto shrink-0 opacity-60" />}
     </button>
   );
 

@@ -7,12 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { LoadError, EmptyState } from "@/components/ui/misc";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { AvatarStack } from "@/components/ui/avatar";
-import { AppTile, ReleaseStatusBadge } from "@/components/ui/task-chips";
+import { AppTile, ReleaseStatusBadge, PlatformGlyph } from "@/components/ui/task-chips";
 import { AppFormSheet } from "@/components/app-form";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch, prefetch } from "@/lib/client-cache";
 import { cn } from "@/lib/cn";
-import { IconApps, IconPlus, IconAndroid, IconApple, IconChevronRight } from "@/components/ui/icons";
+import { IconApps, IconPlus, IconChevronRight } from "@/components/ui/icons";
 import type { AppOverview } from "@/lib/types";
 
 export default function AppsPage() {
@@ -50,15 +50,15 @@ export default function AppsPage() {
                     <span className="break-words text-[14px] font-semibold text-ink">{a.name}</span>
                     {a.status === "archived" && <Badge tone="neutral">Archived</Badge>}
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-ink-subtle">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-ink-muted">
                     {a.has_android && (
-                      <span className="inline-flex items-center gap-1">
-                        <IconAndroid size={12} /> {a.latest_android ? `v${a.latest_android.version_name}` : "no release"}
+                      <span className="inline-flex items-center gap-1" title="Android">
+                        <PlatformGlyph platform="android" size={13} /> {a.latest_android ? `v${a.latest_android.version_name}` : "no release"}
                       </span>
                     )}
                     {a.has_ios && (
-                      <span className="inline-flex items-center gap-1">
-                        <IconApple size={12} /> {a.latest_ios ? `v${a.latest_ios.version_name}` : "no release"}
+                      <span className="inline-flex items-center gap-1" title="iOS">
+                        <PlatformGlyph platform="ios" size={13} /> {a.latest_ios ? `v${a.latest_ios.version_name}` : "no release"}
                       </span>
                     )}
                     {a.next_release && (

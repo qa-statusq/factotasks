@@ -106,7 +106,7 @@ export default function ActivityPage() {
   const users = usersData?.users ?? [];
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
-      <PageHeader title="Activity" description="Every action by every teammate — the audit trail. Kept for 90 days." />
+      <PageHeader title="Activity" description="Every action by every teammate — the audit trail. Kept for 14 days." />
       <div className="flex flex-wrap gap-2">
         <div className="w-44">
           <Dropdown value={area} onChange={setArea} options={AREAS} className="[&>button]:h-9" />

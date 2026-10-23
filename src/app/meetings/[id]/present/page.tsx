@@ -554,7 +554,7 @@ function Frame({
                   <p className="mt-[0.7cqw] flex items-center gap-[1.2cqw] text-[1.15cqw] text-ink-muted">
                     {app.platforms.android && (
                       <span className="inline-flex items-center gap-[0.4cqw]">
-                        <IconAndroid size={14} className="h-[1.3cqw] w-[1.3cqw] text-[#3ddc84]" /> Android
+                        <IconAndroid size={14} className="h-[1.3cqw] w-[1.3cqw] text-[#2f9e5f]" /> Android
                       </span>
                     )}
                     {app.platforms.ios && (
@@ -682,7 +682,7 @@ function TaskTable({
                       <span className={cn("break-words font-semibold", done ? "text-ink-muted" : "text-ink")}>{t.title}</span>
                       {t.platform && (
                         <span className="inline-flex items-center gap-[0.3cqw] text-[1.05cqw] text-ink-subtle">
-                          {t.platform === "android" ? <IconAndroid size={12} className="h-[1.1cqw] w-[1.1cqw] text-[#3ddc84]" /> : <IconApple size={12} className="h-[1.1cqw] w-[1.1cqw]" />}
+                          {t.platform === "android" ? <IconAndroid size={12} className="h-[1.1cqw] w-[1.1cqw] text-[#2f9e5f]" /> : <IconApple size={12} className="h-[1.1cqw] w-[1.1cqw]" />}
                           {PLATFORM_META[t.platform].label}
                         </span>
                       )}
@@ -761,7 +761,7 @@ function ReleaseTable({ releases }: { releases: Release[] }) {
               </td>
               <td className={cn(TD, "text-ink-muted")}>
                 <span className="inline-flex items-center gap-[0.5cqw]">
-                  {r.platform === "android" ? <IconAndroid size={14} className="h-[1.3cqw] w-[1.3cqw] text-[#3ddc84]" /> : <IconApple size={14} className="h-[1.3cqw] w-[1.3cqw]" />}
+                  {r.platform === "android" ? <IconAndroid size={14} className="h-[1.3cqw] w-[1.3cqw] text-[#2f9e5f]" /> : <IconApple size={14} className="h-[1.3cqw] w-[1.3cqw]" />}
                   {PLATFORM_META[r.platform].label}
                 </span>
               </td>

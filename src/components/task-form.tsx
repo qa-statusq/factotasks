@@ -9,7 +9,7 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { Sheet } from "@/components/ui/sheet";
 import { PeoplePicker } from "@/components/ui/people-picker";
 import { DateInput } from "@/components/ui/date-input";
-import { LabelChip, AppTile } from "@/components/ui/task-chips";
+import { LabelChip, AppTile, PlatformGlyph } from "@/components/ui/task-chips";
 import { Spinner } from "@/components/ui/misc";
 import { useSession } from "@/components/providers/session-provider";
 import { useToast } from "@/components/ui/toast";
@@ -103,7 +103,7 @@ export function TargetPicker({ apps, value, onChange }: { apps: AppOverview[]; v
                     <span key={`${t.app_id}:${t.platform}`} className="inline-flex h-6 items-center gap-1 rounded-md bg-surface pl-1 pr-1 text-[11.5px] font-medium text-ink ring-1 ring-inset ring-line">
                       {a && <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-4 w-4 rounded-[4px] text-[7px]" />}
                       {a?.name ?? "App"}
-                      {t.platform === "android" ? <IconAndroid size={11} className="text-ink-subtle" /> : <IconApple size={11} className="text-ink-subtle" />}
+                      <PlatformGlyph platform={t.platform} size={12} />
                       <button type="button" onClick={() => toggle(t.app_id, t.platform)} className="rounded p-0.5 text-ink-subtle hover:text-red-600" aria-label={`Remove ${a?.name ?? "app"} ${t.platform}`}>
                         <IconX size={11} />
                       </button>

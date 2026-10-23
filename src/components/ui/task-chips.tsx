@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import {
@@ -53,49 +56,63 @@ export function TypeBadge({ type, className }: { type: TaskType; className?: str
   );
 }
 
-/** Android / iOS glyphs; "both" shows the pair. */
+/**
+ * The Android robot (green) or the Apple mark (black) — always in their own
+ * colour so they read at 11px, with a tick when that target has shipped.
+ */
+export function PlatformGlyph({ platform, size = 12, className, released }: { platform: "android" | "ios"; size?: number; className?: string; released?: boolean }) {
+  const label = `${PLATFORM_META[platform].label}${released ? " · released" : ""}`;
+  return (
+    <span className={cn("inline-flex shrink-0 items-center", className)} title={label} aria-label={label}>
+      {platform === "android" ? <IconAndroid size={size} className="text-[#2f9e5f]" /> : <IconApple size={size} className="text-ink" />}
+      {released && <IconCheck size={Math.max(9, size - 3)} className="-ml-0.5 text-emerald-600" />}
+    </span>
+  );
+}
+
+/** Android / iOS glyphs with a label; "both" shows the pair. */
 export function PlatformBadge({ platform, className, label = true }: { platform: Platform | null | undefined; className?: string; label?: boolean }) {
   if (!platform) return null;
   const m = PLATFORM_META[platform];
   const icons =
     platform === "both" ? (
       <>
-        <IconAndroid size={13} />
-        <IconApple size={13} />
+        <PlatformGlyph platform="android" size={13} />
+        <PlatformGlyph platform="ios" size={13} />
       </>
-    ) : platform === "android" ? (
-      <IconAndroid size={13} />
     ) : (
-      <IconApple size={13} />
+      <PlatformGlyph platform={platform} size={13} />
     );
   return (
-    <span
-      className={cn("inline-flex items-center gap-1 whitespace-nowrap text-[11.5px] font-medium text-ink-muted", className)}
-      title={m.label}
-    >
+    <span className={cn("inline-flex items-center gap-1 whitespace-nowrap text-[11.5px] font-medium text-ink-muted", className)} title={m.label}>
       {icons}
       {label && (platform === "both" ? "Android · iOS" : m.label)}
     </span>
   );
 }
 
-/** App identity: colour tile + name. "General" when the task has no app. */
+/** App identity: tile + name. "General" when the task has no app. */
 export function AppChip({ app, className, size = "sm" }: { app: AppLite | null | undefined; className?: string; size?: "xs" | "sm" }) {
-  const dot = size === "xs" ? "h-2 w-2 rounded-[3px]" : "h-2.5 w-2.5 rounded-[3px]";
+  const tile = size === "xs" ? "h-4 w-4 rounded-[4px] text-[7px]" : "h-5 w-5 rounded-[5px] text-[8px]";
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-ink-muted", className)} title={app ? app.name : "General task (no app)"}>
-      <span className={cn("shrink-0", dot)} style={{ backgroundColor: app?.color || "#94a3b8" }} />
+      {app ? <AppTile name={app.name} color={app.color} iconUrl={app.icon_url} className={tile} /> : <span className={cn("shrink-0 bg-slate-400", tile)} />}
       <span className="truncate">{app ? app.name : "General"}</span>
     </span>
   );
 }
 
-/** Square app tile with the first letter — used wherever an app is listed. */
+/**
+ * Square app tile: the store icon when the app has one, otherwise its first
+ * letter on its colour. An icon that fails to load falls back to the letter
+ * instead of leaving an empty box.
+ */
 export function AppTile({ name, color, iconUrl, className }: { name: string; color: string; iconUrl?: string | null; className?: string }) {
-  if (iconUrl) {
+  const [broken, setBroken] = useState<string | null>(null);
+  if (iconUrl && broken !== iconUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={iconUrl} alt="" loading="lazy" decoding="async" className={cn("shrink-0 rounded-xl bg-canvas object-cover ring-1 ring-inset ring-black/10", className)} />
+      <img src={iconUrl} alt="" loading="lazy" decoding="async" onError={() => setBroken(iconUrl)} className={cn("shrink-0 rounded-xl bg-canvas object-cover ring-1 ring-inset ring-black/10", className)} />
     );
   }
   return (
@@ -133,30 +150,48 @@ export function LabelChip({ label, className, onRemove }: { label: string; class
 }
 
 /**
- * Where a task ships, compactly: app tile + name + platform glyph per target,
- * a tick once that target is released, "+N" past `max`. Falls back to the
- * legacy single app/platform for cards without targets.
+ * Where a task ships: ONE chip per app — its tile, name and a glyph per
+ * platform (ticked once that target is released) — "+N" past `max` apps.
+ * `compact` drops the names when the task spans more than two apps (the
+ * tooltip still carries them). Falls back to the legacy single app/platform
+ * for cards without targets.
  */
-export function TargetChips({ targets, app, platform, max = 3, className }: { targets?: TaskTarget[]; app?: AppLite | null; platform?: Platform | null; max?: number; className?: string }) {
+export function TargetChips({ targets, app, platform, max = 3, compact, className }: { targets?: TaskTarget[]; app?: AppLite | null; platform?: Platform | null; max?: number; compact?: boolean; className?: string }) {
   if (!targets?.length) {
     if (!app) return <span className={cn("text-[11.5px] text-ink-subtle", className)}>General</span>;
     return (
       <span className={cn("inline-flex items-center gap-1.5", className)}>
         <AppChip app={app} size="xs" />
-        <PlatformBadge platform={platform} label={false} className="px-0 ring-0 bg-transparent" />
+        <PlatformBadge platform={platform} label={false} />
       </span>
     );
   }
-  const shown = targets.slice(0, max);
-  const more = targets.length - shown.length;
+  const byApp = new Map<string, { app: AppLite; items: TaskTarget[] }>();
+  for (const t of targets) {
+    const g = byApp.get(t.app.id) ?? { app: t.app, items: [] };
+    g.items.push(t);
+    byApp.set(t.app.id, g);
+  }
+  const list = [...byApp.values()];
+  for (const g of list) g.items.sort((a, b) => (a.platform === b.platform ? 0 : a.platform === "android" ? -1 : 1));
+  const shown = list.slice(0, max);
+  const more = list.length - shown.length;
+  const names = !compact || list.length <= 2;
   return (
     <span className={cn("inline-flex flex-wrap items-center gap-x-2 gap-y-0.5", className)}>
-      {shown.map((t) => (
-        <span key={`${t.app.id}:${t.platform}`} className="inline-flex max-w-full items-center gap-1 whitespace-nowrap text-[11.5px] font-medium text-ink-muted" title={`${t.app.name} · ${PLATFORM_META[t.platform].label}${t.released_at ? " · released" : t.release ? ` · v${t.release.version_name}` : " · no release yet"}`}>
-          <AppTile name={t.app.name} color={t.app.color} iconUrl={t.app.icon_url} className="h-3.5 w-3.5 rounded-[3px] text-[7px]" />
-          <span className="max-w-[11rem] truncate">{t.app.name}</span>
-          {t.platform === "android" ? <IconAndroid size={11} className="text-ink-subtle" /> : <IconApple size={11} className="text-ink-subtle" />}
-          {t.released_at && <IconCheck size={10} className="text-emerald-600" />}
+      {shown.map(({ app: a, items }) => (
+        <span
+          key={a.id}
+          className="inline-flex max-w-full items-center gap-1 whitespace-nowrap text-[11.5px] font-medium text-ink-muted"
+          title={`${a.name} · ${items.map((t) => `${PLATFORM_META[t.platform].label}${t.released_at ? " (released)" : t.release ? ` (v${t.release.version_name})` : ""}`).join(", ")}`}
+        >
+          <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-4 w-4 rounded-[4px] text-[7px]" />
+          {names && <span className="max-w-[11rem] truncate">{a.name}</span>}
+          <span className="inline-flex items-center gap-0.5">
+            {items.map((t) => (
+              <PlatformGlyph key={t.platform} platform={t.platform} size={11} released={!!t.released_at} />
+            ))}
+          </span>
         </span>
       ))}
       {more > 0 && <span className="text-[11px] text-ink-subtle">+{more}</span>}
@@ -164,7 +199,6 @@ export function TargetChips({ targets, app, platform, max = 3, className }: { ta
   );
 }
 
-/** "Released 2/6" once anything has shipped; green when everything has. */
 /** "Attached to Weekly sync": the series a task reports into. */
 export function SeriesChip({ series, className }: { series?: { id: string; name: string; color: string } | null; className?: string }) {
   if (!series) return null;
@@ -176,6 +210,7 @@ export function SeriesChip({ series, className }: { series?: { id: string; name:
   );
 }
 
+/** "Released 2/6" once anything has shipped; green when everything has. */
 export function ReleaseProgress({ progress, className }: { progress?: { released: number; total: number }; className?: string }) {
   if (!progress || progress.total < 1 || progress.released === 0) return null;
   const all = progress.released >= progress.total;

@@ -113,7 +113,7 @@ Cloud Scheduler job.
   bucket, 10-minute signed URLs; images downscaled client-side before upload.
 - All text cleaned (control/bidi characters stripped, lengths capped); React-escaped
   rendering; CSV export defuses formula injection.
-- Full activity log (90 days) of every action by every user.
+- Full activity log (14 days) of every action by every user.
 
 ## Project layout
 ```

@@ -11,7 +11,7 @@ import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { ReleaseStatusBadge, PlatformBadge, PriorityBadge, AppTile, TargetChips, ReleaseProgress } from "@/components/ui/task-chips";
 import { StatusMenu, toneClass } from "@/components/status-menu";
-import { DueChip } from "@/components/task-list";
+import { DueChip, PILL_WIDTH } from "@/components/task-list";
 import { NoteComposer, NoteList } from "@/components/meeting-notes";
 import { AddTaskSheet } from "@/components/add-task-sheet";
 import { SeriesBadge, ScopeLabel } from "@/components/meeting-series";
@@ -360,7 +360,7 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, needsApproval, 
           <ClampedText text={desc} lines={2} className="mt-1 text-[12.5px] leading-relaxed text-ink-muted" />
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-ink-subtle">
             <span>{ownerText(t.assignees, labels) || "unassigned"}</span>
-            {(t.targets?.length ?? 0) > 1 ? <TargetChips targets={t.targets} max={6} /> : <PlatformBadge platform={t.platform} label={false} className="px-0 ring-0 bg-transparent" />}
+            {(t.targets?.length ?? 0) > 1 ? <TargetChips targets={t.targets} max={4} compact /> : <PlatformBadge platform={t.platform} label={false} />}
             <ReleaseProgress progress={t.release_progress} />
             <DueChip task={t} />
             {t.requested_status && <span className="text-amber-700">awaiting approval</span>}
@@ -372,7 +372,7 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, needsApproval, 
           )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <StatusMenu task={t} needsApproval={needsApproval} />
+          <StatusMenu task={t} needsApproval={needsApproval} className={PILL_WIDTH} />
           {!readOnly && (
             <button type="button" onClick={() => onNote(t)} className="text-[11.5px] font-medium text-brand-700 hover:text-brand-800">
               + Note

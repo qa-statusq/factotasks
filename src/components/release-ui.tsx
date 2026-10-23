@@ -12,7 +12,7 @@ import { DateInput, usePopover } from "@/components/ui/date-input";
 import { Spinner, EmptyState, LoadError } from "@/components/ui/misc";
 import { Avatar } from "@/components/ui/avatar";
 import { RichText } from "@/components/ui/rich-text";
-import { ReleaseStatusBadge, PlatformBadge, AppTile, PriorityBadge } from "@/components/ui/task-chips";
+import { ReleaseStatusBadge, PlatformBadge, AppTile, PriorityBadge, PlatformGlyph } from "@/components/ui/task-chips";
 import { TaskList } from "@/components/task-list";
 import { toneClass } from "@/components/status-menu";
 import { useToast } from "@/components/ui/toast";
@@ -29,7 +29,7 @@ import { istTime } from "@/lib/time";
 import { RelTime } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { LIMITS, RELEASE_STATUSES, RELEASE_STATUS_META, PLATFORM_META, STATUS_META, taskRef, type ReleaseStatus } from "@/lib/domain";
-import { IconRocket, IconEdit, IconTrash, IconPlus, IconAndroid, IconApple, IconCheck, IconUserCheck, IconChevronDown } from "@/components/ui/icons";
+import { IconRocket, IconEdit, IconTrash, IconPlus, IconCheck, IconUserCheck, IconChevronDown } from "@/components/ui/icons";
 import type { AppOverview, Release, ReleaseTaskLite, TaskCard, TaskTarget } from "@/lib/types";
 
 const STATUS_OPTIONS = RELEASE_STATUSES.map((s) => ({ value: s, label: RELEASE_STATUS_META[s].label }));
@@ -299,7 +299,7 @@ export function ReleaseRow({ r, showApp = true, onOpen }: { r: Release; showApp?
   return (
     <li className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-canvas/70 sm:px-5">
       <button type="button" onClick={() => onOpen(r)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        {showApp && r.app ? <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} className="h-9 w-9 text-sm" /> : <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-canvas text-ink-subtle ring-1 ring-inset ring-line">{r.platform === "ios" ? <IconApple size={16} /> : <IconAndroid size={16} />}</span>}
+        {showApp && r.app ? <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} className="h-9 w-9 text-sm" /> : <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-canvas ring-1 ring-inset ring-line"><PlatformGlyph platform={r.platform} size={18} /></span>}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {showApp && r.app && <span className="text-sm font-medium text-ink">{r.app.name}</span>}
@@ -701,7 +701,7 @@ export function UnreleasedWorkBanner({ className, compact = false }: { className
                 <button key={`${g.appId}:${g.platform}`} type="button" onClick={() => setForm({ app: g.app, platform: g.platform, task_ids: g.tasks.map((t) => t.id) })} className="inline-flex items-center gap-1 rounded-md bg-surface px-1.5 py-0.5 text-[12px] font-medium text-ink ring-1 ring-inset ring-amber-200 hover:ring-ink" title={`New ${PLATFORM_META[g.platform].label} release for ${g.app.name} with ${g.tasks.map((t) => taskRef(t.number)).join(", ")}`}>
                   <AppTile name={g.app.name} color={g.app.color} iconUrl={g.app.icon_url} className="h-4 w-4 rounded-[4px] text-[7px]" />
                   {g.app.name}
-                  {g.platform === "android" ? <IconAndroid size={11} className="text-ink-subtle" /> : <IconApple size={11} className="text-ink-subtle" />}
+                  <PlatformGlyph platform={g.platform} size={12} />
                   <span className="text-ink-subtle">· {g.tasks.length}</span>
                 </button>
               ))}
@@ -748,7 +748,7 @@ export function PendingReleaseBanner({ task, className }: { task: TaskCard; clas
               <button key={`${t.app.id}:${t.platform}`} type="button" onClick={() => start(t)} className="inline-flex items-center gap-1 rounded-md bg-surface px-1.5 py-0.5 text-[12px] font-medium text-ink ring-1 ring-inset ring-amber-200 hover:ring-ink" title={`Create a ${PLATFORM_META[t.platform].label} release for ${t.app.name}`}>
                 <AppTile name={t.app.name} color={t.app.color} iconUrl={t.app.icon_url} className="h-4 w-4 rounded-[4px] text-[7px]" />
                 {t.app.name}
-                {t.platform === "android" ? <IconAndroid size={11} className="text-ink-subtle" /> : <IconApple size={11} className="text-ink-subtle" />}
+                <PlatformGlyph platform={t.platform} size={12} />
               </button>
             ))}
           </p>

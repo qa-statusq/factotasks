@@ -18,7 +18,7 @@ import { istTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { STATUS_META, taskRef } from "@/lib/domain";
 import { prettyDate } from "@/components/release-ui";
-import { IconUserCheck, IconRocket } from "@/components/ui/icons";
+import { IconUserCheck, IconRocket, IconCheck } from "@/components/ui/icons";
 import type { Release, TaskCard } from "@/lib/types";
 
 export default function ApprovalsPage() {
@@ -82,9 +82,49 @@ export default function ApprovalsPage() {
   const tasks = data?.tasks ?? [];
   const releases = rd?.releases ?? [];
   const nothing = tasks.length === 0 && releases.length === 0;
+  const total = tasks.length + releases.length;
+
+  /** Every request at once, in order: tasks, then releases (each release also ships its linked tasks). */
+  async function approveAll() {
+    if (busy || total < 2) return;
+    const shipping = releases.reduce((n, r) => n + (r.tasks ?? []).filter((t) => !t.released_at).length, 0);
+    const parts = [
+      tasks.length ? `${tasks.length} task status change${tasks.length === 1 ? "" : "s"} will be applied.` : "",
+      releases.length ? `${releases.length} release${releases.length === 1 ? "" : "s"} will be marked released${shipping ? `, shipping ${shipping} linked task${shipping === 1 ? "" : "s"}` : ""}.` : "",
+    ].filter(Boolean);
+    if (!(await confirm({ title: `Approve all ${total} requests?`, message: parts.join(" "), confirmLabel: "Approve all" }))) return;
+    setBusy("all");
+    let ok = 0;
+    const failed: string[] = [];
+    for (const t of tasks) {
+      const r = await postJson(`/api/tasks/${t.id}/review`, { action: "approve", note: null });
+      if (r.ok) ok++;
+      else failed.push(taskRef(t.number));
+    }
+    for (const r of releases) {
+      const res = await postJson(`/api/releases/${r.id}/review`, { action: "approve", note: null });
+      if (res.ok) ok++;
+      else failed.push(`${r.app?.name ?? "App"} v${r.version_name}`);
+    }
+    setBusy(null);
+    done();
+    if (failed.length) toast(`${ok} approved · couldn't approve ${failed.join(", ")}`, "error");
+    else toast(`${ok} request${ok === 1 ? "" : "s"} approved`, "success");
+  }
+
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
-      <PageHeader title="Approvals" description="Status changes and releases your teammates have requested. Approving applies them; sending back clears the request with your note." />
+      <PageHeader
+        title="Approvals"
+        description="Status changes and releases your teammates have requested. Approving applies them; sending back clears the request with your note."
+        actions={
+          total > 1 ? (
+            <Button onClick={approveAll} disabled={!!busy}>
+              {busy === "all" ? <Spinner /> : <IconCheck size={15} />} Approve all · {total}
+            </Button>
+          ) : undefined
+        }
+      />
       {loading || rLoading || sessionLoading ? (
         <ListSkeleton rows={5} />
       ) : (error && !data) || (rError && !rd) ? (

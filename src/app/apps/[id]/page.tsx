@@ -6,12 +6,11 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dropdown } from "@/components/ui/dropdown";
 import { Segmented } from "@/components/ui/segmented";
 import { Breadcrumb, LoadError, EmptyState, Spinner, StatCard } from "@/components/ui/misc";
 import { ListSkeleton, PanelSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
-import { AppTile, PlatformBadge } from "@/components/ui/task-chips";
+import { AppTile, PlatformBadge, PlatformGlyph } from "@/components/ui/task-chips";
 import { PeoplePicker } from "@/components/ui/people-picker";
 import { TaskList } from "@/components/task-list";
 import { AppFormSheet } from "@/components/app-form";
@@ -24,8 +23,8 @@ import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { postJson, deleteJson } from "@/lib/http";
 import { cn } from "@/lib/cn";
-import { APP_ROLES, APP_ROLE_META, DEPARTMENT_META, type AppRole } from "@/lib/domain";
-import { IconPlus, IconEdit, IconTasks, IconRocket, IconUsers, IconSettings, IconExternal, IconAndroid, IconApple, IconTrash, IconArchive, IconX } from "@/components/ui/icons";
+import { APP_ROLE_META, DEPARTMENT_META, appRoleForDepartment, type AppRole } from "@/lib/domain";
+import { IconPlus, IconEdit, IconTasks, IconRocket, IconUsers, IconSettings, IconExternal, IconTrash, IconArchive, IconX } from "@/components/ui/icons";
 import type { AppOverview, Release, TaskCard, UserBrief } from "@/lib/types";
 
 type Tab = "tasks" | "releases" | "members" | "settings";
@@ -88,7 +87,7 @@ function AppScreen() {
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-subtle">
               {app.has_android && (
                 <span className="inline-flex items-center gap-1">
-                  <IconAndroid size={13} /> {app.latest_android ? `v${app.latest_android.version_name}` : "no release yet"}
+                  <PlatformGlyph platform="android" size={14} /> {app.latest_android ? `v${app.latest_android.version_name}` : "no release yet"}
                   {playUrl && (
                     <a href={playUrl} target="_blank" rel="noopener noreferrer" className="ml-0.5 text-brand-700 hover:text-brand-800" title="Open on Google Play">
                       <IconExternal size={12} />
@@ -98,7 +97,7 @@ function AppScreen() {
               )}
               {app.has_ios && (
                 <span className="inline-flex items-center gap-1">
-                  <IconApple size={13} /> {app.latest_ios ? `v${app.latest_ios.version_name}` : "no release yet"}
+                  <PlatformGlyph platform="ios" size={14} /> {app.latest_ios ? `v${app.latest_ios.version_name}` : "no release yet"}
                   {app.appstore_url && (
                     <a href={app.appstore_url} target="_blank" rel="noopener noreferrer" className="ml-0.5 text-brand-700 hover:text-brand-800" title="Open on the App Store">
                       <IconExternal size={12} />
@@ -244,8 +243,6 @@ function ReleasesTab({ app, apps }: { app: AppOverview; apps: AppOverview[] }) {
   );
 }
 
-const ROLE_OPTIONS = APP_ROLES.map((r) => ({ value: r, label: APP_ROLE_META[r].label }));
-
 function MembersTab({ app }: { app: AppOverview }) {
   const { isAdmin } = useSession();
   const { toast } = useToast();
@@ -288,7 +285,8 @@ function MembersTab({ app }: { app: AppOverview }) {
                 value={adding}
                 onChange={(ids) => {
                   setAdding([]);
-                  if (ids.length) setDraft([...rows, ...ids.filter((id) => !rows.some((r) => r.user_id === id)).map((id) => ({ user_id: id, app_role: "developer" as AppRole }))]);
+                  // Their app role follows their department (set under People) — no second question here.
+                  if (ids.length) setDraft([...rows, ...ids.filter((id) => !rows.some((r) => r.user_id === id)).map((id) => ({ user_id: id, app_role: appRoleForDepartment(byId.get(id)?.department) }))]);
                 }}
                 placeholder="Add a teammate…"
                 single
@@ -313,17 +311,11 @@ function MembersTab({ app }: { app: AppOverview }) {
                   <div className="truncate text-sm font-medium text-ink">{u.name}</div>
                   <div className="truncate text-xs text-ink-subtle">{DEPARTMENT_META[u.department]?.label ?? u.department}</div>
                 </div>
-                {isAdmin ? (
-                  <>
-                    <div className="w-36">
-                      <Dropdown value={r.app_role} onChange={(v) => setDraft(rows.map((x) => (x.user_id === r.user_id ? { ...x, app_role: v as AppRole } : x)))} options={ROLE_OPTIONS} className="[&>button]:h-9" />
-                    </div>
-                    <button type="button" onClick={() => setDraft(rows.filter((x) => x.user_id !== r.user_id))} className="tap rounded-md p-1.5 text-ink-subtle hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${u.name}`}>
-                      <IconX size={16} />
-                    </button>
-                  </>
-                ) : (
-                  <Badge tone="neutral">{APP_ROLE_META[r.app_role].label}</Badge>
+                <Badge tone="neutral" title="From their department under People">{APP_ROLE_META[r.app_role].label}</Badge>
+                {isAdmin && (
+                  <button type="button" onClick={() => setDraft(rows.filter((x) => x.user_id !== r.user_id))} className="tap rounded-md p-1.5 text-ink-subtle hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${u.name}`}>
+                    <IconX size={16} />
+                  </button>
                 )}
               </li>
             );

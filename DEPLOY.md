@@ -83,7 +83,7 @@ numbers restart at T-1) and empty the `attachments` bucket under Storage.
 
 ## 7. Daily job — Cloud Scheduler (needed)
 App Hosting has no built-in cron. The daily job sends due-date reminders (09:00 IST) and is
-what keeps the Activity log at 90 days and the inbox at 60 days — without it they grow
+what keeps the Activity log at 14 days and the inbox at 60 days — without it they grow
 without bound. Replace `<APP_URL>` and `<CRON_SECRET>`:
 ```powershell
 gcloud scheduler jobs create http factotasks-daily `

@@ -7,11 +7,12 @@ import { LoadError, EmptyState } from "@/components/ui/misc";
 import { Segmented } from "@/components/ui/segmented";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
+import { AppTile } from "@/components/ui/task-chips";
 import { useCachedFetch } from "@/lib/client-cache";
 import { cn } from "@/lib/cn";
 import { STATUS_META, TYPE_META, formatDuration, type TaskStatus, type TaskType } from "@/lib/domain";
 import { IconAnalytics } from "@/components/ui/icons";
-import type { UserBrief } from "@/lib/types";
+import type { AppOverview, UserBrief } from "@/lib/types";
 
 interface MonthRow {
   month: string;
@@ -31,6 +32,8 @@ interface Pack {
   totals: { done: number; created: number; open_now: number; overdue_now: number; median_lead_hours: number | null; avg_active_hours: number | null };
 }
 
+/** Heatmap column heads: the month alone, the year on January so a 12-month grid still reads. */
+const monthShort = (m: string) => new Date(m + "-01T00:00:00Z").toLocaleDateString("en-IN", { month: "short", timeZone: "UTC" }) + (m.endsWith("-01") ? ` ${m.slice(2, 4)}` : "");
 const monthLabel = (m: string) => new Date(m + "-01T00:00:00Z").toLocaleDateString("en-IN", { month: "short", year: "2-digit", timeZone: "UTC" });
 const hours = (h: number | null | undefined) => (h == null ? "—" : formatDuration(h * 3600));
 const STATUS_COLORS: Record<TaskStatus, string> = { todo: "#94a3b8", in_progress: "#3b82f6", in_review: "#0ea5e9", on_hold: "#f59e0b", partial: "#14b8a6", done: "#10b981", cancelled: "#f87171" };
@@ -64,6 +67,9 @@ export default function AnalyticsPage() {
 
 function AnalyticsView({ data }: { data: Pack }) {
   const months = data.months;
+  // Store icons come from the apps list the rest of the panel already caches.
+  const { data: ad } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
+  const iconOf = useMemo(() => new Map((ad?.apps ?? []).map((a) => [a.id, a.icon_url ?? null])), [ad]);
   const maxMonth = Math.max(1, ...months.map((m) => Math.max(m.done, m.created)));
   const statusRows = useMemo(() => (Object.keys(STATUS_META) as TaskStatus[]).map((s) => ({ s, n: data.status_now[s] ?? 0 })).filter((r) => r.n > 0), [data]);
   const statusTotal = statusRows.reduce((a, r) => a + r.n, 0) || 1;
@@ -101,7 +107,13 @@ function AnalyticsView({ data }: { data: Pack }) {
                 </div>
                 <div className="text-[11px] font-medium text-ink-muted">{monthLabel(m.month)}</div>
                 <div className="text-[10.5px] tabular-nums text-ink-subtle">
-                  <span className="text-emerald-700">{m.done}</span> / {m.created}
+                  {m.done || m.created ? (
+                    <>
+                      <span className="text-emerald-700">{m.done}</span> / {m.created}
+                    </>
+                  ) : (
+                    <span className="text-ink-subtle/50">—</span>
+                  )}
                   {m.releases > 0 && <span title={`${m.releases} release(s)`}> · {m.releases} rel.</span>}
                 </div>
               </div>
@@ -117,7 +129,7 @@ function AnalyticsView({ data }: { data: Pack }) {
         {/* App-wise, month-wise */}
         <Section title="App-wise" hint="Done per month, per app">
           {appsWithGeneral.length ? (
-            <Heatmap rows={appsWithGeneral.map((a) => ({ key: a.id, label: a.name, color: a.color, months: a.months, total: a.done, extra: `${a.open} open${a.overdue ? ` · ${a.overdue} late` : ""}` }))} months={months.map((m) => m.month)} max={maxAppMonth} />
+            <Heatmap rows={appsWithGeneral.map((a) => ({ key: a.id, label: a.name, color: a.color, iconUrl: iconOf.get(a.id) ?? null, months: a.months, total: a.done, extra: `${a.open} open${a.overdue ? ` · ${a.overdue} late` : ""}` }))} months={months.map((m) => m.month)} max={maxAppMonth} />
           ) : (
             <p className="py-6 text-center text-sm text-ink-subtle">No apps yet.</p>
           )}
@@ -170,9 +182,9 @@ function AnalyticsView({ data }: { data: Pack }) {
               </thead>
               <tbody className="divide-y divide-line/60">
                 {months.map((m) => (
-                  <tr key={m.month}>
-                    <td className="py-1.5 text-ink">{monthLabel(m.month)}</td>
-                    <td className="py-1.5 text-right tabular-nums text-emerald-700">{m.done}</td>
+                  <tr key={m.month} className={cn(!m.done && "text-ink-subtle/70")}>
+                    <td className="py-1.5">{monthLabel(m.month)}</td>
+                    <td className={cn("py-1.5 text-right tabular-nums", m.done > 0 && "text-emerald-700")}>{m.done}</td>
                     <td className="py-1.5 text-right tabular-nums">{hours(m.avg_lead_hours)}</td>
                     <td className="py-1.5 text-right tabular-nums">{hours(m.avg_active_hours)}</td>
                   </tr>
@@ -240,27 +252,27 @@ function Legend({ items }: { items: [string, string][] }) {
 }
 
 /** Rows × months grid of counts, shaded by intensity — reads at a glance on a phone too. */
-function Heatmap({ rows, months, max }: { rows: { key: string; label: string; color?: string; avatar?: UserBrief; months: Record<string, number>; total: number; extra?: string }[]; months: string[]; max: number }) {
+function Heatmap({ rows, months, max }: { rows: { key: string; label: string; color?: string; iconUrl?: string | null; avatar?: UserBrief; months: Record<string, number>; total: number; extra?: string }[]; months: string[]; max: number }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[420px] text-[13px]">
+      <table className="w-full min-w-[360px] text-[13px]">
         <thead className="text-[11px] uppercase tracking-wide text-ink-subtle">
           <tr>
             <th className="pb-1.5 text-left font-medium"></th>
             {months.map((m) => (
-              <th key={m} className="pb-1.5 text-center font-medium">
-                {monthLabel(m)}
+              <th key={m} className="pb-1.5 text-center font-medium" title={monthLabel(m)}>
+                {monthShort(m)}
               </th>
             ))}
-            <th className="pb-1.5 text-right font-medium">Total</th>
+            <th className="pb-1.5 pl-1 text-right font-medium">Total</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-line/60">
           {rows.map((r) => (
             <tr key={r.key}>
-              <td className="py-1.5 pr-2">
+              <td className="w-full max-w-0 py-1.5 pr-2">
                 <div className="flex items-center gap-2">
-                  {r.avatar ? <Avatar user={r.avatar} size="xs" /> : <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: r.color }} />}
+                  {r.avatar ? <Avatar user={r.avatar} size="xs" /> : <AppTile name={r.label} color={r.color ?? "#94a3b8"} iconUrl={r.iconUrl} className="h-6 w-6 rounded-md text-[10px]" />}
                   <span className="min-w-0">
                     <span className="block truncate font-medium text-ink">{r.label}</span>
                     {r.extra && <span className="block text-[11px] text-ink-subtle">{r.extra}</span>}
@@ -272,9 +284,15 @@ function Heatmap({ rows, months, max }: { rows: { key: string; label: string; co
                 const a = v ? 0.15 + 0.85 * (v / max) : 0;
                 return (
                   <td key={m} className="px-0.5 py-1.5 text-center">
-                    <span className={cn("inline-flex h-7 w-10 items-center justify-center rounded-md text-[12px] font-semibold tabular-nums", v ? (a >= 0.5 ? "text-white" : "text-ink") : "text-ink-subtle/60")} style={{ backgroundColor: v ? `rgba(28,28,26,${a.toFixed(2)})` : "rgba(15,23,42,0.04)" }}>
-                      {v || "·"}
-                    </span>
+                    {v ? (
+                      <span className={cn("inline-flex h-7 w-10 items-center justify-center rounded-md text-[12px] font-semibold tabular-nums", a >= 0.5 ? "text-white" : "text-ink")} style={{ backgroundColor: `rgba(28,28,26,${a.toFixed(2)})` }}>
+                        {v}
+                      </span>
+                    ) : (
+                      <span className="inline-flex h-7 w-10 items-center justify-center text-[12px] text-ink-subtle/40" aria-label="none">
+                        ·
+                      </span>
+                    )}
                   </td>
                 );
               })}

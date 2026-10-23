@@ -104,16 +104,19 @@ export default function DashboardPage() {
           {data.releases.length > 0 && (
             <section>
               <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">Releases</h2>
-              <ul className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                {data.releases.slice(0, 8).map((r) => (
-                  <li key={r.id} className="shrink-0">
-                    <Link href={`/apps/${r.app.id}?tab=releases`} className="flex items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 transition-colors hover:bg-canvas">
-                      <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} className="h-7 w-7 text-xs" />
-                      <span className="text-sm">
-                        <span className="font-medium text-ink">{r.app.name}</span> <span className="tabular-nums text-ink-muted">v{r.version_name}</span>
+              <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {data.releases.map((r) => (
+                  <li key={r.id} className="min-w-0">
+                    <Link href={`/apps/${r.app.id}?tab=releases`} className="flex h-full items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 transition-colors hover:bg-canvas">
+                      <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} className="h-8 w-8 text-xs" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium text-ink">{r.app.name}</span>
+                        <span className="flex items-center gap-1.5 text-[12px] text-ink-muted">
+                          <span className="tabular-nums">v{r.version_name}</span>
+                          <PlatformBadge platform={r.platform} label={false} />
+                        </span>
                       </span>
-                      <PlatformBadge platform={r.platform} label={false} />
-                      <ReleaseStatusBadge status={r.status} />
+                      <ReleaseStatusBadge status={r.status} className="shrink-0" />
                     </Link>
                   </li>
                 ))}

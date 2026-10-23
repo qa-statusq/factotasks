@@ -44,10 +44,10 @@ export async function logActivity(input: ActivityInput): Promise<void> {
 
 /**
  * Keep the activity log to a rolling window: delete entries older than `days`
- * (default 90). Best-effort — never throws, never blocks a sync. Uses the
+ * (default 14). Best-effort — never throws, never blocks a sync. Uses the
  * (created_at) index, so it's an efficient range delete regardless of size.
  */
-export async function purgeOldActivity(days = 90): Promise<void> {
+export async function purgeOldActivity(days = 14): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     const sb = getSupabase();

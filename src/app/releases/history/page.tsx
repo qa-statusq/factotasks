@@ -18,7 +18,7 @@ import { useCachedFetch } from "@/lib/client-cache";
 import { usePref } from "@/lib/use-pref";
 import { istTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
-import { PLATFORM_META, RELEASE_STATUS_META, STATUS_META, taskRef, type ReleaseStatus } from "@/lib/domain";
+import { PLATFORM_META, RELEASE_STATUSES, RELEASE_STATUS_META, STATUS_META, taskRef, type ReleaseStatus } from "@/lib/domain";
 import { IconBack, IconRocket, IconCalendar, IconCheck, IconChevronDown, IconEdit, IconUserCheck, IconX, IconSearch } from "@/components/ui/icons";
 import type { AppOverview, Release } from "@/lib/types";
 import type { ReleaseEvent } from "@/app/api/releases/history/route";
@@ -42,6 +42,7 @@ function HistoryScreen() {
   const sp = useSearchParams();
   const app = sp.get("app") || "";
   const platform = sp.get("platform") || "";
+  const status = sp.get("status") || "";
   const [groupPref, setGroupPref] = usePref<string>("history.group", "month");
   const group = ((sp.get("group") as Group) || (groupPref as Group)) ?? "month";
   const from = sp.get("from") || "";
@@ -70,13 +71,14 @@ function HistoryScreen() {
   const needle = q.trim().toLowerCase();
   const matches = useCallback(
     (r: Release) => {
+      if (status && r.status !== status) return false;
       if (!needle) return true;
       const hay = [`v${r.version_name}`, r.version_name, r.build_number ?? "", r.app?.name ?? "", r.description ?? "", r.notes ?? "", RELEASE_STATUS_META[r.status].label, PLATFORM_META[r.platform].label, ...(r.tasks ?? []).flatMap((t) => [taskRef(t.number), t.title, t.description ?? ""]), ...(eventsByRelease.get(r.id) || []).map((e) => `${e.summary ?? ""} ${e.by}`)]
         .join("\n")
         .toLowerCase();
       return hay.includes(needle);
     },
-    [needle, eventsByRelease]
+    [needle, status, eventsByRelease]
   );
   const groups = useMemo(() => {
     const releases = [...(data?.releases ?? [])].filter(matches).sort((a, b) => dayOf(b).localeCompare(dayOf(a)) || b.created_at.localeCompare(a.created_at));
@@ -114,6 +116,9 @@ function HistoryScreen() {
         <Cell label="Platform">
           <Dropdown value={platform} onChange={(v) => set({ platform: v || undefined })} options={[{ value: "", label: "Both platforms" }, { value: "android", label: PLATFORM_META.android.label }, { value: "ios", label: PLATFORM_META.ios.label }]} className="w-44 [&>button]:h-9" />
         </Cell>
+        <Cell label="Status">
+          <Dropdown value={status} onChange={(v) => set({ status: v || undefined })} options={[{ value: "", label: "Any status" }, ...RELEASE_STATUSES.map((s) => ({ value: s, label: RELEASE_STATUS_META[s].label }))]} className="w-40 [&>button]:h-9" />
+        </Cell>
         <Cell label="Dates">
           <DateRangeInput value={from && to ? { from, to } : null} onChange={(v) => set({ from: v?.from, to: v?.to })} placeholder="Any dates" className="[&>button]:h-9" />
         </Cell>
@@ -141,7 +146,7 @@ function HistoryScreen() {
       ) : error && !data ? (
         <LoadError title="Couldn't load the history" onRetry={refresh} />
       ) : total === 0 ? (
-        <EmptyState icon={<IconRocket size={20} />} title={needle ? `Nothing matches “${q.trim()}”` : "No releases here"} description={needle ? "Try a version number, a task number or a word from the notes." : "Widen the dates or pick another app."} />
+        <EmptyState icon={<IconRocket size={20} />} title={needle ? `Nothing matches “${q.trim()}”` : status ? `No ${RELEASE_STATUS_META[status as ReleaseStatus]?.label.toLowerCase() ?? status} releases` : "No releases here"} description={needle ? "Try a version number, a task number or a word from the notes." : "Widen the dates, pick another app or clear the status filter."} />
       ) : (
         <>
           <p className="-mt-2 text-[12.5px] text-ink-subtle">

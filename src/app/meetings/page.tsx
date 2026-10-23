@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/field";
+import { Dropdown } from "@/components/ui/dropdown";
 import { DateRangeInput, type DateRange } from "@/components/ui/date-range";
 import { EmptyState, LoadError } from "@/components/ui/misc";
 import { ListSkeleton } from "@/components/ui/skeleton";
@@ -12,9 +13,8 @@ import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch } from "@/lib/client-cache";
 import { istTime } from "@/lib/time";
 import { RelTime } from "@/components/ui/live-time";
-import { cn } from "@/lib/cn";
 import { NewMeetingSheet, ManageSeriesSheet, SeriesBadge, ScopeLabel } from "@/components/meeting-series";
-import { IconPresentation, IconPlus, IconMaximize, IconSettings, IconSearch, IconX } from "@/components/ui/icons";
+import { IconPresentation, IconPlus, IconMaximize, IconSettings, IconSearch, IconX, IconCalendar } from "@/components/ui/icons";
 import type { AppOverview, Meeting, MeetingSeries } from "@/lib/types";
 
 const fmt = (iso: string) => istTime(iso).replace(/:\d\d (am|pm)/, " $1");
@@ -74,21 +74,17 @@ export default function MeetingsPage() {
         )}
       </p>
 
-      {series.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Series">
-          <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-            All <span className="text-ink-subtle">{meetings.length}</span>
-          </FilterChip>
-          {series.map((s) => (
-            <FilterChip key={s.id} active={filter === s.id} onClick={() => setFilter(s.id)}>
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
-              {s.name} <span className="text-ink-subtle">{s.meeting_count ?? 0}</span>
-            </FilterChip>
-          ))}
-        </div>
-      )}
-
       <div className="flex flex-wrap items-center gap-2">
+        {series.length > 0 && (
+          <div className="w-full sm:w-64">
+            <Dropdown
+              value={filter}
+              onChange={setFilter}
+              options={[{ value: "all", label: `All series · ${meetings.length}` }, ...series.map((s) => ({ value: s.id, label: `${s.name} · ${s.meeting_count ?? 0}` }))]}
+              className="[&>button]:h-9"
+            />
+          </div>
+        )}
         <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
           <IconSearch size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search meetings…" className="h-9 pl-8 pr-8" aria-label="Search meetings" />
@@ -117,25 +113,25 @@ export default function MeetingsPage() {
       ) : (
         <ul className="divide-y divide-line/70 overflow-hidden rounded-xl border border-line bg-surface">
           {shown.map((m) => (
-            <li key={m.id} className="flex items-center gap-3 px-3 py-3 sm:px-4">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-canvas text-ink-muted ring-1 ring-inset ring-line">
-                <IconPresentation size={16} />
+            <li key={m.id} className="flex items-center gap-3 px-3 py-3.5 sm:px-4">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ring-1 ring-inset ring-black/10" style={{ backgroundColor: m.series?.color || "#64748b" }} title={m.series?.name}>
+                <IconPresentation size={18} />
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <Link href={`/meetings/${m.id}`} className="break-words text-[14px] font-semibold text-ink hover:underline">
                     {m.title}
                   </Link>
                   <Badge tone={m.status === "open" ? "success" : "neutral"}>{m.status === "open" ? "Open" : "Closed"}</Badge>
-                  {filter === "all" && <SeriesBadge series={m.series} />}
                 </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ink-subtle">
-                  <span>
-                    {fmt(m.held_at)} · <RelTime iso={m.held_at} />
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-muted">
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                    <IconCalendar size={12} className="text-ink-subtle" />
+                    {fmt(m.held_at)} <span className="text-ink-subtle">· <RelTime iso={m.held_at} /></span>
                   </span>
-                  <span>·</span>
+                  {filter === "all" && <SeriesBadge series={m.series} />}
                   <ScopeLabel scope={m} apps={ad?.apps} />
-                  {typeof m.note_count === "number" && m.note_count > 0 && <span>· {m.note_count} note{m.note_count === 1 ? "" : "s"}</span>}
+                  {typeof m.note_count === "number" && m.note_count > 0 && <span className="text-ink-subtle">{m.note_count} note{m.note_count === 1 ? "" : "s"}</span>}
                 </div>
               </div>
               <Link href={`/meetings/${m.id}/present`} className={buttonClass("secondary", "sm")} title="Present full-screen">
@@ -152,13 +148,5 @@ export default function MeetingsPage() {
       {creating && <NewMeetingSheet onClose={() => setCreating(false)} defaultSeriesId={filter === "all" ? null : filter} />}
       {managing && <ManageSeriesSheet onClose={() => setManaging(false)} />}
     </div>
-  );
-}
-
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button type="button" role="tab" aria-selected={active} onClick={onClick} className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium ring-1 ring-inset transition-colors", active ? "bg-ink text-white ring-ink [&_span]:text-white/60" : "bg-surface text-ink-muted ring-line hover:text-ink")}>
-      {children}
-    </button>
   );
 }

@@ -13,7 +13,7 @@ export const maxDuration = 60;
  * Daily housekeeping, called by Cloud Scheduler with `Authorization: Bearer
  * <CRON_SECRET>` (see DEPLOY.md). Idempotent for a given day:
  *  - "due tomorrow" / "overdue" reminders to assignees (one per task per day)
- *  - trims the activity log (90 d) and notifications (60 d)
+ *  - trims the activity log (14 d) and notifications (60 d)
  * Rejects any request without the secret — safe to expose publicly.
  */
 export async function GET(req: NextRequest) {

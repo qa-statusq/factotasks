@@ -96,6 +96,29 @@ export const APP_ROLE_META: Record<AppRole, { label: string }> = {
   other: { label: "Other" },
 };
 
+/** The part someone plays on an app follows their department, so adding them asks nothing more. */
+export function appRoleForDepartment(d: string | null | undefined): AppRole {
+  switch (d) {
+    case "android":
+    case "ios":
+    case "flutter":
+    case "web":
+      return "developer";
+    case "design":
+      return "designer";
+    case "qa":
+      return "qa";
+    case "backend":
+      return "backend";
+    case "marketing":
+      return "marketing";
+    case "management":
+      return "lead";
+    default:
+      return "other";
+  }
+}
+
 /* ------------------------------- releases ------------------------------ */
 
 export const RELEASE_STATUSES = ["planned", "in_progress", "testing", "submitted", "released", "rolled_back", "cancelled"] as const;

@@ -51,7 +51,8 @@ export function ScopeLabel({ scope, apps, className, size = "sm" }: { scope: Par
           {chosen.length <= 4 && a.name}
         </span>
       ))}
-      {chosen.length < ids.length && <span className="text-ink-subtle">+{ids.length - chosen.length}</span>}
+      {chosen.length > 4 && <span className="text-ink-subtle">{ids.length} apps</span>}
+      {chosen.length <= 4 && chosen.length < ids.length && <span className="text-ink-subtle">+{ids.length - chosen.length}</span>}
     </span>
   );
 }
