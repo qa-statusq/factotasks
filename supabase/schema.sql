@@ -583,16 +583,18 @@ as $$
   select coalesce(array_agg(app_id), '{}'::uuid[]) from app_members where user_id = p_user;
 $$;
 
--- A member sees a task when it is general (no app) or targets one of their
--- apps. Nothing else: being assigned to a task on an app you were taken off
--- does not keep it visible (the API un-assigns you at that point).
+-- A member sees an app task when it targets one of their apps, and a general
+-- (no-app) task only when they are assigned to it or created it (011). Being
+-- assigned to a task on an app you were taken off does not keep it visible
+-- (the API un-assigns you at that point).
 create or replace function task_visible(p_task uuid, p_user uuid)
 returns boolean
 language sql
 stable
 set search_path = public
 as $$
-  select t.app_ids = '{}'::uuid[] or t.app_ids && visible_app_ids(p_user)
+  select (t.app_ids <> '{}'::uuid[] and t.app_ids && visible_app_ids(p_user))
+      or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user))
   from tasks t where t.id = p_task;
 $$;
 
@@ -830,7 +832,7 @@ stable
 set search_path = public
 as $$
   -- What this caller may see: everything for admins, their apps for members.
-  with vis as (select t.* from tasks t where p_admin or t.app_ids = '{}'::uuid[] or t.app_ids && visible_app_ids(p_user)),
+  with vis as (select t.* from tasks t where p_admin or (t.app_ids <> '{}'::uuid[] and t.app_ids && visible_app_ids(p_user)) or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user))),
   mine as (
     select t.* from vis t
     where exists (select 1 from task_assignees ta where ta.task_id = t.id and ta.user_id = p_user)
@@ -1103,7 +1105,7 @@ as $$
            ((p_to + 1)::timestamp at time zone 'Asia/Kolkata') as to_at
   ),
   -- p_user null = the whole team (admins); otherwise only what that member may see.
-  vis as (select t.* from tasks t where p_user is null or t.app_ids = '{}'::uuid[] or t.app_ids && visible_app_ids(p_user)),
+  vis as (select t.* from tasks t where p_user is null or (t.app_ids <> '{}'::uuid[] and t.app_ids && visible_app_ids(p_user)) or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user))),
   done as (
     select t.* from vis t, bounds b where t.status = 'done' and t.completed_at >= b.from_at and t.completed_at < b.to_at
   ),
@@ -1176,7 +1178,7 @@ as $$
     from bounds, generate_series(bounds.from_m, date_trunc('month', (now() at time zone 'Asia/Kolkata')), interval '1 month') g(m)
   ),
   -- p_user null = the whole team (admins); otherwise only what that member may see.
-  vis as (select t.* from tasks t where p_user is null or t.app_ids = '{}'::uuid[] or t.app_ids && visible_app_ids(p_user)),
+  vis as (select t.* from tasks t where p_user is null or (t.app_ids <> '{}'::uuid[] and t.app_ids && visible_app_ids(p_user)) or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user))),
   done as (
     select t.*, to_char(t.completed_at at time zone 'Asia/Kolkata', 'YYYY-MM') as month
     from vis t, bounds b

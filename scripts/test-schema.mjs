@@ -175,8 +175,11 @@ await db.query("update tasks set series_id = null where id = $1", [gen.id]);
 // Visibility: an outsider (no app membership, nothing assigned) sees only general tasks.
 const outsider = await one("insert into users (email, password_hash, first_name, last_name, role) values ('out@x.test', 'x', 'Out', 'Sider', 'member') returning id");
 const visOut = (await db.query("select visible_task_ids($1) as id", [outsider.id])).rows.map((r) => r.id);
-assert(!visOut.includes(t1.id) && visOut.includes(t2.id), "visibility: outsider sees general tasks but not another app's");
-assert((await one("select task_visible($1, $2) as v", [t2.id, outsider.id])).v === true, "visibility: general task is visible to everyone");
+assert(!visOut.includes(t1.id) && !visOut.includes(t2.id), "visibility: outsider sees neither another app's task nor someone else's general task");
+assert((await one("select task_visible($1, $2) as v", [t2.id, admin.id])).v === true, "visibility: a general task is visible to its assignee");
+await db.query("update tasks set created_by = $1 where id = $2", [outsider.id, t2.id]);
+assert((await one("select task_visible($1, $2) as v", [t2.id, outsider.id])).v === true, "visibility: a general task is visible to its creator");
+await db.query("update tasks set created_by = $1 where id = $2", [admin.id, t2.id]);
 assert((await one("select task_visible($1, $2) as v", [t1.id, dev.id])).v === true, "visibility: app member sees the app's task");
 await db.query("delete from app_members where user_id = $1 and app_id = $2", [dev.id, app.id]);
 assert((await one("select task_visible($1, $2) as v", [t1.id, dev.id])).v === false, "visibility: assignee taken off the app no longer sees its task");

@@ -1,8 +1,8 @@
 /**
  * What a signed-in person may see. Admins see the whole workspace. A member's
  * world is the apps they belong to: those apps, their releases, tasks that
- * target them, plus general (no-app) tasks. Nothing else — not even a task
- * they are assigned to on another app. The rule lives in SQL (task_visible / visible_task_ids /
+ * target them, plus general (no-app) tasks they are assigned to or created.
+ * Nothing else — not even a task they are assigned to on another app. The rule lives in SQL (task_visible / visible_task_ids /
  * visible_app_ids, migration 007) so lists and aggregates agree; these helpers
  * call it, with a plain-query fallback so a panel whose database has not been
  * migrated yet still answers correctly (and never shows more).
@@ -40,19 +40,22 @@ export async function canSeeTask(u: SessionUser, taskId: string): Promise<boolea
 /** The same rule as task_visible(), in queries, for a database without 007. */
 async function computeVisible(uid: string): Promise<Set<string>> {
   const sb = getSupabase();
-  const [all, targets, members] = await Promise.all([
-    sb.from("tasks").select("id"),
+  const [all, targets, members, mine] = await Promise.all([
+    sb.from("tasks").select("id, created_by"),
     sb.from("task_targets").select("task_id, app_id"),
     sb.from("app_members").select("app_id").eq("user_id", uid),
+    sb.from("task_assignees").select("task_id").eq("user_id", uid),
   ]);
   const myApps = new Set((members.data || []).map((m) => m.app_id as string));
+  const assigned = new Set((mine.data || []).map((x) => x.task_id as string));
   const targeted = new Set<string>();
   const out = new Set<string>();
   for (const t of targets.data || []) {
     targeted.add(t.task_id as string);
     if (myApps.has(t.app_id as string)) out.add(t.task_id as string);
   }
-  for (const t of all.data || []) if (!targeted.has(t.id as string)) out.add(t.id as string);
+  // General tasks are private: assignees and the creator only.
+  for (const t of all.data || []) if (!targeted.has(t.id as string) && (assigned.has(t.id as string) || t.created_by === uid)) out.add(t.id as string);
   return out;
 }
 

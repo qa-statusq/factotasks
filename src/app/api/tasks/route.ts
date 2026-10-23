@@ -64,7 +64,9 @@ export async function GET(req: NextRequest) {
   if (u.role !== "admin") {
     if (arrays) {
       const apps = (await visibleAppIds(u)) ?? [];
-      q = apps.length ? q.or(`app_ids.eq.{},app_ids.ov.{${apps.join(",")}}`) : q.eq("app_ids", "{}");
+      // App tasks on their apps, plus general tasks they are assigned to or created.
+      const general = `and(app_ids.eq.{},or(assignee_ids.cs.{${u.uid}},created_by.eq.${u.uid}))`;
+      q = apps.length ? q.or(`app_ids.ov.{${apps.join(",")}},${general}`) : q.or(general);
     } else {
       const visible = (await visibleTaskIds(u)) ?? [];
       q = q.in("id", visible.length ? visible : [NONE_ID]);

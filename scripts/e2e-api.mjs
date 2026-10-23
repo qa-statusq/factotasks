@@ -177,7 +177,7 @@ const attachSeries = r.data?.series?.id;
 if (attachSeries) created.series.push(attachSeries);
 r = await member.call("GET", "/api/meeting-series");
 check(r.status === 200 && r.data?.series?.some((s) => s.id === attachSeries) && !("meeting_count" in (r.data.series[0] || {})), "members get the series names (no rollups)", r);
-r = await admin.call("POST", "/api/tasks", { title: "Attached general task", type: "other", priority: "low", series_id: attachSeries });
+r = await admin.call("POST", "/api/tasks", { title: "Attached general task", type: "other", priority: "low", series_id: attachSeries, assignee_ids: [memberId] });
 const attached = r.data?.task;
 if (attached) created.tasks.push(attached.id);
 if (r.status === 400 && /migration 010/.test(r.data?.error || "")) {
@@ -187,7 +187,14 @@ check(r.status === 200 && attached?.series?.id === attachSeries && attached.app 
 r = await member.call("GET", "/api/tasks?scope=all&kind=general&series=any&limit=100");
 check(r.status === 200 && r.data?.tasks?.some((t) => t.id === attached?.id) && !r.data.tasks.some((t) => t.id === general.id), "kind=general + series=any lists only attached general tasks", r);
 r = await member.call("GET", "/api/tasks?scope=all&kind=general&series=none&limit=100");
-check(r.status === 200 && r.data?.tasks?.some((t) => t.id === general.id) && !r.data.tasks.some((t) => t.id === attached?.id), "series=none lists general tasks not on a meeting", r);
+check(r.status === 200 && !r.data?.tasks?.some((t) => t.id === general.id) && !r.data.tasks.some((t) => t.id === attached?.id), "series=none: the admin's own general task is not visible to the member", r);
+r = await admin.call("GET", "/api/tasks?scope=all&kind=general&series=none&limit=100");
+check(r.status === 200 && r.data?.tasks?.some((t) => t.id === general.id), "series=none lists general tasks not on a meeting (admin)", r);
+r = await member.call("POST", "/api/tasks", { title: "My private general task", type: "other", priority: "low" });
+const mineGeneral = r.data?.task;
+if (mineGeneral) created.tasks.push(mineGeneral.id);
+r = await member.call("GET", `/api/tasks/${mineGeneral?.id}`);
+check(r.status === 200, "a member sees the general task they created", r);
 r = await member.call("GET", "/api/tasks?scope=all&kind=app&limit=100");
 check(r.status === 200 && r.data?.tasks?.every((t) => t.app !== null), "kind=app lists app tasks only", r);
 r = await admin.call("POST", "/api/meetings", { series_id: attachSeries, held_at: new Date().toISOString() });
