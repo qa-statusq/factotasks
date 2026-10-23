@@ -5,7 +5,7 @@ import { fail, serverError, readJsonObject, EXPECTED_EMBED_MISS } from "@/lib/ap
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUniqueViolation, parseUuidList } from "@/lib/validate";
 import { pickDistinctColor, SERIES_COLORS } from "@/lib/colors";
-import { SERIES_SELECT, shapeSeries, SERIES_NAME_MAX } from "@/lib/meetings";
+import { SERIES_SELECT, SERIES_SELECT_LEGACY, selectSeries, shapeSeries, SERIES_NAME_MAX } from "@/lib/meetings";
 import type { MeetingSeries } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -22,13 +22,10 @@ export async function GET() {
     if (error) return serverError(error);
     return NextResponse.json({ series: (data || []).map((r) => ({ id: r.id, name: r.name, color: r.color, app_ids: [], include_general: true, app_order: [] })) });
   }
-  const [seriesFirst, meetings] = await Promise.all([
-    sb.from("meeting_series").select(SERIES_SELECT).order("created_at"),
+  const [series, meetings] = await Promise.all([
+    selectSeries<Record<string, unknown>[] | null>((sel) => sb.from("meeting_series").select(sel).order("created_at")),
     sb.from("meetings").select("id, series_id, held_at, status").order("held_at", { ascending: false }).limit(1000),
   ]);
-  let series: { data: Record<string, unknown>[] | null; error: { code?: string; message: string } | null } = seriesFirst as never;
-  // A database without 013 has no app_order column yet.
-  if (series.error && EXPECTED_EMBED_MISS.has(series.error.code ?? "")) series = (await sb.from("meeting_series").select("id, name, color, app_ids, include_general, created_at").order("created_at")) as never;
   if (series.error) return serverError(series.error);
   if (meetings.error) return serverError(meetings.error);
   const out: MeetingSeries[] = (series.data || []).map((r) => ({ ...shapeSeries(r as Record<string, unknown>), meeting_count: 0, last_held_at: null, open_meeting_id: null }));
@@ -59,14 +56,10 @@ export async function POST(req: NextRequest) {
   const sb = getSupabase();
   const { data: existing } = await sb.from("meeting_series").select("color");
   const color = pickDistinctColor((existing || []).map((r) => r.color as string), SERIES_COLORS);
-  let { data, error } = await sb
-    .from("meeting_series")
-    .insert({ name, color, app_ids, include_general, app_order, created_by: u.uid })
-    .select(SERIES_SELECT)
-    .single();
+  let { data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, app_order, created_by: u.uid }).select(SERIES_SELECT).single();
   if (error && EXPECTED_EMBED_MISS.has((error as { code?: string }).code ?? "")) {
     // A database without 013: create it without the order column.
-    ({ data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, created_by: u.uid }).select("id, name, color, app_ids, include_general, created_at").single());
+    ({ data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, created_by: u.uid }).select(SERIES_SELECT_LEGACY).single());
   }
   if (error) return isUniqueViolation(error) ? fail("A series with that name already exists", 409) : serverError(error);
   const s = shapeSeries(data as Record<string, unknown>);

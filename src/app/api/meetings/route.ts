@@ -5,7 +5,7 @@ import { fail, serverError, readJsonObject } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid } from "@/lib/validate";
 import { LIMITS } from "@/lib/domain";
-import { MEETING_SELECT, SERIES_SELECT, shapeMeeting, shapeSeries, defaultTitle, ensureDefaultSeries } from "@/lib/meetings";
+import { MEETING_SELECT, selectSeries, shapeMeeting, shapeSeries, defaultTitle, ensureDefaultSeries } from "@/lib/meetings";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   let series;
   if (b.series_id !== undefined) {
     if (!isUuid(b.series_id)) return fail("Pick a series");
-    const { data } = await sb.from("meeting_series").select(SERIES_SELECT).eq("id", b.series_id).maybeSingle();
+    const { data } = await selectSeries((sel) => sb.from("meeting_series").select(sel).eq("id", b.series_id).maybeSingle());
     if (!data) return fail("Series not found", 404);
     series = shapeSeries(data as Record<string, unknown>);
   } else series = await ensureDefaultSeries(u.uid);
