@@ -24,7 +24,7 @@ import { useSession } from "@/components/providers/session-provider";
 import { useNeedsApproval } from "@/lib/use-policy";
 import { useCachedFetch, mutate } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
-import { buildAgenda, notesByTask, type AgendaGroup } from "@/lib/meeting-agenda";
+import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText, type AgendaGroup } from "@/lib/meeting-agenda";
 import { postJson, deleteJson } from "@/lib/http";
 import { istTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
@@ -70,6 +70,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const { data: ad } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
   const agenda = useMemo(() => buildAgenda(pack), [pack]);
+  const labels = useMemo(() => nameLabels(packPeople(pack)), [pack]);
   const notes = useMemo(() => notesByTask(pack.notes), [pack.notes]);
   const general = pack.notes.filter((n) => !n.task_id);
 
@@ -172,7 +173,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
           {agenda.length === 0 ? (
             <EmptyState icon={<IconPresentation size={20} />} title="Nothing to discuss yet" description="Tasks created or completed and releases since the last meeting show up here, app by app." />
           ) : (
-            agenda.map((g) => <AppSection key={g.key} group={g} notes={notes} cacheKey={cacheKey} readOnly={readOnly} needsApproval={needsApproval} onNote={setNoteTask} meetingId={m.id} />)
+            agenda.map((g) => <AppSection key={g.key} group={g} notes={notes} labels={labels} cacheKey={cacheKey} readOnly={readOnly} needsApproval={needsApproval} onNote={setNoteTask} meetingId={m.id} />)
           )}
 
         </div>
@@ -235,7 +236,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "su
   );
 }
 
-function AppSection({ group: g, notes, cacheKey, readOnly, needsApproval, onNote, meetingId }: { group: AgendaGroup; notes: Map<string, MeetingNote[]>; cacheKey: string; readOnly: boolean; needsApproval: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
+function AppSection({ group: g, notes, labels, cacheKey, readOnly, needsApproval, onNote, meetingId }: { group: AgendaGroup; notes: Map<string, MeetingNote[]>; labels: Map<string, string>; cacheKey: string; readOnly: boolean; needsApproval: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
   const [showDone, setShowDone] = useState(g.done.length <= 5);
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-surface">
@@ -258,7 +259,7 @@ function AppSection({ group: g, notes, cacheKey, readOnly, needsApproval, onNote
       {g.pending.length > 0 && (
         <ul className="divide-y divide-line/70">
           {g.pending.map((t) => (
-            <AgendaRow key={t.id} task={t} notes={notes.get(t.id) || []} cacheKey={cacheKey} readOnly={readOnly} needsApproval={needsApproval} onNote={onNote} meetingId={meetingId} />
+            <AgendaRow key={t.id} task={t} notes={notes.get(t.id) || []} labels={labels} cacheKey={cacheKey} readOnly={readOnly} needsApproval={needsApproval} onNote={onNote} meetingId={meetingId} />
           ))}
         </ul>
       )}
@@ -270,7 +271,7 @@ function AppSection({ group: g, notes, cacheKey, readOnly, needsApproval, onNote
           {showDone && (
             <ul className="divide-y divide-line/70 border-t border-line/70">
               {g.done.map((t) => (
-                <AgendaRow key={t.id} task={t} notes={notes.get(t.id) || []} cacheKey={cacheKey} readOnly={readOnly} needsApproval={needsApproval} onNote={onNote} meetingId={meetingId} />
+                <AgendaRow key={t.id} task={t} notes={notes.get(t.id) || []} labels={labels} cacheKey={cacheKey} readOnly={readOnly} needsApproval={needsApproval} onNote={onNote} meetingId={meetingId} />
               ))}
             </ul>
           )}
@@ -319,7 +320,7 @@ function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }
   );
 }
 
-function AgendaRow({ task: t, notes, cacheKey, readOnly, needsApproval, onNote, meetingId }: { task: TaskCard; notes: MeetingNote[]; cacheKey: string; readOnly: boolean; needsApproval: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
+function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, needsApproval, onNote, meetingId }: { task: TaskCard; notes: MeetingNote[]; labels: Map<string, string>; cacheKey: string; readOnly: boolean; needsApproval: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
   const { toast } = useToast();
   async function unpin() {
     const r = await postJson(`/api/meetings/${meetingId}/tasks`, { task_id: t.id }, "DELETE");
@@ -358,7 +359,7 @@ function AgendaRow({ task: t, notes, cacheKey, readOnly, needsApproval, onNote, 
           </div>
           <ClampedText text={desc} lines={2} className="mt-1 text-[12.5px] leading-relaxed text-ink-muted" />
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-ink-subtle">
-            <span>{t.assignees.map((a) => a.name.split(" ")[0]).join(", ") || "unassigned"}</span>
+            <span>{ownerText(t.assignees, labels) || "unassigned"}</span>
             {(t.targets?.length ?? 0) > 1 ? <TargetChips targets={t.targets} max={6} /> : <PlatformBadge platform={t.platform} label={false} className="px-0 ring-0 bg-transparent" />}
             <ReleaseProgress progress={t.release_progress} />
             <DueChip task={t} />

@@ -23,11 +23,11 @@ export function shapeMeeting(r: Record<string, unknown>): Meeting {
   };
 }
 
-export const SERIES_SELECT = "id, name, color, app_ids, include_general, created_at";
+export const SERIES_SELECT = "id, name, color, app_ids, include_general, app_order, created_at";
 export const SERIES_NAME_MAX = 60;
 
 export function shapeSeries(r: Record<string, unknown>): MeetingSeries {
-  return { id: r.id as string, name: r.name as string, color: r.color as string, app_ids: (r.app_ids as string[] | null) ?? [], include_general: (r.include_general as boolean | null) ?? true, created_at: r.created_at as string };
+  return { id: r.id as string, name: r.name as string, color: r.color as string, app_ids: (r.app_ids as string[] | null) ?? [], include_general: (r.include_general as boolean | null) ?? true, app_order: (r.app_order as string[] | null) ?? [], created_at: r.created_at as string };
 }
 
 /** "Weekly sync · 21 Oct 2026" — the default title for a new meeting. */

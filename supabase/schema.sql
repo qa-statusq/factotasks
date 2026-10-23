@@ -407,10 +407,12 @@ create table if not exists meeting_series (
   color      text not null default '#1c1c1a',
   app_ids    uuid[] not null default '{}',   -- default scope for new meetings in this series
   include_general boolean not null default true, -- tasks that belong to no app
+  app_order  uuid[] not null default '{}',   -- presentation order of apps in this series' meetings (013)
   created_by uuid references users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table meeting_series add column if not exists app_order uuid[] not null default '{}';
 create unique index if not exists meeting_series_name_idx on meeting_series (lower(name));
 drop trigger if exists meeting_series_touch on meeting_series;
 create trigger meeting_series_touch before update on meeting_series for each row execute function touch_updated_at();
@@ -1019,7 +1021,7 @@ as $$
     'meeting', (select jsonb_build_object('id', m.id, 'title', m.title, 'held_at', m.held_at, 'notes', m.notes,
                                           'status', m.status, 'finalized_at', m.finalized_at,
                                           'series_id', m.series_id, 'app_ids', to_jsonb(m.app_ids), 'include_general', m.include_general) from m),
-    'series', (select jsonb_build_object('id', s.id, 'name', s.name, 'color', s.color) from meeting_series s, m where s.id = m.series_id),
+    'series', (select jsonb_build_object('id', s.id, 'name', s.name, 'color', s.color, 'app_order', to_jsonb(s.app_order)) from meeting_series s, m where s.id = m.series_id),
     'window', (select jsonb_build_object('from', from_at, 'to', to_at) from win),
     'previous_meeting', (select held_at from prev),
     'pinned', coalesce((select jsonb_agg(task_id) from pinned), '[]'::jsonb),

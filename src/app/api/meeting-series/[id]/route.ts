@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { ok, fail, serverError, readJsonObject } from "@/lib/api";
+import { ok, fail, serverError, readJsonObject, EXPECTED_EMBED_MISS } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUniqueViolation, isUuid, parseUuidList } from "@/lib/validate";
 import { SERIES_NAME_MAX } from "@/lib/meetings";
@@ -28,8 +28,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (ids === null) return fail("Invalid app list");
     patch.app_ids = ids;
   }
+  if ("app_order" in b) {
+    const ids = parseUuidList(b.app_order, 60);
+    if (ids === null) return fail("Invalid app order");
+    patch.app_order = ids;
+  }
   if (!Object.keys(patch).length) return fail("Nothing to update");
-  const { data, error } = await getSupabase().from("meeting_series").update(patch).eq("id", id).select("id, name").maybeSingle();
+  let { data, error } = await getSupabase().from("meeting_series").update(patch).eq("id", id).select("id, name").maybeSingle();
+  if (error && "app_order" in patch && EXPECTED_EMBED_MISS.has((error as { code?: string }).code ?? "")) {
+    // A database without 013 has no app_order column yet: save the rest.
+    delete patch.app_order;
+    if (!Object.keys(patch).length) return ok();
+    ({ data, error } = await getSupabase().from("meeting_series").update(patch).eq("id", id).select("id, name").maybeSingle());
+  }
   if (error) return isUniqueViolation(error) ? fail("A series with that name already exists", 409) : serverError(error);
   if (!data) return fail("Series not found", 404);
   after(() => logActivity({ action: "meeting.series.update", entityType: "meeting_series", entityId: id, summary: `Updated meeting series “${data.name}”` }));

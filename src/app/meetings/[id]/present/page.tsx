@@ -8,7 +8,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
-import { buildAgenda, notesByTask, type AgendaGroup } from "@/lib/meeting-agenda";
+import { buildAgenda, notesByTask, deckRows, otherApps, nameLabels, packPeople, ownerText, type AgendaGroup } from "@/lib/meeting-agenda";
 import { istTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRef } from "@/lib/domain";
@@ -16,7 +16,7 @@ import { toneClass } from "@/components/status-menu";
 import { dueInfo } from "@/components/task-list";
 import { AppTile } from "@/components/ui/task-chips";
 import { ClampedText } from "@/components/ui/clamped-text";
-import { IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconAndroid, IconApple } from "@/components/ui/icons";
+import { IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconAndroid, IconApple, IconApps } from "@/components/ui/icons";
 import type { MeetingNote, MeetingPack, TaskCard } from "@/lib/types";
 
 /**
@@ -68,6 +68,8 @@ const minuteRowCost = (n: MeetingNote) => 1 + Math.min(3, Math.floor(n.body.leng
 interface Slide {
   key: string;
   render: (n: number, total: number) => React.ReactNode;
+  /** Listed in the "jump to" panel (first slide of each section). */
+  jump?: { label: string; icon?: { name: string; color: string; iconUrl: string | null }; sub?: string };
 }
 
 export default function PresentPage() {
@@ -94,6 +96,7 @@ function Deck() {
   // Controls fade after a moment of stillness and come back on any movement,
   // so nothing sits over the slide while it is being presented.
   const [chrome, setChrome] = useState(true);
+  const [jumpOpen, setJumpOpen] = useState(false);
   const idleTimer = useRef(0);
   const wake = useCallback(() => {
     setChrome(true);
@@ -156,7 +159,14 @@ function Deck() {
           toggleFullscreen();
           break;
         case "Escape":
-          if (!document.fullscreenElement) exit();
+          if (jumpOpen) setJumpOpen(false);
+          else if (!document.fullscreenElement) exit();
+          break;
+        case "a":
+        case "A":
+        case "j":
+        case "J":
+          setJumpOpen((o) => !o);
           break;
       }
     };
@@ -166,7 +176,7 @@ function Deck() {
     };
     window.addEventListener("keydown", onAny);
     return () => window.removeEventListener("keydown", onAny);
-  }, [next, prev, go, last, exit, toggleFullscreen, wake]);
+  }, [next, prev, go, last, exit, toggleFullscreen, wake, jumpOpen]);
 
   // Old links used ?print=1 on the deck; the minutes document is the print view now.
   useEffect(() => {
@@ -215,6 +225,9 @@ function Deck() {
 
       {/* Controls live outside the stage so they never print or cover content. */}
       <div className={cn("deck-chrome absolute right-3 top-3 z-10 flex items-center gap-0.5 rounded-xl border border-white/10 bg-[#1f1f1c]/90 p-0.5 text-white/70 backdrop-blur transition-opacity duration-300", !chrome && "pointer-events-none opacity-0")}>
+        <button type="button" onClick={() => setJumpOpen((o) => !o)} className={cn("rounded-lg p-2 hover:bg-white/10 hover:text-white", jumpOpen && "bg-white/15 text-white")} aria-label="Jump to an app" title="Jump to an app (a)">
+          <IconApps size={17} />
+        </button>
         <button type="button" onClick={() => window.open(`/meetings/${id}/print`, "_blank", "noopener")} className="rounded-lg p-2 hover:bg-white/10 hover:text-white" aria-label="Print" title="Minutes as an A4 document — print or save as PDF">
           <IconPrint size={17} />
         </button>
@@ -225,6 +238,25 @@ function Deck() {
           <IconX size={19} />
         </button>
       </div>
+      {jumpOpen && (
+        <div className="absolute inset-0 z-20 flex items-start justify-center bg-black/50 p-6 pt-16" onClick={() => setJumpOpen(false)}>
+          <div className="w-full max-w-[720px] rounded-2xl border border-white/10 bg-[#1f1f1c] p-3 text-white shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Jump to">
+            <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">Jump to</p>
+            <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+              {slides.map((s, i) => s.jump ? (
+                <button key={s.key} type="button" onClick={() => { go(i); setJumpOpen(false); }} className={cn("flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] hover:bg-white/10", i === index && "bg-white/15")}>
+                  {s.jump.icon ? <AppTile name={s.jump.icon.name} color={s.jump.icon.color} iconUrl={s.jump.icon.iconUrl} className="h-7 w-7 rounded-lg text-[10px]" /> : <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-[11px] font-semibold tabular-nums">{i + 1}</span>}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{s.jump.label}</span>
+                    {s.jump.sub && <span className="block truncate text-[11px] text-white/50">{s.jump.sub}</span>}
+                  </span>
+                  <span className="shrink-0 text-[11px] tabular-nums text-white/40">{i + 1}</span>
+                </button>
+              ) : null)}
+            </div>
+          </div>
+        </div>
+      )}
       <div className={cn("deck-chrome absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-[#1f1f1c]/90 px-2 py-1 text-[12px] text-white/70 backdrop-blur transition-opacity duration-300", !chrome && "pointer-events-none opacity-0")}>
         <button type="button" onClick={prev} disabled={index === 0} className="rounded-full p-1 hover:bg-white/10 hover:text-white disabled:opacity-30" aria-label="Previous">
           <IconChevronLeft size={16} />
@@ -245,8 +277,9 @@ function Deck() {
 function buildSlides(p: Pack): Slide[] {
   const slides: Slide[] = [];
   const m = p.meeting;
-  const agenda = buildAgenda(p);
+  const agenda = buildAgenda(p, { dedupe: true });
   const notes = notesByTask(p.notes);
+  const labels = nameLabels(packPeople(p));
   const appMeta = new Map(p.apps.map((a) => [a.id, a]));
   const windowText = p.previous_meeting ? `${fmtDay(p.previous_meeting)} – ${fmtDay(m.held_at)}` : `7 days to ${fmtDay(m.held_at)}`;
   const frame = (n: number, total: number) => ({ meeting: m, workspace: p.workspace_name, n, total });
@@ -254,6 +287,7 @@ function buildSlides(p: Pack): Slide[] {
   /* Cover */
   slides.push({
     key: "cover",
+    jump: { label: "Cover", sub: m.title },
     render: (n, total) => (
       <Frame {...frame(n, total)} bare>
         <div className="grid flex-1 grid-cols-[1.15fr_1fr] items-center gap-[5cqw]">
@@ -293,18 +327,17 @@ function buildSlides(p: Pack): Slide[] {
               {agenda.length === 0 ? (
                 <p className="px-[1.3cqw] py-[1.2cqw] text-[1.25cqw] text-ink-muted">Nothing changed since the last meeting.</p>
               ) : (
-                <ul className="divide-y divide-line/70 px-[1.3cqw]">
-                  {agenda.slice(0, 7).map((g) => (
-                    <li key={g.key} className="flex items-center gap-[1cqw] py-[0.8cqw] text-[1.25cqw]">
-                      <AppTile name={g.name} color={g.color} iconUrl={g.iconUrl} className="h-[2.2cqw] w-[2.2cqw] rounded-[0.5cqw] text-[0.9cqw]" />
-                      <span className="min-w-0 flex-1 truncate font-semibold text-ink">{g.name}</span>
+                <ul className={cn("px-[1.3cqw]", agenda.length > 6 ? "grid grid-cols-2 gap-x-[1.4cqw]" : "divide-y divide-line/70")}>
+                  {agenda.map((g) => (
+                    <li key={g.key} className={cn("flex items-center gap-[0.8cqw] text-ink", agenda.length > 6 ? "border-b border-line/70 py-[0.5cqw] text-[1.05cqw]" : "py-[0.8cqw] text-[1.25cqw]")}>
+                      <AppTile name={g.name} color={g.color} iconUrl={g.iconUrl} className={agenda.length > 6 ? "h-[1.8cqw] w-[1.8cqw] rounded-[0.4cqw] text-[0.8cqw]" : "h-[2.2cqw] w-[2.2cqw] rounded-[0.5cqw] text-[0.9cqw]"} />
+                      <span className="min-w-0 flex-1 truncate font-semibold">{g.name}</span>
                       <span className="shrink-0 tabular-nums text-ink-muted">
-                        {g.pending.length} pending · <span className="text-emerald-700">{g.done.length} done</span>
-                        {g.releases.length ? ` · ${g.releases.length} release${g.releases.length === 1 ? "" : "s"}` : ""}
+                        {g.pending.length}<span className="text-ink-subtle"> open</span> · <span className="text-emerald-700">{g.done.length}</span><span className="text-ink-subtle"> done</span>
+                        {g.releases.length ? <span className="text-ink-subtle"> · {g.releases.length} rel</span> : ""}
                       </span>
                     </li>
                   ))}
-                  {agenda.length > 7 && <li className="py-[0.8cqw] text-[1.05cqw] text-ink-subtle">+ {agenda.length - 7} more</li>}
                 </ul>
               )}
             </div>
@@ -319,10 +352,13 @@ function buildSlides(p: Pack): Slide[] {
     const meta = appMeta.get(g.key);
     const app = { group: g, platforms: meta ? { android: meta.has_android, ios: meta.has_ios } : undefined };
 
+    const jump = { label: g.name, icon: { name: g.name, color: g.color, iconUrl: g.iconUrl }, sub: `${g.pending.length} open · ${g.done.length} done${g.releases.length ? ` · ${g.releases.length} release${g.releases.length === 1 ? "" : "s"}` : ""}` };
+    let jumped = false;
     if (g.releases.length) {
       chunk(g.releases, RELEASES_PER_SLIDE).forEach((part, i, all) => {
         slides.push({
           key: `rel-${g.key}-${i}`,
+          jump: jumped ? undefined : ((jumped = true), jump),
           render: (n, total) => (
             <Frame {...frame(n, total)} app={app} section="Releases" part={all.length > 1 ? `${i + 1} / ${all.length}` : undefined}>
               <ReleaseTable releases={part} />
@@ -332,15 +368,19 @@ function buildSlides(p: Pack): Slide[] {
       });
     }
 
-    const rows: { t: TaskCard; done: boolean }[] = [...g.pending.map((t) => ({ t, done: false })), ...g.done.map((t) => ({ t, done: true }))];
+    // One flat list: done first, then in progress, in review, to do, on hold,
+    // cancelled — newest first within each. A task on several apps sits under
+    // its first app only (buildAgenda dedupe) with the others shown as tiles.
+    const rows: { t: TaskCard; done: boolean }[] = deckRows(g).map((t) => ({ t, done: t.status === "done" }));
     if (!rows.length) continue;
     const parts = chunkByCost(rows, (r) => taskRowCost(r.t, (notes.get(r.t.id) || []).length), TASKS_PER_SLIDE);
     parts.forEach((part, i) => {
       slides.push({
         key: `app-${g.key}-${i}`,
+        jump: jumped ? undefined : ((jumped = true), jump),
         render: (n, total) => (
           <Frame {...frame(n, total)} app={app} section="Tasks" part={parts.length > 1 ? `${i + 1} / ${parts.length}` : undefined}>
-            <TaskTable rows={part} notes={notes} firstPendingIndex={part.findIndex((r) => !r.done)} firstDoneIndex={part.findIndex((r) => r.done)} counts={{ pending: g.pending.length, done: g.done.length }} />
+            <TaskTable rows={part} notes={notes} labels={labels} currentApp={g.key} />
           </Frame>
         ),
       });
@@ -363,9 +403,10 @@ function buildSlides(p: Pack): Slide[] {
     chunkByCost(p.approvals, (t) => taskRowCost(t, 0), TASKS_PER_SLIDE).forEach((part, i, all) => {
       slides.push({
         key: `approvals-${i}`,
+        jump: i === 0 ? { label: "Awaiting approval", sub: `${p.approvals.length} request${p.approvals.length === 1 ? "" : "s"}` } : undefined,
         render: (n, total) => (
           <Frame {...frame(n, total)} title="Awaiting approval" subtitle={`${p.approvals.length} status change${p.approvals.length === 1 ? "" : "s"} waiting for an admin`} part={all.length > 1 ? `${i + 1} / ${all.length}` : undefined}>
-            <TaskTable rows={part.map((t) => ({ t, done: false }))} notes={notes} showApp />
+            <TaskTable rows={part.map((t) => ({ t, done: false }))} notes={notes} labels={labels} showApp />
           </Frame>
         ),
       });
@@ -380,6 +421,7 @@ function buildSlides(p: Pack): Slide[] {
     parts.forEach((part, i, all) => {
       slides.push({
         key: `minutes-${i}`,
+        jump: i === 0 ? { label: "Minutes", sub: `${minutes.length} note${minutes.length === 1 ? "" : "s"}` } : undefined,
         render: (n, total) => (
           <Frame {...frame(n, total)} title="Minutes" subtitle="Decisions, action items, blockers and notes recorded in this meeting" part={all.length > 1 ? `${i + 1} / ${all.length}` : undefined}>
             {i === 0 && m.notes && (
@@ -388,7 +430,7 @@ function buildSlides(p: Pack): Slide[] {
                 <p className="line-clamp-5 whitespace-pre-wrap break-words text-[1.3cqw] leading-relaxed text-ink">{m.notes}</p>
               </div>
             )}
-            {part.length > 0 && <MinutesTable notes={part} />}
+            {part.length > 0 && <MinutesTable notes={part} labels={labels} />}
           </Frame>
         ),
       });
@@ -398,6 +440,7 @@ function buildSlides(p: Pack): Slide[] {
   /* Close */
   slides.push({
     key: "end",
+    jump: { label: "Carried forward", sub: `${p.pending.length} open` },
     render: (n, total) => (
       <Frame {...frame(n, total)} title="Next steps" subtitle="What carries into the next meeting">
         <div className="grid flex-1 grid-cols-[1fr_1.2fr] items-center gap-[5cqw]">
@@ -419,7 +462,7 @@ function buildSlides(p: Pack): Slide[] {
                     <li key={t.id} className="flex items-center gap-[1cqw] py-[0.85cqw] text-[1.25cqw]">
                       <span className="shrink-0 tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
                       <span className="min-w-0 flex-1 truncate font-medium text-ink">{t.title}</span>
-                      <span className="shrink-0 text-ink-muted">{t.assignees.map((a) => a.name.split(" ")[0]).join(", ")}</span>
+                      <span className="shrink-0 text-ink-muted">{ownerText(t.assignees, labels)}</span>
                       {typeof t.carry === "number" && t.carry > 0 && <CarryChip carry={t.carry} />}
                     </li>
                   ))}
@@ -580,32 +623,21 @@ const PANEL_LABEL = "block border-b border-line/70 " + TH;
 const TD = "px-[1.3cqw] py-[1.2cqw] align-top text-[1.4cqw] leading-snug";
 const BADGE = "inline-block whitespace-nowrap rounded-full px-[0.95cqw] py-[0.35cqw] text-[1.05cqw] font-semibold ring-1 ring-inset";
 
-function SectionRow({ label, count, tone, cols }: { label: string; count: number; tone: "pending" | "done"; cols: number }) {
-  return (
-    <tr>
-      <td colSpan={cols} className={cn("border-y border-line/70 px-[1.3cqw] py-[0.55cqw] text-[0.95cqw] font-semibold uppercase tracking-[0.16em]", tone === "done" ? "bg-emerald-50/60 text-emerald-700" : "bg-canvas/70 text-ink-muted")}>
-        {label} · {count}
-      </td>
-    </tr>
-  );
-}
 
 function TaskTable({
   rows,
   notes,
-  firstPendingIndex = -1,
-  firstDoneIndex = -1,
-  counts,
+  labels,
+  currentApp,
   showApp,
 }: {
   rows: { t: TaskCard; done: boolean }[];
   notes: Map<string, MeetingNote[]>;
-  firstPendingIndex?: number;
-  firstDoneIndex?: number;
-  counts?: { pending: number; done: number };
+  labels: Map<string, string>;
+  /** The app this slide belongs to: a task's OTHER apps are shown as tiles. */
+  currentApp?: string;
   showApp?: boolean;
 }) {
-  const cols = showApp ? 6 : 5;
   return (
     <div className={PANEL_SCROLL}>
       <table className="w-full border-collapse">
@@ -617,7 +649,7 @@ function TaskTable({
           <col style={{ width: "11%" }} />
           <col style={{ width: "14%" }} />
         </colgroup>
-        <thead>
+        <thead className="sticky top-0 z-[1] bg-surface">
           <tr>
             <th className={TH}>#</th>
             {showApp && <th className={TH}>App</th>}
@@ -628,14 +660,13 @@ function TaskTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ t, done }, i) => {
+          {rows.map(({ t, done }) => {
             const taskNotes = notes.get(t.id) || [];
             const desc = t.description?.trim();
             const due = dueInfo(t.due_date, t.status);
+            const also = currentApp ? otherApps(t, currentApp) : [];
             return (
               <FragmentRows key={t.id}>
-                {counts && i === firstPendingIndex && <SectionRow label="Pending" count={counts.pending} tone="pending" cols={cols} />}
-                {counts && i === firstDoneIndex && <SectionRow label="Completed since last meeting" count={counts.done} tone="done" cols={cols} />}
                 <tr className="border-b border-line/70 last:border-b-0">
                   <td className={cn(TD, "tabular-nums text-ink-subtle")}>{taskRef(t.number)}</td>
                   {showApp && (
@@ -655,7 +686,14 @@ function TaskTable({
                           {PLATFORM_META[t.platform].label}
                         </span>
                       )}
-                      {(t.targets?.length ?? 0) > 1 && <span className="text-[1.05cqw] text-ink-subtle">{t.targets.length} targets</span>}
+                      {also.length > 0 && (
+                        <span className="inline-flex items-center gap-[0.3cqw]" title={`Also on ${also.map((a) => a.name).join(", ")}`}>
+                          <span className="text-[1.05cqw] text-ink-subtle">also</span>
+                          {also.map((a) => (
+                            <AppTile key={a.id} name={a.name} color={a.color} iconUrl={a.icon_url} className="h-[1.6cqw] w-[1.6cqw] rounded-[0.35cqw] text-[0.7cqw]" />
+                          ))}
+                        </span>
+                      )}
                       {t.release_progress && t.release_progress.released > 0 && <span className={cn("shrink-0 rounded-full px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold ring-1 ring-inset", t.release_progress.released >= t.release_progress.total ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-teal-50 text-teal-700 ring-teal-200")}>Released {t.release_progress.released}/{t.release_progress.total}</span>}
                       {typeof t.carry === "number" && t.carry > 0 && <CarryChip carry={t.carry} />}
                       {t.pinned && <span className="shrink-0 rounded-full bg-canvas px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold text-ink-muted ring-1 ring-inset ring-line">Pinned</span>}
@@ -674,7 +712,7 @@ function TaskTable({
                       </ul>
                     )}
                   </td>
-                  <td className={cn(TD, "text-ink-muted")}>{t.assignees.length ? t.assignees.map((a) => a.name.split(" ")[0]).join(", ") : <span className="text-ink-subtle">Unassigned</span>}</td>
+                  <td className={cn(TD, "text-ink-muted")}>{t.assignees.length ? ownerText(t.assignees, labels) : <span className="text-ink-subtle">Unassigned</span>}</td>
                   <td className={cn(TD, "tabular-nums", due?.tone === "danger" ? "font-semibold text-red-600" : due?.tone === "warning" ? "font-semibold text-amber-700" : "text-ink-muted")}>{t.due_date ? ymdPretty(t.due_date) : <span className="text-ink-subtle">—</span>}</td>
                   <td className={cn(TD, "text-right")}>
                     <span className={cn(BADGE, toneClass(t.status))}>{STATUS_META[t.status].label}</span>
@@ -754,7 +792,7 @@ function ReleaseTable({ releases }: { releases: Release[] }) {
   );
 }
 
-function MinutesTable({ notes }: { notes: MeetingNote[] }) {
+function MinutesTable({ notes, labels }: { notes: MeetingNote[]; labels: Map<string, string> }) {
   return (
     <div className={PANEL}>
       <table className="w-full border-collapse">
@@ -791,7 +829,7 @@ function MinutesTable({ notes }: { notes: MeetingNote[] }) {
                 )}
               </td>
               <td className={cn(TD, "whitespace-pre-wrap break-words text-ink")}><span className="line-clamp-4">{x.body}</span></td>
-              <td className={cn(TD, "text-ink-muted")}>{x.author ? x.author.name.split(" ")[0] : "—"}</td>
+              <td className={cn(TD, "text-ink-muted")}>{x.author ? ownerText([x.author], labels) : "—"}</td>
             </tr>
           ))}
         </tbody>

@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
-import { buildAgenda, notesByTask } from "@/lib/meeting-agenda";
+import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText } from "@/lib/meeting-agenda";
 import { istTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRef } from "@/lib/domain";
@@ -39,7 +39,8 @@ function PrintDoc() {
   const auto = sp.get("auto") !== "0";
   const { data, loading, error, refresh } = useCachedFetch<Pack>(`/api/meetings/${id}`);
   useDocumentTitle(data ? `${data.meeting.title} · Minutes` : "Minutes");
-  const agenda = useMemo(() => (data ? buildAgenda(data) : []), [data]);
+  const agenda = useMemo(() => (data ? buildAgenda(data, { dedupe: true }) : []), [data]);
+  const labels = useMemo(() => (data ? nameLabels(packPeople(data)) : new Map<string, string>()), [data]);
   const notes = useMemo(() => (data ? notesByTask(data.notes) : new Map<string, MeetingNote[]>()), [data]);
 
   const printed = useRef(false);
@@ -211,11 +212,11 @@ function PrintDoc() {
                 <tbody>
                   {g.pending.length > 0 && <SectionRow label={`Pending · ${g.pending.length}`} />}
                   {g.pending.map((t) => (
-                    <TaskRow key={t.id} t={t} notes={notes.get(t.id) || []} />
+                    <TaskRow key={t.id} t={t} notes={notes.get(t.id) || []} labels={labels} />
                   ))}
                   {g.done.length > 0 && <SectionRow label={`Completed since last meeting · ${g.done.length}`} tone="done" />}
                   {g.done.map((t) => (
-                    <TaskRow key={t.id} t={t} notes={notes.get(t.id) || []} done />
+                    <TaskRow key={t.id} t={t} notes={notes.get(t.id) || []} labels={labels} done />
                   ))}
                 </tbody>
               </table>
@@ -245,7 +246,7 @@ function PrintDoc() {
               </thead>
               <tbody>
                 {p.approvals.map((t) => (
-                  <TaskRow key={t.id} t={t} notes={[]} showApp />
+                  <TaskRow key={t.id} t={t} notes={[]} labels={labels} showApp />
                 ))}
               </tbody>
             </table>
@@ -276,7 +277,7 @@ function PrintDoc() {
                     <Td className="font-semibold uppercase tracking-wide text-[8pt]">{NOTE_KIND_META[x.kind].label}</Td>
                     <Td>{x.task ? <><span className="tabular-nums text-ink-subtle">{taskRef(x.task.number)}</span> {x.task.title}</> : x.about ? x.about.name : <span className="text-ink-subtle">General</span>}</Td>
                     <Td className="whitespace-pre-wrap break-words">{x.body}</Td>
-                    <Td className="text-ink-muted">{x.author ? x.author.name.split(" ")[0] : "—"}</Td>
+                    <Td className="text-ink-muted">{x.author ? ownerText([x.author], labels) : "—"}</Td>
                   </tr>
                 ))}
               </tbody>
@@ -345,7 +346,7 @@ function SectionRow({ label, tone }: { label: string; tone?: "done" }) {
   );
 }
 
-function TaskRow({ t, notes, done, showApp }: { t: TaskCard; notes: MeetingNote[]; done?: boolean; showApp?: boolean }) {
+function TaskRow({ t, notes, labels, done, showApp }: { t: TaskCard; notes: MeetingNote[]; labels: Map<string, string>; done?: boolean; showApp?: boolean }) {
   const due = dueInfo(t.due_date, t.status);
   const desc = t.description?.trim();
   return (
@@ -372,7 +373,7 @@ function TaskRow({ t, notes, done, showApp }: { t: TaskCard; notes: MeetingNote[
           </ul>
         )}
       </Td>
-      <Td className="text-ink-muted">{t.assignees.length ? t.assignees.map((a) => a.name.split(" ")[0]).join(", ") : "—"}</Td>
+      <Td className="text-ink-muted">{t.assignees.length ? ownerText(t.assignees, labels) : "—"}</Td>
       <Td className={cn("tabular-nums", due?.tone === "danger" ? "font-semibold text-red-600" : due?.tone === "warning" ? "font-semibold text-amber-700" : "text-ink-muted")}>{t.due_date ? ymd(t.due_date) : "—"}</Td>
       <Td className="text-right font-semibold">{STATUS_META[t.status].label}</Td>
     </tr>

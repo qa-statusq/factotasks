@@ -17,7 +17,7 @@ import { postJson, deleteJson } from "@/lib/http";
 import { useOnChange } from "@/lib/use-on-change";
 import { useSubmitShortcut } from "@/lib/use-submit-shortcut";
 import { cn } from "@/lib/cn";
-import { IconCheck, IconTrash } from "@/components/ui/icons";
+import { IconCheck, IconTrash, IconChevronUp, IconChevronDown } from "@/components/ui/icons";
 import type { AppOverview, Meeting, MeetingSeries } from "@/lib/types";
 
 const NEW = "__new__";
@@ -237,13 +237,28 @@ function SeriesEditor({ series, apps, onChanged, onCancel, canDelete }: { series
   const { confirm } = useDialog();
   const [name, setName] = useState(series?.name ?? "");
   const [scope, setScope] = useState<Scope>({ app_ids: series?.app_ids ?? [], include_general: series?.include_general ?? true });
+  const [order, setOrder] = useState<string[]>(series?.app_order ?? []);
   const [busy, setBusy] = useState(false);
-  const dirty = !series || name.trim() !== series.name || scope.app_ids.join() !== series.app_ids.join() || scope.include_general !== (series.include_general ?? true);
+  // The apps this series presents, in their current order: listed ones first, then the rest by name.
+  const inScope = apps.filter((a) => a.status !== "archived" && (scope.app_ids.length === 0 || scope.app_ids.includes(a.id)));
+  const ordered = [...inScope].sort((a, b) => {
+    const ia = order.indexOf(a.id), ib = order.indexOf(b.id);
+    return (ia === -1 ? order.length : ia) - (ib === -1 ? order.length : ib) || a.name.localeCompare(b.name);
+  });
+  const move = (id: string, dir: -1 | 1) => {
+    const ids = ordered.map((a) => a.id);
+    const i = ids.indexOf(id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    setOrder(ids);
+  };
+  const dirty = !series || name.trim() !== series.name || scope.app_ids.join() !== series.app_ids.join() || scope.include_general !== (series.include_general ?? true) || order.join() !== (series.app_order ?? []).join();
 
   async function save() {
     if (busy || !name.trim()) return;
     setBusy(true);
-    const body = { name: name.trim(), app_ids: scope.app_ids, include_general: scope.include_general };
+    const body = { name: name.trim(), app_ids: scope.app_ids, include_general: scope.include_general, app_order: order };
     const r = series ? await postJson(`/api/meeting-series/${series.id}`, body, "PATCH") : await postJson("/api/meeting-series", body);
     setBusy(false);
     if (r.ok) {
@@ -275,6 +290,26 @@ function SeriesEditor({ series, apps, onChanged, onCancel, canDelete }: { series
         <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-ink-subtle">Covers</p>
         <AppScopePicker apps={apps} value={scope} onChange={setScope} />
       </div>
+      {ordered.length > 1 && (
+        <div className="mt-3">
+          <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-ink-subtle">Presentation order <span className="font-normal normal-case tracking-normal">· General tasks always come first</span></p>
+          <ol className="divide-y divide-line/70 overflow-hidden rounded-lg border border-line">
+            {ordered.map((a, i) => (
+              <li key={a.id} className="flex items-center gap-2 bg-surface px-2.5 py-1.5 text-[13px]">
+                <span className="w-5 shrink-0 text-right tabular-nums text-ink-subtle">{i + 1}</span>
+                <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />
+                <span className="min-w-0 flex-1 truncate text-ink">{a.name}</span>
+                <button type="button" onClick={() => move(a.id, -1)} disabled={i === 0} className="tap rounded-md p-1 text-ink-subtle hover:bg-canvas hover:text-ink disabled:opacity-30" aria-label={`Move ${a.name} up`}>
+                  <IconChevronUp size={14} />
+                </button>
+                <button type="button" onClick={() => move(a.id, 1)} disabled={i === ordered.length - 1} className="tap rounded-md p-1 text-ink-subtle hover:bg-canvas hover:text-ink disabled:opacity-30" aria-label={`Move ${a.name} down`}>
+                  <IconChevronDown size={14} />
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       <div className="mt-3 flex items-center gap-2 text-[12px] text-ink-subtle">
         {series && (
           <span>

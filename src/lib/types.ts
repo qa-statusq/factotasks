@@ -254,6 +254,8 @@ export interface MeetingSeries {
   app_ids: string[];
   /** With a narrowed scope: also cover tasks that belong to no app. */
   include_general: boolean;
+  /** Presentation order of apps (ids); unlisted apps follow alphabetically. */
+  app_order?: string[];
   created_at?: string;
   /** Rollups from the list endpoint. */
   meeting_count?: number;
@@ -291,7 +293,7 @@ export interface MeetingNote {
 
 export interface MeetingPack {
   meeting: Meeting;
-  series: { id: string; name: string; color: string } | null;
+  series: { id: string; name: string; color: string; app_order?: string[] } | null;
   /** Ids of tasks pinned to this meeting. */
   pinned: string[];
   window: { from: string; to: string };
