@@ -15,8 +15,8 @@ import { DueChip } from "@/components/task-list";
 import { NoteComposer, NoteList } from "@/components/meeting-notes";
 import { AddTaskSheet } from "@/components/add-task-sheet";
 import { SeriesBadge, ScopeLabel } from "@/components/meeting-series";
-import { RichText } from "@/components/ui/rich-text";
 import { useToast } from "@/components/ui/toast";
+import { ClampedText } from "@/components/ui/clamped-text";
 import { prettyDate } from "@/components/release-ui";
 import { tabMemSet } from "@/lib/compat";
 import { useDialog } from "@/components/ui/dialog";
@@ -281,9 +281,7 @@ function AppSection({ group: g, notes, cacheKey, readOnly, needsApproval, onNote
 }
 
 function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }) {
-  const [open, setOpen] = useState(false);
   const desc = r.description?.trim();
-  const long = !!desc && desc.length > 220;
   const when = r.status === "released" && r.released_at ? `Released ${fmt(r.released_at)}` : r.planned_date ? `Planned ${prettyDate(r.planned_date)}` : "No date yet";
   return (
     <li className="px-3 py-2.5 sm:px-4">
@@ -309,23 +307,12 @@ function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }
                     </Link>
                     <span className={cn("ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold ring-1 ring-inset", toneClass(t.status))}>{STATUS_META[t.status].label}</span>
                   </div>
-                  {t.description && <RichText text={open ? t.description : t.description.split("\n")[0].slice(0, 220)} className="mt-0.5 text-[12px] text-ink-muted" />}
+                  <ClampedText text={t.description} rich lines={2} className="mt-0.5 text-[12px] text-ink-muted" />
                 </li>
               ))}
             </ul>
           )}
-          {desc ? (
-            <>
-              <p className={cn("mt-1.5 whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-ink-muted", !open && long && "line-clamp-3")}>{desc}</p>
-            </>
-          ) : (
-            !r.tasks?.length && <p className="mt-0.5 text-[12px] text-ink-subtle">No release notes.</p>
-          )}
-          {(long || (r.tasks ?? []).some((t) => t.description && (t.description.includes("\n") || t.description.length > 220))) && (
-            <button type="button" onClick={() => setOpen((v) => !v)} className="mt-0.5 text-[11.5px] font-medium text-brand-700 hover:text-brand-800">
-              {open ? "Less" : "Full details"}
-            </button>
-          )}
+          {desc ? <ClampedText text={desc} lines={3} className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted" /> : !r.tasks?.length && <p className="mt-0.5 text-[12px] text-ink-subtle">No release notes.</p>}
         </div>
       </div>
     </li>
@@ -333,7 +320,6 @@ function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }
 }
 
 function AgendaRow({ task: t, notes, cacheKey, readOnly, needsApproval, onNote, meetingId }: { task: TaskCard; notes: MeetingNote[]; cacheKey: string; readOnly: boolean; needsApproval: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
-  const [open, setOpen] = useState(false);
   const { toast } = useToast();
   async function unpin() {
     const r = await postJson(`/api/meetings/${meetingId}/tasks`, { task_id: t.id }, "DELETE");
@@ -344,7 +330,6 @@ function AgendaRow({ task: t, notes, cacheKey, readOnly, needsApproval, onNote, 
     } else toast(r.data?.error || "Couldn't remove", "error");
   }
   const desc = t.description?.trim();
-  const long = !!desc && desc.length > 160;
   return (
     <li className="px-3 py-2.5 sm:px-4">
       <div className="flex items-start gap-3">
@@ -371,17 +356,7 @@ function AgendaRow({ task: t, notes, cacheKey, readOnly, needsApproval, onNote, 
               </Badge>
             )}
           </div>
-          {desc && (
-            <p className={cn("mt-1 whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-ink-muted", !open && long && "line-clamp-2")}>
-              {desc}
-              {!long ? "" : ""}
-            </p>
-          )}
-          {long && (
-            <button type="button" onClick={() => setOpen((v) => !v)} className="text-[11.5px] font-medium text-brand-700 hover:text-brand-800">
-              {open ? "Less" : "More"}
-            </button>
-          )}
+          <ClampedText text={desc} lines={2} className="mt-1 text-[12.5px] leading-relaxed text-ink-muted" />
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-ink-subtle">
             <span>{t.assignees.map((a) => a.name.split(" ")[0]).join(", ") || "unassigned"}</span>
             {(t.targets?.length ?? 0) > 1 ? <TargetChips targets={t.targets} max={6} /> : <PlatformBadge platform={t.platform} label={false} className="px-0 ring-0 bg-transparent" />}

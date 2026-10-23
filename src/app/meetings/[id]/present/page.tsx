@@ -15,6 +15,7 @@ import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRe
 import { toneClass } from "@/components/status-menu";
 import { dueInfo } from "@/components/task-list";
 import { AppTile } from "@/components/ui/task-chips";
+import { ClampedText } from "@/components/ui/clamped-text";
 import { IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconAndroid, IconApple } from "@/components/ui/icons";
 import type { MeetingNote, MeetingPack, TaskCard } from "@/lib/types";
 
@@ -265,7 +266,17 @@ function buildSlides(p: Pack): Slide[] {
               <dt className="text-ink-subtle">Covering</dt>
               <dd className="text-ink">{windowText}</dd>
               <dt className="text-ink-subtle">Scope</dt>
-              <dd className="text-ink">{m.app_ids?.length ? `${p.apps.map((a) => a.name).join(", ")}${m.include_general !== false ? " + general tasks" : ""}` : "All apps & general tasks"}</dd>
+              <dd className="text-ink">
+                {m.app_ids?.length ? (
+                  <span className="inline-flex flex-wrap items-center gap-[0.5cqw]" title={p.apps.map((a) => a.name).join(", ")}>
+                    {p.apps.map((a) => (
+                      <AppTile key={a.id} name={a.name} color={a.color} iconUrl={a.icon_url} className="h-[2.2cqw] w-[2.2cqw] rounded-[0.5cqw] text-[0.9cqw]" />
+                    ))}
+                  </span>
+                ) : (
+                  "All apps"
+                )}
+              </dd>
               <dt className="text-ink-subtle">Status</dt>
               <dd className="text-ink">{m.status === "finalized" ? "Closed · minutes locked" : "Open · live figures"}</dd>
             </dl>
@@ -564,6 +575,7 @@ function Tile({ n, label, tone }: { n: number; label: string; tone?: "emerald" |
 const PANEL = "overflow-hidden rounded-[1cqw] border border-line bg-surface shadow-[0_1px_0_rgba(0,0,0,0.02)]";
 const TH = "bg-canvas px-[1.3cqw] py-[0.9cqw] text-left text-[0.95cqw] font-semibold uppercase tracking-[0.16em] text-ink-subtle";
 /* Same look as a table header, for a panel caption that is not a <th>. */
+const PANEL_SCROLL = PANEL.replace("overflow-hidden", "max-h-full overflow-y-auto overflow-x-hidden");
 const PANEL_LABEL = "block border-b border-line/70 " + TH;
 const TD = "px-[1.3cqw] py-[1.2cqw] align-top text-[1.4cqw] leading-snug";
 const BADGE = "inline-block whitespace-nowrap rounded-full px-[0.95cqw] py-[0.35cqw] text-[1.05cqw] font-semibold ring-1 ring-inset";
@@ -595,7 +607,7 @@ function TaskTable({
 }) {
   const cols = showApp ? 6 : 5;
   return (
-    <div className={PANEL}>
+    <div className={PANEL_SCROLL}>
       <table className="w-full border-collapse">
         <colgroup>
           <col style={{ width: "7%" }} />
@@ -648,7 +660,7 @@ function TaskTable({
                       {typeof t.carry === "number" && t.carry > 0 && <CarryChip carry={t.carry} />}
                       {t.pinned && <span className="shrink-0 rounded-full bg-canvas px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold text-ink-muted ring-1 ring-inset ring-line">Pinned</span>}
                     </div>
-                    {desc && <p className="mt-[0.4cqw] line-clamp-2 whitespace-pre-wrap break-words text-[1.15cqw] leading-snug text-ink-muted">{desc}</p>}
+                    <ClampedText text={desc} lines={2} className="mt-[0.4cqw] text-[1.15cqw] leading-snug text-ink-muted" buttonClassName="text-[1.05cqw]" moreLabel="Show more" lessLabel="Show less" />
                     {t.requested_status && <p className="mt-[0.4cqw] text-[1.1cqw] text-amber-700">Asked to move to {STATUS_META[t.requested_status].label} — awaiting approval</p>}
                     {taskNotes.length > 0 && (
                       <ul className="mt-[0.9cqw] flex flex-col gap-[0.55cqw] border-l-[0.25cqw] border-line pl-[1cqw]">

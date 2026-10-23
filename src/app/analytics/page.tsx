@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { usePref } from "@/lib/use-pref";
+
+import { useMemo } from "react";
 import { LoadError, EmptyState } from "@/components/ui/misc";
 import { Segmented } from "@/components/ui/segmented";
 import { PanelSkeleton } from "@/components/ui/skeleton";
@@ -34,7 +36,7 @@ const hours = (h: number | null | undefined) => (h == null ? "—" : formatDurat
 const STATUS_COLORS: Record<TaskStatus, string> = { todo: "#94a3b8", in_progress: "#3b82f6", in_review: "#0ea5e9", on_hold: "#f59e0b", partial: "#14b8a6", done: "#10b981", cancelled: "#f87171" };
 
 export default function AnalyticsPage() {
-  const [months, setMonths] = useState(6);
+  const [months, setMonths] = usePref<number>("analytics.months", 6);
   const { data, loading, error, refresh } = useCachedFetch<Pack>(`/api/analytics?months=${months}`);
   const needsSchema = (error as { status?: number } | null)?.status === 424;
 

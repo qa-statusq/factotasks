@@ -4,7 +4,7 @@ import { passwordChangeRequired, resolveUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity";
 import { rateLimited } from "@/lib/rate-limit";
-import { serverError, readJsonObject } from "@/lib/api";
+import { serverError, readJsonObject, EXPECTED_EMBED_MISS } from "@/lib/api";
 import { cleanName, displayName } from "@/lib/name";
 import { cleanLine, isHexColor } from "@/lib/validate";
 import { LIMITS, USER_COLORS } from "@/lib/domain";
@@ -24,6 +24,7 @@ const publicMe = (u: SessionUser) => ({
   department: u.department ?? "other",
   title: u.title ?? null,
   color: u.color ?? USER_COLORS[0],
+  prefs: u.prefs ?? {},
 });
 
 export async function GET() {
@@ -90,10 +91,27 @@ export async function PATCH(req: NextRequest) {
     if (!isHexColor(b.color)) return NextResponse.json({ error: "Pick a valid colour" }, { status: 400 });
     update.color = String(b.color).toLowerCase();
   }
+  // UI preferences: merged into the person's own prefs. Scalars only, bounded.
+  let prefs: Record<string, string | number | boolean> | null = null;
+  if (b.prefs && typeof b.prefs === "object" && !Array.isArray(b.prefs)) {
+    prefs = { ...(u.prefs ?? {}) };
+    for (const [k, v] of Object.entries(b.prefs as Record<string, unknown>)) {
+      if (!/^[a-z][a-z0-9_.-]{0,39}$/i.test(k)) return NextResponse.json({ error: "Invalid preference" }, { status: 400 });
+      if (v === null || v === undefined) delete prefs[k];
+      else if (typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && v.length <= 80)) prefs[k] = v;
+      else return NextResponse.json({ error: "Invalid preference value" }, { status: 400 });
+    }
+    if (Object.keys(prefs).length > 60) return NextResponse.json({ error: "Too many preferences" }, { status: 400 });
+    update.prefs = prefs;
+  }
   if (Object.keys(update).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
   const { error } = await getSupabase().from("users").update(update).eq("id", u.uid);
-  if (error) return serverError(error);
+  if (error) {
+    // A database without 012 has no prefs column: keep the session's copy
+    // for this request and say nothing — everything else still saves.
+    if (!(prefs && EXPECTED_EMBED_MISS.has((error as { code?: string }).code ?? "") && Object.keys(update).length === 1)) return serverError(error);
+  }
   // The next /me (and every guard) must see the change immediately.
   invalidateAuthCache(u.uid);
   const merged: SessionUser = {
@@ -102,8 +120,10 @@ export async function PATCH(req: NextRequest) {
     lastName: "last_name" in update ? (update.last_name as string | null) : u.lastName,
     title: "title" in update ? (update.title as string | null) : u.title,
     color: (update.color as string | undefined) ?? u.color,
+    prefs: prefs ?? u.prefs,
   };
-  await logActivity({
+  const onlyPrefs = prefs && Object.keys(update).length === 1;
+  if (!onlyPrefs) await logActivity({
     action: "user.profile",
     entityType: "user",
     entityId: u.uid,

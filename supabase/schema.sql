@@ -47,12 +47,15 @@ create table if not exists users (
   -- Avatar hue (CSS hex). Assigned at invite time from a fixed palette so
   -- every teammate is distinguishable at a glance across the panel.
   color                text not null default '#4f46e5',
+  -- Per-person UI preferences (layout, sort, ranges). Free-form, small (012).
+  prefs                jsonb not null default '{}',
   is_active            boolean not null default true,        -- deactivated = cannot sign in, history kept
   must_change_password boolean not null default false,
   token_version        int not null default 0,               -- bump = every session of this user dies
   created_at           timestamptz not null default now(),
   last_login_at        timestamptz
 );
+alter table users add column if not exists prefs jsonb not null default '{}';
 create index if not exists users_active_idx on users (is_active, department);
 
 -- DB-backed login throttle + fixed-window rate limiter (serverless-safe).

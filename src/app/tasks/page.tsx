@@ -16,6 +16,7 @@ import { timeoutSignal } from "@/lib/compat";
 import { cn } from "@/lib/cn";
 import { useLatest } from "@/lib/use-latest";
 import { useOnChange } from "@/lib/use-on-change";
+import { usePref } from "@/lib/use-pref";
 import { PRIORITIES, PRIORITY_META, STATUS_META, TASK_STATUSES, TASK_TYPES, TYPE_META } from "@/lib/domain";
 import { IconPlus, IconSearch, IconX, IconFilter, IconBoard, IconList } from "@/components/ui/icons";
 import type { Meeting, AppOverview, TaskCard, UserBrief } from "@/lib/types";
@@ -85,8 +86,11 @@ function TasksScreen() {
   }, [searchParams]);
   // "approvals" is the admin queue; anyone else lands on the open list.
   const scope = ((filters.scope === "approvals" && !isAdmin ? "open" : filters.scope) || "open") as "open" | "mine" | "done" | "all";
-  const sort = filters.sort || "updated";
-  const grouped = filters.group === "app";
+  // Layout and default sort are personal, remembered on the account.
+  const [layout, setLayout] = usePref<"app" | "flat">("tasks.layout", "app");
+  const [sortPref, setSortPref] = usePref<string>("tasks.sort", "updated");
+  const sort = filters.sort || sortPref;
+  const grouped = layout === "app";
   const set = useCallback(
     (patch: Filters) => {
       const next: Filters = { ...filters, ...patch };
@@ -105,7 +109,7 @@ function TasksScreen() {
     return () => window.clearTimeout(t);
   }, [q, filters.q, setRef]);
 
-  const url = `/api/tasks${apiQuery(filters) || "?scope=open"}`;
+  const url = `/api/tasks${apiQuery({ ...filters, sort: sort === "updated" ? undefined : sort }) || "?scope=open"}`;
   const { data, loading, error, refresh } = useCachedFetch<Page>(url);
   const { data: appsData } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
   const { data: usersData } = useCachedFetch<{ users: UserBrief[] }>("/api/users");
@@ -202,15 +206,23 @@ function TasksScreen() {
         </button>
         <Segmented
           value={grouped ? "app" : "flat"}
-          onChange={(v) => set({ group: v === "app" ? "app" : undefined })}
+          onChange={(v) => setLayout(v === "app" ? "app" : "flat")}
           options={[
-            { value: "flat", label: <IconList size={14} />, title: "Flat list" },
             { value: "app", label: <IconBoard size={14} />, title: "Group by app" },
+            { value: "flat", label: <IconList size={14} />, title: "Flat list" },
           ]}
           aria-label="Layout"
         />
         <div className="w-44">
-          <Dropdown value={sort} onChange={(v) => set({ sort: v === "updated" ? undefined : v })} options={SORTS} className="[&>button]:h-9 [&>button]:text-[13px]" />
+          <Dropdown
+            value={sort}
+            onChange={(v) => {
+              setSortPref(v);
+              set({ sort: v === sortPref || v === "updated" ? undefined : v });
+            }}
+            options={SORTS}
+            className="[&>button]:h-9 [&>button]:text-[13px]"
+          />
         </div>
       </div>
 

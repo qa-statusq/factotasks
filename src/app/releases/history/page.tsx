@@ -15,6 +15,7 @@ import { ReleaseStatusBadge, PlatformBadge, AppTile } from "@/components/ui/task
 import { toneClass } from "@/components/status-menu";
 import { ReleaseViewSheet, prettyDate } from "@/components/release-ui";
 import { useCachedFetch } from "@/lib/client-cache";
+import { usePref } from "@/lib/use-pref";
 import { istTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { PLATFORM_META, RELEASE_STATUS_META, STATUS_META, taskRef, type ReleaseStatus } from "@/lib/domain";
@@ -41,7 +42,8 @@ function HistoryScreen() {
   const sp = useSearchParams();
   const app = sp.get("app") || "";
   const platform = sp.get("platform") || "";
-  const group = (sp.get("group") as Group) || "month";
+  const [groupPref, setGroupPref] = usePref<string>("history.group", "month");
+  const group = ((sp.get("group") as Group) || (groupPref as Group)) ?? "month";
   const from = sp.get("from") || "";
   const to = sp.get("to") || "";
   const set = (patch: Record<string, string | undefined>) => {
@@ -122,7 +124,15 @@ function HistoryScreen() {
           </div>
         </Cell>
         <Cell label="Group by">
-          <Segmented value={group} onChange={(v) => set({ group: v === "month" ? undefined : v })} options={[{ value: "app", label: "App" }, { value: "month", label: "Month" }, { value: "date", label: "Date" }]} aria-label="Group by" />
+          <Segmented
+            value={group}
+            onChange={(v) => {
+              setGroupPref(v);
+              set({ group: undefined });
+            }}
+            options={[{ value: "app", label: "App" }, { value: "month", label: "Month" }, { value: "date", label: "Date" }]}
+            aria-label="Group by"
+          />
         </Cell>
       </div>
 

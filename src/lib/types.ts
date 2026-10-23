@@ -329,4 +329,6 @@ export interface Me {
   department: Department;
   title: string | null;
   color: string;
+  /** Small UI preferences, per person (see lib/use-pref). */
+  prefs?: Record<string, string | number | boolean>;
 }

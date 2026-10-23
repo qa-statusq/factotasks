@@ -46,9 +46,9 @@ export function ScopeLabel({ scope, apps, className, size = "sm" }: { scope: Par
   return (
     <span className={cn("inline-flex flex-wrap items-center gap-1.5", className)}>
       {chosen.map((a) => (
-        <span key={a.id} className="inline-flex items-center gap-1 text-ink-muted">
+        <span key={a.id} className="inline-flex items-center gap-1 text-ink-muted" title={a.name}>
           <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className={size === "sm" ? "h-4 w-4 rounded-[4px] text-[8px]" : "h-5 w-5 rounded-[5px] text-[9px]"} />
-          {a.name}
+          {chosen.length <= 4 && a.name}
         </span>
       ))}
       {chosen.length < ids.length && <span className="text-ink-subtle">+{ids.length - chosen.length}</span>}

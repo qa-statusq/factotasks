@@ -22,6 +22,7 @@ export interface SessionUser {
   department?: string;
   title?: string | null;
   color?: string;
+  prefs?: Record<string, string | number | boolean>;
 }
 
 function secret(): Uint8Array {
@@ -185,6 +186,7 @@ export async function getAuthenticatedUser(): Promise<SessionUser | null> {
         department: (data.department as string | undefined) ?? "other",
         title: (data.title as string | undefined) ?? null,
         color: (data.color as string | undefined) ?? "#4f46e5",
+        prefs: (data.prefs as Record<string, string | number | boolean> | null | undefined) ?? {},
       };
       if (authCache.size >= AUTH_CACHE_MAX) authCache.clear();
       authCache.set(decoded.uid, { at: Date.now(), user });
