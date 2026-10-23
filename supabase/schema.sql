@@ -157,6 +157,8 @@ create table if not exists apps (
 );
 alter table apps add column if not exists icon_url text; -- (001 → 002 upgrade path)
 alter table apps add column if not exists sort_order int not null default 0; -- (014) hand-arranged order, Apps screen
+alter table apps add column if not exists icon_android_url text; -- (016) Play listing icon
+alter table apps add column if not exists icon_ios_url text;     -- (016) App Store artwork; icon_url = Android first, else iOS
 create unique index if not exists apps_name_uq on apps (lower(name));
 drop trigger if exists apps_touch on apps;
 create trigger apps_touch before update on apps for each row execute function touch_updated_at();
@@ -642,14 +644,14 @@ as $$
     'requested_at', t.requested_at,
     'request_note', t.request_note,
     'requested_by', (select user_brief(u) from users u where u.id = t.requested_by),
-    'app', (select jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'has_android', a.has_android, 'has_ios', a.has_ios)
+    'app', (select jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url, 'has_android', a.has_android, 'has_ios', a.has_ios)
               from apps a where a.id = t.app_id),
     'release', (select jsonb_build_object('id', r.id, 'version_name', r.version_name, 'platform', r.platform, 'status', r.status)
                   from releases r where r.id = t.release_id),
     'series', (select jsonb_build_object('id', ms.id, 'name', ms.name, 'color', ms.color) from meeting_series ms where ms.id = t.series_id),
     'targets', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'app', jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url),
+        'app', jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url),
         'platform', tt.platform,
         'release', (select jsonb_build_object('id', r.id, 'version_name', r.version_name, 'platform', r.platform, 'status', r.status, 'planned_date', r.planned_date)
                       from releases r where r.id = tt.release_id),
@@ -883,7 +885,7 @@ as $$
     ), '[]'::jsonb),
     'releases', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', r.id, 'app', jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url),
+        'id', r.id, 'app', jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url),
         'platform', r.platform, 'version_name', r.version_name, 'status', r.status,
         'planned_date', r.planned_date, 'released_at', r.released_at
       ) order by coalesce(r.planned_date, (r.released_at at time zone 'Asia/Kolkata')::date) nulls last)
@@ -908,7 +910,7 @@ as $$
     'id', a.id, 'name', a.name, 'description', a.description, 'kind', a.kind, 'status', a.status,
     'has_android', a.has_android, 'has_ios', a.has_ios,
     'android_package', a.android_package, 'ios_bundle_id', a.ios_bundle_id, 'appstore_url', a.appstore_url,
-    'color', a.color, 'icon_path', a.icon_path, 'icon_url', a.icon_url, 'created_at', a.created_at, 'updated_at', a.updated_at,
+    'color', a.color, 'icon_path', a.icon_path, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url, 'created_at', a.created_at, 'updated_at', a.updated_at,
     'open_tasks',  (select count(*) from tasks t where a.id = any(t.app_ids) and t.status not in ('done','cancelled')),
     'in_progress', (select count(*) from tasks t where a.id = any(t.app_ids) and t.status = 'in_progress'),
     'overdue',     (select count(*) from tasks t where a.id = any(t.app_ids) and t.status not in ('done','cancelled') and t.due_date < ist_today()),
@@ -943,6 +945,56 @@ as $$
   where a.id = x.id;
 $$;
 
+-- (016) Task numbers stay a straight series: once test rows are removed, the
+-- next task continues from the highest number in use.
+create or replace function task_sequence_reset()
+returns bigint
+language sql
+set search_path = public
+as $$
+  select setval('task_number_seq', coalesce((select max(number) from tasks), 1), (select count(*) from tasks) > 0);
+$$;
+
+-- (016) Close the gaps: renumber every task 1..n in creation order and
+-- rewrite the T-numbers quoted in descriptions, comments, minutes, activity
+-- and notifications. Run by hand, once; it returns how many tasks moved.
+create or replace function tasks_renumber()
+returns int
+language plpgsql
+set search_path = public
+as $$
+declare
+  r record;
+  moved int := 0;
+begin
+  create temp table _renum (id uuid primary key, old_n int, new_n int) on commit drop;
+  insert into _renum select id, number, row_number() over (order by created_at, number) from tasks;
+  -- Only the number changes: no touch/bump triggers, no "recently updated" shuffle.
+  alter table tasks disable trigger user;
+  update tasks t set number = t.number + 1000000;   -- clear the way (never collides: numbers are far below)
+  update tasks t set number = x.new_n from _renum x where x.id = t.id;
+  alter table tasks enable trigger user;
+  for r in select * from _renum where old_n <> new_n loop
+    -- two phases ("T#") so T-44 → T-14 can never be re-mapped by the old T-14's rule
+    update tasks set description = regexp_replace(description, '\mT-' || r.old_n || '\M', 'T#' || r.new_n, 'g') where description ~ ('\mT-' || r.old_n || '\M');
+    update task_comments set body = regexp_replace(body, '\mT-' || r.old_n || '\M', 'T#' || r.new_n, 'g') where body ~ ('\mT-' || r.old_n || '\M');
+    update meeting_notes set body = regexp_replace(body, '\mT-' || r.old_n || '\M', 'T#' || r.new_n, 'g') where body ~ ('\mT-' || r.old_n || '\M');
+    update activity_log set summary = regexp_replace(summary, '\mT-' || r.old_n || '\M', 'T#' || r.new_n, 'g') where summary ~ ('\mT-' || r.old_n || '\M');
+    update activity_log set metadata = jsonb_set(metadata, '{number}', to_jsonb(r.new_n)) where metadata->>'number' = r.old_n::text;
+    update notifications set message = regexp_replace(message, '\mT-' || r.old_n || '\M', 'T#' || r.new_n, 'g') where message ~ ('\mT-' || r.old_n || '\M');
+    moved := moved + 1;
+  end loop;
+  update tasks set description = replace(description, 'T#', 'T-') where description like '%T#%';
+  update task_comments set body = replace(body, 'T#', 'T-') where body like '%T#%';
+  update meeting_notes set body = replace(body, 'T#', 'T-') where body like '%T#%';
+  update activity_log set summary = replace(summary, 'T#', 'T-') where summary like '%T#%';
+  update notifications set message = replace(message, 'T#', 'T-') where message like '%T#%';
+  perform task_sequence_reset();
+  return moved;
+end;
+$$;
+
+
 
 -- Team directory with workload per person.
 create or replace function team_overview()
@@ -959,7 +1011,7 @@ as $$
       'in_progress', (select count(*) from task_assignees ta join tasks t on t.id = ta.task_id where ta.user_id = u.id and t.status = 'in_progress'),
       'overdue',     (select count(*) from task_assignees ta join tasks t on t.id = ta.task_id where ta.user_id = u.id and t.status not in ('done','cancelled') and t.due_date < ist_today()),
       'done_week',   (select count(*) from task_assignees ta join tasks t on t.id = ta.task_id where ta.user_id = u.id and t.completed_at >= ist_week_start()),
-      'apps', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'app_role', m.app_role) order by a.sort_order, a.name)
+      'apps', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url, 'app_role', m.app_role) order by a.sort_order, a.name)
                           from app_members m join apps a on a.id = m.app_id where m.user_id = u.id), '[]'::jsonb)
     ) order by (not u.is_active), u.department, u.first_name, u.email
   ), '[]'::jsonb)
@@ -1069,7 +1121,7 @@ as $$
     ), '[]'::jsonb),
     'releases', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', r.id, 'app', jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url),
+        'id', r.id, 'app', jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url),
         'platform', r.platform, 'version_name', r.version_name, 'build_number', r.build_number,
         'status', r.status, 'planned_date', r.planned_date, 'released_at', r.released_at, 'description', r.description,
         'tasks', coalesce((select jsonb_agg(task_card(t) order by t.number) from tasks t where exists (select 1 from task_targets tt where tt.task_id = t.id and tt.release_id = r.id)), '[]'::jsonb)
@@ -1104,7 +1156,7 @@ as $$
     ), '[]'::jsonb),
     'apps', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'has_android', a.has_android, 'has_ios', a.has_ios,
+        'id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url, 'has_android', a.has_android, 'has_ios', a.has_ios,
         'done', (select count(*) from done d where task_targets_app((d.t).id, a.id)),
         'pending', (select count(*) from pending p where task_targets_app((p.t).id, a.id)),
         'carried', (select count(*) from pending p where task_targets_app((p.t).id, a.id) and p.carry > 0)
@@ -1262,7 +1314,7 @@ as $$
     ), '[]'::jsonb),
     'by_app', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url,
+        'id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url,
         'done', (select count(*) from done d where a.id = any(d.app_ids)),
         'created', (select count(*) from created c where a.id = any(c.app_ids)),
         'open', (select count(*) from openx t where a.id = any(t.app_ids)),
@@ -1333,7 +1385,7 @@ as $$
     'oldest_open', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', t.id, 'number', t.number, 'title', t.title, 'status', t.status, 'priority', t.priority, 'age_days', t.age_days, 'due_date', t.due_date,
-        'app', (select jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url) from apps a where a.id = t.app_ids[1]),
+        'app', (select jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url) from apps a where a.id = t.app_ids[1]),
         'assignees', coalesce((select jsonb_agg(user_brief(u) order by u.first_name) from task_assignees ta join users u on u.id = ta.user_id where ta.task_id = t.id), '[]'::jsonb)
       ) order by t.age_days desc, t.number)
       from (select * from openx order by created_at limit 8) t

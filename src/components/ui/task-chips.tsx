@@ -129,12 +129,14 @@ export function iconSrc(url: string): string {
   return url;
 }
 
-export function AppTile({ name, color, iconUrl, className }: { name: string; color: string; iconUrl?: string | null; className?: string }) {
+export function AppTile({ name, color, iconUrl, androidIconUrl, iosIconUrl, platform, className }: { name: string; color: string; iconUrl?: string | null; androidIconUrl?: string | null; iosIconUrl?: string | null; /** Show that platform's own store icon when the app has one. */ platform?: "android" | "ios" | null; className?: string }) {
   const [broken, setBroken] = useState<string | null>(null);
-  if (iconUrl && broken !== iconUrl) {
+  // Where the tile stands for ONE platform, that store's icon wins over the main tile.
+  const src = platform === "android" ? androidIconUrl ?? iconUrl : platform === "ios" ? iosIconUrl ?? iconUrl : iconUrl;
+  if (src && broken !== src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={iconSrc(iconUrl)} alt="" loading="lazy" decoding="async" onError={() => setBroken(iconUrl)} className={cn("shrink-0 rounded-xl bg-canvas object-cover ring-1 ring-inset ring-black/10", className)} />
+      <img src={iconSrc(src)} alt="" loading="lazy" decoding="async" onError={() => setBroken(src)} className={cn("shrink-0 rounded-xl bg-canvas object-cover ring-1 ring-inset ring-black/10", className)} />
     );
   }
   return (
@@ -207,7 +209,7 @@ export function TargetChips({ targets, app, platform, max = 3, compact, classNam
           className="inline-flex max-w-full items-center gap-1 whitespace-nowrap text-[11.5px] font-medium text-ink-muted"
           title={`${a.name} · ${items.map((t) => `${PLATFORM_META[t.platform].label}${t.released_at ? " (released)" : t.release ? ` (v${t.release.version_name})` : ""}`).join(", ")}`}
         >
-          <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-4 w-4 rounded-[4px] text-[7px]" />
+          <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} androidIconUrl={a.icon_android_url} iosIconUrl={a.icon_ios_url} platform={items.length === 1 ? items[0].platform : null} className="h-4 w-4 rounded-[4px] text-[7px]" />
           {names && <span className="max-w-[11rem] truncate">{a.name}</span>}
           <span className="inline-flex items-center gap-0.5">
             {items.map((t) => (

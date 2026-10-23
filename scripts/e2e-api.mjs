@@ -427,6 +427,17 @@ if (cleanup) {
   for (const id of created.users) await admin.call("DELETE", `/api/users/${id}`);
   r = await admin.call("GET", "/api/apps");
   check(!r.data?.apps?.some((a) => created.apps.includes(a.id)), "sample app removed");
+  // Leave no trace in the panel: task numbers continue from the highest real
+  // task, and the activity rows the sample users (and this admin) wrote go.
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const H = { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, "content-type": "application/json" };
+    const seq = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/task_sequence_reset`, { method: "POST", headers: H, body: "{}" });
+    if (seq.status === 404) console.log("  (task_sequence_reset missing — run migration 016; sequence left as is)");
+    else check(seq.ok, "task numbers continue from the highest real task (sequence reset)", seq.status);
+    const emails = [adminEmail, memberEmail].map((x) => `"${x}"`).join(",");
+    const act = await fetch(`${process.env.SUPABASE_URL}/rest/v1/activity_log?user_email=in.(${emails})`, { method: "DELETE", headers: { ...H, prefer: "return=minimal" } });
+    check(act.ok, "activity rows of the sample users removed", act.status);
+  } else console.log("  (no SUPABASE env: sequence/activity cleanup skipped)");
   ok("sample data removed (admin kept)");
 } else {
   console.log("\n(sample data kept — rerun with --cleanup to remove it)");

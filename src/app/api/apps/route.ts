@@ -9,7 +9,7 @@ import { isUniqueViolation, oneOf, parseUuidList } from "@/lib/validate";
 import { APP_COLORS, APP_ROLES } from "@/lib/domain";
 import { pickDistinctColor } from "@/lib/colors";
 import { appPatch } from "@/lib/apps";
-import { resolveAppIcon, backfillAppIcons } from "@/lib/app-icon";
+import { resolveAppIcons, iconPatch, backfillAppIcons } from "@/lib/app-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +22,12 @@ export async function GET() {
   if (error) return serverError(error);
   const allowed = await visibleAppIds(u);
   // Members see only the apps they belong to.
-  const apps = ((data ?? []) as { id: string; icon_url?: string | null; android_package?: string | null; ios_bundle_id?: string | null }[]).filter((a) => allowed === null || allowed.includes(a.id));
-  // Fill in store icons for apps that don't have one yet (fire-and-forget).
-  backfillAppIcons(apps, async (id, icon_url) => sb.from("apps").update({ icon_url }).eq("id", id));
+  const apps = ((data ?? []) as { id: string; icon_url?: string | null; icon_android_url?: string | null; icon_ios_url?: string | null; android_package?: string | null; ios_bundle_id?: string | null }[]).filter((a) => allowed === null || allowed.includes(a.id));
+  // Fill in store icons (per platform) for apps that still miss one (fire-and-forget).
+  backfillAppIcons(apps, async (id, patch) => {
+    const { error } = await sb.from("apps").update(patch).eq("id", id);
+    if (error) throw error;
+  });
   return memberJson(u, { apps });
 }
 
@@ -66,9 +69,9 @@ export async function POST(req: NextRequest) {
     if (mErr) console.error("[apps] initial members failed:", mErr);
   }
 
-  // Store icon, best effort — the listing is public, so no key is needed.
-  const icon = await resolveAppIcon(patch.android_package as string | null, patch.ios_bundle_id as string | null);
-  if (icon) await sb.from("apps").update({ icon_url: icon }).eq("id", app.id);
+  // Store icons, best effort — the listings are public, so no key is needed.
+  const icons = iconPatch(await resolveAppIcons(patch.android_package as string | null, patch.ios_bundle_id as string | null));
+  if (Object.keys(icons).length) await sb.from("apps").update(icons).eq("id", app.id);
 
   await logActivity({ action: "app.create", entityType: "app", entityId: app.id, summary: `Added app “${app.name}”` });
   return NextResponse.json({ app: { id: app.id, name: app.name } });

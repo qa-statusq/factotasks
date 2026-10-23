@@ -17,7 +17,11 @@ export interface AppLite {
   id: string;
   name: string;
   color: string;
+  /** Main tile (Android first, else iOS). */
   icon_url?: string | null;
+  /** The Play icon and the App Store artwork, shown where that platform is meant. */
+  icon_android_url?: string | null;
+  icon_ios_url?: string | null;
   has_android?: boolean;
   has_ios?: boolean;
 }
@@ -154,6 +158,8 @@ export interface AppOverview {
   color: string;
   icon_path: string | null;
   icon_url: string | null;
+  icon_android_url?: string | null;
+  icon_ios_url?: string | null;
   /** Hand-arranged position (Apps → Arrange); lists arrive sorted by it. */
   sort_order?: number;
   created_at: string;

@@ -6,7 +6,7 @@ import { ok, fail, serverError, readJsonObject, memberJson } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUniqueViolation, isUuid } from "@/lib/validate";
 import { appPatch } from "@/lib/apps";
-import { resolveAppIcon } from "@/lib/app-icon";
+import { resolveAppIcons } from "@/lib/app-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (Object.keys(v.patch).length === 0 && b.refresh_icon !== true) return fail("Nothing to update");
 
   const sb = getSupabase();
-  const { data: cur } = await sb.from("apps").select("name, has_android, has_ios, android_package, ios_bundle_id, icon_url").eq("id", id).maybeSingle();
+  const { data: cur } = await sb.from("apps").select("name, has_android, has_ios, android_package, ios_bundle_id, icon_url, icon_android_url, icon_ios_url").eq("id", id).maybeSingle();
   if (!cur) return fail("App not found", 404);
   const android = (v.patch.has_android as boolean | undefined) ?? cur.has_android;
   const ios = (v.patch.has_ios as boolean | undefined) ?? cur.has_ios;
@@ -52,8 +52,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // for — never on an unrelated edit (an archive click must not wait ~12 s
   // on two store timeouts). Clearing both ids clears the icon.
   if ((idsChanged || b.refresh_icon === true) && (pkg || bid)) {
-    v.patch.icon_url = (await resolveAppIcon(pkg, bid)) ?? (idsChanged ? null : cur.icon_url);
-  } else if (idsChanged && !pkg && !bid) v.patch.icon_url = null;
+    const icons = await resolveAppIcons(pkg, bid);
+    // A changed id drops the old artwork for that platform; a refresh keeps it when the store answers nothing.
+    v.patch.icon_android_url = icons.android ?? (idsChanged ? null : cur.icon_android_url);
+    v.patch.icon_ios_url = icons.ios ?? (idsChanged ? null : cur.icon_ios_url);
+    v.patch.icon_url = (v.patch.icon_android_url as string | null) ?? (v.patch.icon_ios_url as string | null) ?? (idsChanged ? null : cur.icon_url);
+  } else if (idsChanged && !pkg && !bid) {
+    v.patch.icon_url = null;
+    v.patch.icon_android_url = null;
+    v.patch.icon_ios_url = null;
+  }
   const { error } = await sb.from("apps").update(v.patch).eq("id", id);
   if (error) {
     if (isUniqueViolation(error)) return NextResponse.json({ error: "An app with that name already exists" }, { status: 409 });

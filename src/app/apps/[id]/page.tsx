@@ -423,7 +423,7 @@ function SettingsTab({ app, onEdit }: { app: AppOverview; onEdit: () => void }) 
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-canvas/70 px-3 py-2 text-[12.5px] text-ink-muted">
-            <span className="min-w-0 flex-1">{app.icon_url ? "The icon comes from the store listing." : "No store icon yet — add the package or bundle id and fetch it."}</span>
+            <span className="min-w-0 flex-1">{app.icon_url ? `Icons come from the store listings — ${app.icon_android_url ? "Google Play" : ""}${app.icon_android_url && app.icon_ios_url ? " and " : ""}${app.icon_ios_url ? "the App Store" : ""}. The main tile uses the Android icon when there is one.` : "No store icon yet — add the package or bundle id and fetch it."}</span>
             <Button variant="secondary" size="sm" onClick={refreshIcon} disabled={!!busy || (!app.android_package && !app.ios_bundle_id)}>
               {busy === "icon" ? <Spinner /> : "Fetch icon"}
             </Button>
@@ -437,8 +437,8 @@ function SettingsTab({ app, onEdit }: { app: AppOverview; onEdit: () => void }) 
           <CardTitle>Platforms & stores</CardTitle>
         </CardHeader>
         <CardBody className="flex flex-col gap-3">
-          <StoreRow platform="android" on={app.has_android} id={app.android_package} idLabel="Package" link={playUrl} linkLabel="Google Play" latest={app.latest_android} />
-          <StoreRow platform="ios" on={app.has_ios} id={app.ios_bundle_id} idLabel="Bundle id" link={app.appstore_url} linkLabel="App Store" latest={app.latest_ios} />
+          <StoreRow platform="android" on={app.has_android} id={app.android_package} idLabel="Package" link={playUrl} linkLabel="Google Play" latest={app.latest_android} icon={app.icon_android_url} app={app} />
+          <StoreRow platform="ios" on={app.has_ios} id={app.ios_bundle_id} idLabel="Bundle id" link={app.appstore_url} linkLabel="App Store" latest={app.latest_ios} icon={app.icon_ios_url} app={app} />
           <p className="text-[12px] text-ink-subtle">Platforms decide which targets a task can have and which releases the app can hold. Change them under Edit details.</p>
         </CardBody>
       </Card>
@@ -473,11 +473,12 @@ function SettingsTab({ app, onEdit }: { app: AppOverview; onEdit: () => void }) 
   );
 }
 
-function StoreRow({ platform, on, id, idLabel, link, linkLabel, latest }: { platform: "android" | "ios"; on: boolean; id: string | null; idLabel: string; link: string | null; linkLabel: string; latest: AppOverview["latest_android"] }) {
+function StoreRow({ platform, on, id, idLabel, link, linkLabel, latest, icon, app }: { platform: "android" | "ios"; on: boolean; id: string | null; idLabel: string; link: string | null; linkLabel: string; latest: AppOverview["latest_android"]; icon?: string | null; app: AppOverview }) {
   return (
     <div className={cn("flex items-start gap-3 rounded-xl border border-line p-3", !on && "opacity-60")}>
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-canvas ring-1 ring-inset ring-line">
-        <PlatformGlyph platform={platform} size={18} />
+      <span className="relative shrink-0">
+        {on && icon ? <AppTile name={app.name} color={app.color} iconUrl={icon} className="h-10 w-10 text-sm" /> : <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-canvas ring-1 ring-inset ring-line"><PlatformGlyph platform={platform} size={18} /></span>}
+        {on && icon && <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-surface ring-1 ring-line"><PlatformGlyph platform={platform} size={10} /></span>}
       </span>
       <div className="min-w-0 flex-1 text-[13px]">
         <div className="flex flex-wrap items-center gap-2">

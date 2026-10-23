@@ -189,7 +189,7 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
   return (
     <article className="overflow-hidden rounded-xl border border-line bg-surface">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3">
-        {showApp && r.app && <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} className="h-9 w-9 text-sm" />}
+        {showApp && r.app && <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} androidIconUrl={r.app.icon_android_url} iosIconUrl={r.app.icon_ios_url} platform={r.platform} className="h-9 w-9 text-sm" />}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {showApp && r.app && <span className="text-[14px] font-semibold text-ink">{r.app.name}</span>}

@@ -236,5 +236,16 @@ try {
 }
 await db.exec("reset role");
 
+// (016) renumbering closes gaps and the sequence continues from the top
+{
+  await db.query("update tasks set number = number + 40 where number = (select max(number) from tasks)");
+  const moved = (await one("select tasks_renumber() as n", [])).n;
+  const nums = await json("select jsonb_agg(number order by number) from tasks");
+  assert(moved >= 1 && nums.every((v, i) => v === i + 1), `tasks_renumber closes gaps (${nums.join(",")})`);
+  const fresh = await one("insert into tasks (title, created_by) values ('after renumber', $1) returning number", [admin.id]);
+  assert(fresh.number === nums.length + 1, "task_sequence_reset: the next task continues the series");
+  const cols = await json("select jsonb_agg(column_name) from information_schema.columns where table_name = 'apps' and column_name in ('icon_android_url','icon_ios_url')");
+  assert(cols.length === 2, "apps carry a store icon per platform");
+}
 console.log(process.exitCode ? "\nFAILED" : "\nAll schema checks passed.");
 await db.close();

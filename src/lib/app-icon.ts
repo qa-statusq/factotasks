@@ -43,21 +43,26 @@ export async function fetchAppStoreIcon(bundleId: string): Promise<string | null
   }
 }
 
-/**
- * App Store first: its artwork is always the plain square icon. Play's
- * og:image is whatever asset the listing uploaded, which sometimes carries a
- * wordmark or padding — fine as a fallback, not as the first choice.
- */
-export async function resolveAppIcon(androidPackage: string | null | undefined, iosBundleId: string | null | undefined): Promise<string | null> {
-  if (iosBundleId) {
-    const icon = await fetchAppStoreIcon(iosBundleId);
-    if (icon) return icon;
-  }
-  if (androidPackage) {
-    const icon = await fetchPlayIcon(androidPackage);
-    if (icon) return icon;
-  }
-  return null;
+export interface AppIcons {
+  android: string | null;
+  ios: string | null;
+  /** The app's main tile: the Play icon where the app is on Android, else the App Store artwork. */
+  main: string | null;
+}
+
+/** Both store icons, fetched side by side; each platform shows its own. */
+export async function resolveAppIcons(androidPackage: string | null | undefined, iosBundleId: string | null | undefined): Promise<AppIcons> {
+  const [android, ios] = await Promise.all([androidPackage ? fetchPlayIcon(androidPackage) : Promise.resolve(null), iosBundleId ? fetchAppStoreIcon(iosBundleId) : Promise.resolve(null)]);
+  return { android, ios, main: android ?? ios };
+}
+
+/** The row patch for a fetched icon set (null keeps a column as it was). */
+export function iconPatch(icons: AppIcons): Record<string, string | null> {
+  const patch: Record<string, string | null> = {};
+  if (icons.android) patch.icon_android_url = icons.android;
+  if (icons.ios) patch.icon_ios_url = icons.ios;
+  if (icons.main) patch.icon_url = icons.main;
+  return patch;
 }
 
 // Apps created before icons existed (or whose first fetch failed) get one
@@ -67,14 +72,23 @@ export async function resolveAppIcon(androidPackage: string | null | undefined, 
 // next poll.
 const attempted = new Set<string>();
 export function backfillAppIcons(
-  apps: { id: string; icon_url?: string | null; android_package?: string | null; ios_bundle_id?: string | null }[],
-  save: (id: string, iconUrl: string) => Promise<unknown>
+  apps: { id: string; icon_url?: string | null; icon_android_url?: string | null; icon_ios_url?: string | null; android_package?: string | null; ios_bundle_id?: string | null }[],
+  save: (id: string, patch: Record<string, string | null>) => Promise<unknown>
 ): void {
   for (const a of apps) {
-    if (a.icon_url || attempted.has(a.id) || (!a.android_package && !a.ios_bundle_id)) continue;
+    const wantAndroid = !!a.android_package && !a.icon_android_url;
+    const wantIos = !!a.ios_bundle_id && !a.icon_ios_url;
+    if (attempted.has(a.id) || (!wantAndroid && !wantIos)) continue;
     attempted.add(a.id);
-    void resolveAppIcon(a.android_package, a.ios_bundle_id)
-      .then((icon) => (icon ? save(a.id, icon) : null))
-      .catch(() => null);
+    void resolveAppIcons(wantAndroid ? a.android_package : null, wantIos ? a.ios_bundle_id : null)
+      .then((icons) => {
+        const patch = iconPatch(icons);
+        // The main tile is Android first: an app that only had its App Store art switches once the Play icon arrives.
+        if (icons.android) patch.icon_url = icons.android;
+        else if (!a.icon_url && icons.ios) patch.icon_url = icons.ios;
+        else delete patch.icon_url;
+        return Object.keys(patch).length ? save(a.id, patch) : null;
+      })
+      .catch(() => attempted.delete(a.id)); // a database without 016 yet: try again next boot
   }
 }

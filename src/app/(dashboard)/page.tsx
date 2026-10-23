@@ -108,7 +108,7 @@ export default function DashboardPage() {
                 {data.releases.map((r) => (
                   <li key={r.id} className="min-w-0">
                     <Link href={`/apps/${r.app.id}?tab=releases`} className="flex h-full items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 transition-colors hover:bg-canvas">
-                      <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} className="h-8 w-8 text-xs" />
+                      <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} androidIconUrl={r.app.icon_android_url} iosIconUrl={r.app.icon_ios_url} platform={r.platform} className="h-8 w-8 text-xs" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-medium text-ink">{r.app.name}</span>
                         <span className="flex items-center gap-1.5 text-[12px] text-ink-muted">

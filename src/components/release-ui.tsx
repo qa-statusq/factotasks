@@ -298,7 +298,7 @@ export function ReleaseRow({ r, showApp = true, onOpen }: { r: Release; showApp?
   return (
     <li className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-canvas/70 sm:px-5">
       <button type="button" onClick={() => onOpen(r)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        {showApp && r.app ? <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} className="h-9 w-9 text-sm" /> : <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-canvas ring-1 ring-inset ring-line"><PlatformGlyph platform={r.platform} size={18} /></span>}
+        {showApp && r.app ? <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} androidIconUrl={r.app.icon_android_url} iosIconUrl={r.app.icon_ios_url} platform={r.platform} className="h-9 w-9 text-sm" /> : <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-canvas ring-1 ring-inset ring-line"><PlatformGlyph platform={r.platform} size={18} /></span>}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {showApp && r.app && <span className="text-sm font-medium text-ink">{r.app.name}</span>}
@@ -698,7 +698,7 @@ export function UnreleasedWorkBanner({ className, compact = false }: { className
             <p className="mt-1 flex flex-wrap items-center gap-1.5">
               {visible.map((g) => (
                 <button key={`${g.appId}:${g.platform}`} type="button" onClick={() => setForm({ app: g.app, platform: g.platform, task_ids: g.tasks.map((t) => t.id) })} className="inline-flex items-center gap-1 rounded-md bg-surface px-1.5 py-0.5 text-[12px] font-medium text-ink ring-1 ring-inset ring-amber-200 hover:ring-ink" title={`New ${PLATFORM_META[g.platform].label} release for ${g.app.name} with ${g.tasks.map((t) => taskRef(t.number)).join(", ")}`}>
-                  <AppTile name={g.app.name} color={g.app.color} iconUrl={g.app.icon_url} className="h-4 w-4 rounded-[4px] text-[7px]" />
+                  <AppTile name={g.app.name} color={g.app.color} iconUrl={g.app.icon_url} androidIconUrl={g.app.icon_android_url} iosIconUrl={g.app.icon_ios_url} platform={g.platform} className="h-4 w-4 rounded-[4px] text-[7px]" />
                   {g.app.name}
                   <PlatformGlyph platform={g.platform} size={12} />
                   <span className="text-ink-subtle">· {g.tasks.length}</span>
@@ -745,7 +745,7 @@ export function PendingReleaseBanner({ task, className }: { task: TaskCard; clas
           <p className="mt-1 flex flex-wrap items-center gap-1.5">
             {pending.map((t) => (
               <button key={`${t.app.id}:${t.platform}`} type="button" onClick={() => start(t)} className="inline-flex items-center gap-1 rounded-md bg-surface px-1.5 py-0.5 text-[12px] font-medium text-ink ring-1 ring-inset ring-amber-200 hover:ring-ink" title={`Create a ${PLATFORM_META[t.platform].label} release for ${t.app.name}`}>
-                <AppTile name={t.app.name} color={t.app.color} iconUrl={t.app.icon_url} className="h-4 w-4 rounded-[4px] text-[7px]" />
+                <AppTile name={t.app.name} color={t.app.color} iconUrl={t.app.icon_url} androidIconUrl={t.app.icon_android_url} iosIconUrl={t.app.icon_ios_url} platform={t.platform} className="h-4 w-4 rounded-[4px] text-[7px]" />
                 {t.app.name}
                 <PlatformGlyph platform={t.platform} size={12} />
               </button>
