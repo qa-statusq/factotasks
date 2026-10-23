@@ -247,7 +247,7 @@ function ChangePasswordCard() {
           <Field label="New password">
             <div className="relative">
               <Input type={show ? "text" : "password"} value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" placeholder="At least 8 characters" className="pr-10" />
-              <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-subtle hover:text-ink" aria-label={show ? "Hide" : "Show"} tabIndex={-1}>
+              <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-subtle hover:text-ink" aria-label={show ? "Hide password" : "Show password"}>
                 {show ? <IconEyeOff size={18} /> : <IconEye size={18} />}
               </button>
             </div>

@@ -56,11 +56,11 @@ export function PageHeader({
     // showing/hiding). Side-by-side from sm+. No eyebrow labels — the page
     // title stands on its own, Play Console-style.
     <div className={cn("flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4", className)}>
-      <div className="min-w-0">
+      <div className="min-w-0 sm:flex-1 sm:basis-[24rem]">
         {/* 2.0: a touch more presence on the page title — larger on desktop,
             tighter tracking — so each screen opens with a clear anchor. */}
         <h1 className="text-[20px] font-bold leading-tight tracking-[-0.02em] text-ink [text-wrap:balance] sm:text-[24px]">{title}</h1>
-        {description && <p className="mt-1 text-[13px] text-ink-muted">{description}</p>}
+        {description && <p className="mt-1 max-w-3xl text-[13px] text-ink-muted">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>

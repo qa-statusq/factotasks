@@ -52,8 +52,8 @@ export default function ReleasesPage() {
         description="What's shipping and what shipped — every version, Android and iOS."
         actions={
           <div className="flex items-center gap-2">
-            <Link href="/releases/history" className={buttonClass("secondary", "sm")} title="Every version with its date changes, status changes and what shipped">
-              <IconClock size={14} /> History
+            <Link href="/releases/history" className={buttonClass("secondary", "md")} title="Every version with its date changes, status changes and what shipped">
+              <IconClock size={15} /> History
             </Link>
             {canAdd && (
               <Button onClick={() => setAdding(true)}>
@@ -65,9 +65,7 @@ export default function ReleasesPage() {
       />
       <UnreleasedWorkBanner />
       <div className="flex flex-wrap gap-2">
-        <div className="w-52">
-          <Dropdown value={app} onChange={setApp} options={[{ value: "", label: "All apps" }, ...apps.map((a) => ({ value: a.id, label: a.name }))]} className="[&>button]:h-9" />
-        </div>
+        <Dropdown fit value={app} onChange={setApp} options={[{ value: "", label: "All apps" }, ...apps.map((a) => ({ value: a.id, label: a.name }))]} className="min-w-[11rem] [&>button]:h-9 [&>button]:w-full" />
         <div className="w-44">
           <Dropdown
             value={platform}

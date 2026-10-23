@@ -12,9 +12,8 @@ import { DateInput, usePopover } from "@/components/ui/date-input";
 import { Spinner, EmptyState, LoadError } from "@/components/ui/misc";
 import { Avatar } from "@/components/ui/avatar";
 import { RichText } from "@/components/ui/rich-text";
-import { ReleaseStatusBadge, PlatformBadge, AppTile, PriorityBadge, PlatformGlyph } from "@/components/ui/task-chips";
+import { ReleaseStatusBadge, PlatformBadge, AppTile, PriorityBadge, PlatformGlyph, StatusBadge } from "@/components/ui/task-chips";
 import { TaskList } from "@/components/task-list";
-import { toneClass } from "@/components/status-menu";
 import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
@@ -28,7 +27,7 @@ import { postJson, deleteJson } from "@/lib/http";
 import { istTime } from "@/lib/time";
 import { RelTime } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
-import { LIMITS, RELEASE_STATUSES, RELEASE_STATUS_META, PLATFORM_META, STATUS_META, taskRef, type ReleaseStatus } from "@/lib/domain";
+import { LIMITS, RELEASE_STATUSES, RELEASE_STATUS_META, PLATFORM_META, taskRef, type ReleaseStatus } from "@/lib/domain";
 import { IconRocket, IconEdit, IconTrash, IconPlus, IconCheck, IconUserCheck, IconChevronDown } from "@/components/ui/icons";
 import type { AppOverview, Release, ReleaseTaskLite, TaskCard, TaskTarget } from "@/lib/types";
 
@@ -82,7 +81,7 @@ function ReleaseTaskPicker({ appId, platform, releaseId, value, onChange }: { ap
   // in the iOS release, and a task released on one app stays available for
   // the other apps it targets.
   const { data: openData, error: openErr, refresh: openRetry } = useCachedFetch<{ tasks: TaskCard[] }>(appId ? `/api/tasks?app=${appId}&platform=${platform}&scope=all&limit=100&sort=number` : null);
-  const { data: linkedData, error: linkedErr } = useCachedFetch<{ tasks: TaskCard[] }>(releaseId ? `/api/tasks?release=${releaseId}&scope=all&limit=100&sort=number` : null);
+  const { data: linkedData, error: linkedErr, refresh: linkedRetry } = useCachedFetch<{ tasks: TaskCard[] }>(releaseId ? `/api/tasks?release=${releaseId}&scope=all&limit=100&sort=number` : null);
   const [q, setQ] = useState("");
   const tasks = useMemo(() => {
     const map = new Map<string, TaskCard>();
@@ -114,7 +113,7 @@ function ReleaseTaskPicker({ appId, platform, releaseId, value, onChange }: { ap
       </div>
       <div className="max-h-64 overflow-y-auto rounded-xl border border-line bg-surface">
         {failed ? (
-          <LoadError title="Couldn't load tasks" onRetry={openRetry} />
+          <LoadError title="Couldn't load tasks" onRetry={() => { openRetry(); linkedRetry(); }} />
         ) : loading ? (
           <div className="flex justify-center py-6">
             <Spinner />
@@ -132,12 +131,12 @@ function ReleaseTaskPicker({ appId, platform, releaseId, value, onChange }: { ap
                     <PriorityBadge priority={t.priority} compact className="mt-0.5 shrink-0" />
                     <span className="shrink-0 text-[12px] tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium text-ink">{t.title}</span>
+                      <span className="block break-words text-[13px] font-medium text-ink">{t.title}</span>
                       {t.description && <span className="mt-0.5 line-clamp-2 block whitespace-pre-wrap text-[12px] leading-snug text-ink-muted">{t.description}</span>}
                     </span>
                     {(t.targets?.length ?? 0) > 1 && <span className="shrink-0 text-[10.5px] text-ink-subtle" title="This task also ships elsewhere">+{(t.targets?.length ?? 1) - 1} more target{(t.targets?.length ?? 1) - 1 === 1 ? "" : "s"}</span>}
                     {(t.targets ?? []).some((x) => x.app.id === appId && x.platform === platform && x.released_at) && <span className="inline-flex shrink-0 items-center gap-0.5 text-[10.5px] font-semibold text-emerald-700"><IconCheck size={11} /> shipped</span>}
-                    <span className={cn("shrink-0 rounded-full px-1.5 py-px text-[10.5px] font-semibold ring-1 ring-inset", toneClass(t.status))}>{STATUS_META[t.status].label}</span>
+                    <StatusBadge status={t.status} className="shrink-0" />
                   </button>
                 </li>
               );
@@ -278,7 +277,7 @@ export function ReleaseFormSheet({ release, apps, appId, initial, onClose }: { r
               : `Saving will mark the release as released and close the ${taskIds.length} linked task${taskIds.length === 1 ? "" : "s"} that ${taskIds.length === 1 ? "is" : "are"} still open.`}
           </p>
         )}
-        <Field label="Additional notes" hint="Anything beyond the task list — highlights, known issues, migration steps. Shown in meetings and minutes.">
+        <Field label="Release notes" hint="Anything beyond the task list — highlights, known issues, migration steps. Shown in meetings and minutes.">
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={LIMITS.releaseText} placeholder="- Faster sync on slow networks&#10;- Known issue: dark-mode icons on Android 10" />
         </Field>
         <Field label="Internal notes" hint="Rollout %, store review remarks, hotfix plans…">
@@ -305,7 +304,7 @@ export function ReleaseRow({ r, showApp = true, onOpen }: { r: Release; showApp?
             {showApp && r.app && <span className="text-sm font-medium text-ink">{r.app.name}</span>}
             <span className="text-sm font-semibold tabular-nums text-ink">v{r.version_name}</span>
             {r.build_number && <span className="text-xs text-ink-subtle">({r.build_number})</span>}
-            <PlatformBadge platform={r.platform} />
+            {showApp && <PlatformBadge platform={r.platform} />}
             {r.requested_status && <Badge tone="warning">Awaiting approval</Badge>}
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-subtle">
@@ -513,7 +512,7 @@ export function ReleaseViewSheet({ release, apps, onClose }: { release: Release;
           </section>
 
           <section>
-            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-subtle">Additional notes</h3>
+            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-subtle">Release notes</h3>
             {r.description ? <RichText text={r.description} /> : <p className="text-sm text-ink-subtle">Nothing beyond the task list.</p>}
           </section>
           {r.notes && (
@@ -547,7 +546,7 @@ export function ReleaseTaskSummary({ tasks, className }: { tasks: ReleaseTaskLit
         <li key={t.id} className="flex items-baseline gap-1.5 text-[12.5px]">
           <span className="shrink-0 tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
           <span className="min-w-0 break-words text-ink">{t.title}</span>
-          <span className={cn("ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold ring-1 ring-inset", toneClass(t.status))}>{STATUS_META[t.status].label}</span>
+          <StatusBadge status={t.status} className="ml-auto shrink-0" />
         </li>
       ))}
     </ul>

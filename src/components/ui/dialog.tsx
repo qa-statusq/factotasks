@@ -10,7 +10,8 @@ interface ConfirmOpts {
   title: string;
   message?: string;
   confirmLabel?: string;
-  cancelLabel?: string;
+  /** null hides the cancel button (a notice with one way out). */
+  cancelLabel?: string | null;
   tone?: "danger" | "brand";
 }
 interface PromptOpts {
@@ -192,9 +193,11 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
             {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
 
             <div className="mt-5 flex justify-end gap-2">
-              <Button variant="secondary" size="sm" onClick={onCancel}>
-                {state.opts.cancelLabel || "Cancel"}
-              </Button>
+              {state.opts.cancelLabel !== null && (
+                <Button variant="secondary" size="sm" onClick={onCancel}>
+                  {state.opts.cancelLabel || "Cancel"}
+                </Button>
+              )}
               <Button
                 variant={state.opts.tone === "danger" ? "danger" : "primary"}
                 size="sm"

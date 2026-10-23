@@ -5,13 +5,12 @@ import { Sheet } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Spinner, LoadError } from "@/components/ui/misc";
-import { AppTile, PriorityBadge } from "@/components/ui/task-chips";
-import { Badge } from "@/components/ui/badge";
+import { AppTile, PriorityBadge, StatusBadge } from "@/components/ui/task-chips";
 import { useToast } from "@/components/ui/toast";
+import { SeriesBadge } from "@/components/meeting-series";
 import { mutate, useCachedFetch } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
-import { STATUS_META, taskRef } from "@/lib/domain";
-import { toneClass } from "@/components/status-menu";
+import { taskRef } from "@/lib/domain";
 import { cn } from "@/lib/cn";
 import { IconSearch, IconCheck } from "@/components/ui/icons";
 import { istTime } from "@/lib/time";
@@ -38,7 +37,10 @@ export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meeting
         const data = (await res.json()) as { tasks: TaskCard[] };
         setResults(data.tasks);
       } catch {
-        if (!ctrl.signal.aborted) setResults([]);
+        if (!ctrl.signal.aborted) {
+          setResults([]);
+          toast("Couldn't search tasks — check the connection and try again", "error");
+        }
       }
     }, q ? 180 : 0);
     return () => {
@@ -106,7 +108,7 @@ export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meeting
                         {t.assignees.length > 0 && <span>· {t.assignees.map((a) => a.name.split(" ")[0]).join(", ")}</span>}
                       </div>
                     </div>
-                    <Badge className={cn("shrink-0", toneClass(t.status))}>{STATUS_META[t.status].label}</Badge>
+                    <StatusBadge status={t.status} className="shrink-0" />
                   </button>
                 </li>
               );
@@ -167,11 +169,7 @@ export function AddToMeetingSheet({ taskId, taskNumber, already, onClose }: { ta
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-medium text-ink">
                       {m.title}
-                      {m.series && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: m.series.color }} /> {m.series.name}
-                        </span>
-                      )}
+                      {m.series && <SeriesBadge series={m.series} />}
                     </div>
                     <div className="mt-0.5 text-[11.5px] text-ink-subtle">{istTime(m.held_at).replace(/:\d\d (am|pm)/, " $1")}</div>
                   </div>

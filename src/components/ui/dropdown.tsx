@@ -27,12 +27,20 @@ export function Dropdown({
   options,
   placeholder = "Select…",
   className,
+  fit,
+  id,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: Option[];
   placeholder?: string;
   className?: string;
+  /** Size the trigger to its label instead of filling the row (toolbars). */
+  fit?: boolean;
+  /** Set by `Field`, so its label names this control. */
+  id?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<MenuPos | null>(null);
@@ -160,16 +168,18 @@ export function Dropdown({
   const selected = options.find((o) => o.value === value);
 
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn("relative", fit && "inline-flex w-auto max-w-full", className)}>
       <button
         ref={btnRef}
+        id={id}
         type="button"
+        disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={cn(controlClass, "flex h-10 items-center justify-between gap-2")}
+        className={cn(controlClass, "flex h-10 items-center justify-between gap-2", fit && "w-auto max-w-full", disabled && "cursor-not-allowed opacity-60 hover:border-line")}
       >
-        <span className={cn("truncate", selected ? "text-ink" : "text-ink-subtle")}>
+        <span className={cn("truncate", fit && "whitespace-nowrap", selected ? "text-ink" : "text-ink-subtle")}>
           {selected ? selected.label : placeholder}
         </span>
         <IconChevronDown size={16} className={cn("shrink-0 text-ink-subtle transition-transform", open && "rotate-180")} />
@@ -183,7 +193,10 @@ export function Dropdown({
             style={{
               position: "fixed",
               left: pos.left,
-              width: pos.width,
+              // At least as wide as the trigger; wider when a label needs it,
+              // so no option is ever cut to "Mobile Apps Weekl…".
+              minWidth: pos.width,
+              maxWidth: Math.max(pos.width, Math.min(440, window.innerWidth - pos.left - 8)),
               ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }),
             }}
             role="listbox"
@@ -206,7 +219,7 @@ export function Dropdown({
                   o.value === active && o.value !== value && "bg-canvas"
                 )}
               >
-                <span className="truncate">{o.label}</span>
+                <span className="min-w-0 break-words">{o.label}</span>
                 {o.value === value && <IconCheck size={15} className="shrink-0 text-brand-600" />}
               </button>
             ))}

@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Segmented } from "@/components/ui/segmented";
 import { controlClass } from "@/components/ui/field";
-import { LoadError, Spinner } from "@/components/ui/misc";
+import { LoadError, Spinner, PageHeader } from "@/components/ui/misc";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { TaskList } from "@/components/task-list";
 import { useTaskComposer } from "@/components/task-composer";
 import { useSession } from "@/components/providers/session-provider";
+import { useToast } from "@/components/ui/toast";
 import { useCachedFetch } from "@/lib/client-cache";
 import { timeoutSignal } from "@/lib/compat";
 import { cn } from "@/lib/cn";
@@ -74,6 +75,7 @@ function TasksScreen() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { me, isAdmin } = useSession();
+  const { toast } = useToast();
   const composer = useTaskComposer();
 
   const filters = useMemo<Filters>(() => {
@@ -138,13 +140,14 @@ function TasksScreen() {
       const page = (await r.json()) as Page;
       setMore((cur) => ({ url, tasks: [...(cur?.url === url ? cur.tasks : []), ...page.tasks], cursor: page.nextCursor, offset: page.nextOffset, hasMore: page.hasMore }));
     } catch {
-      /* retry via button */
+      toast("Couldn't load more tasks — try again", "error");
     } finally {
       setLoadingMore(false);
     }
   }
 
   const apps = useMemo(() => appsData?.apps ?? [], [appsData]);
+  const appOrder = useMemo(() => apps.map((a) => a.id), [apps]);
   const users = useMemo(() => usersData?.users ?? [], [usersData]);
   const appOptions = useMemo(() => [{ value: "", label: "All apps" }, { value: "general", label: "General (no app)" }, ...apps.map((a) => ({ value: a.id, label: a.name }))], [apps]);
   const userOptions = useMemo(
@@ -178,13 +181,17 @@ function TasksScreen() {
 
   return (
     <div className="flex flex-col gap-4 animate-fade-in">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="mr-2 text-[20px] font-bold tracking-[-0.02em] text-ink sm:text-[24px]">Tasks</h1>
-        <Segmented value={scope} onChange={(v) => set({ scope: v === "open" ? undefined : v, status: undefined })} options={SCOPES.map((o) => ({ value: o.value, label: o.label }))} aria-label="Scope" />
-        <Button className="ml-auto" onClick={() => composer.open({ app_id: filters.app && filters.app !== "general" ? filters.app : null })}>
-          <IconPlus size={16} /> New task
-        </Button>
-      </div>
+      <PageHeader
+        title="Tasks"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented value={scope} onChange={(v) => set({ scope: v === "open" ? undefined : v, status: undefined })} options={SCOPES.map((o) => ({ value: o.value, label: o.label }))} aria-label="Scope" />
+            <Button onClick={() => composer.open({ app_id: filters.app && filters.app !== "general" ? filters.app : null })}>
+              <IconPlus size={16} /> New task
+            </Button>
+          </div>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
@@ -258,7 +265,7 @@ function TasksScreen() {
         <LoadError title="Couldn't load tasks" onRetry={refresh} />
       ) : grouped ? (
         <>
-          <TaskList tasks={tasks} groupBy="app" empty={q ? `No tasks match “${q}”` : "No tasks match these filters"} />
+          <TaskList tasks={tasks} groupBy="app" appOrder={appOrder} empty={scope === "mine" ? "Nothing assigned to you" : q ? `No tasks match “${q}”` : "No tasks match these filters"} />
           {hasMore && <LoadMore onClick={loadMore} busy={loadingMore} />}
         </>
       ) : (

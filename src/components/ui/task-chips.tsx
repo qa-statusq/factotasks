@@ -15,14 +15,14 @@ import {
   type TaskStatus,
   type TaskType,
 } from "@/lib/domain";
-import { IconAndroid, IconApple, IconFlag, IconCheck } from "@/components/ui/icons";
+import { IconAndroid, IconApple, IconFlag, IconCheck, IconPresentation } from "@/components/ui/icons";
 import type { AppLite, TaskTarget } from "@/lib/types";
 
 /** Status pill with its colour dot — the same treatment on every screen. */
 export function StatusBadge({ status, className }: { status: TaskStatus; className?: string }) {
   const m = STATUS_META[status] ?? STATUS_META.todo;
   return (
-    <Badge tone={m.tone} className={cn("gap-1.5", className)} title={m.hint}>
+    <Badge tone={m.tone} className={cn("gap-1.5 rounded-full", status === "in_review" && "bg-violet-50 text-violet-700 ring-violet-200", className)} title={m.hint}>
       <span className={cn("h-1.5 w-1.5 rounded-full", m.dot)} />
       {m.label}
     </Badge>
@@ -62,10 +62,16 @@ export function TypeBadge({ type, className }: { type: TaskType; className?: str
  */
 export function PlatformGlyph({ platform, size = 12, className, released }: { platform: "android" | "ios"; size?: number; className?: string; released?: boolean }) {
   const label = `${PLATFORM_META[platform].label}${released ? " · released" : ""}`;
+  const badge = Math.max(8, Math.round(size * 0.7));
   return (
-    <span className={cn("inline-flex shrink-0 items-center", className)} title={label} aria-label={label}>
+    <span className={cn("relative inline-flex shrink-0 items-center", released && "mr-0.5", className)} title={label} aria-label={label}>
       {platform === "android" ? <IconAndroid size={size} className="text-[#2f9e5f]" /> : <IconApple size={size} className="text-ink" />}
-      {released && <IconCheck size={Math.max(9, size - 3)} className="-ml-0.5 text-emerald-600" />}
+      {released && (
+        // A green check badge on the corner of the mark — "this one shipped" — instead of a loose tick beside it.
+        <span className="absolute -bottom-0.5 -right-1 flex items-center justify-center rounded-full bg-emerald-500 ring-[1.5px] ring-surface" style={{ width: badge, height: badge }}>
+          <IconCheck size={Math.max(6, badge - 3)} className="text-white" strokeWidth={3} />
+        </span>
+      )}
     </span>
   );
 }
@@ -91,12 +97,17 @@ export function PlatformBadge({ platform, className, label = true }: { platform:
   );
 }
 
+/** The one tile for "General" (work on no app) — the same grey G everywhere. */
+export function GeneralTile({ className }: { className?: string }) {
+  return <AppTile name="General" color="#94a3b8" className={className} />;
+}
+
 /** App identity: tile + name. "General" when the task has no app. */
 export function AppChip({ app, className, size = "sm" }: { app: AppLite | null | undefined; className?: string; size?: "xs" | "sm" }) {
   const tile = size === "xs" ? "h-4 w-4 rounded-[4px] text-[7px]" : "h-5 w-5 rounded-[5px] text-[8px]";
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-ink-muted", className)} title={app ? app.name : "General task (no app)"}>
-      {app ? <AppTile name={app.name} color={app.color} iconUrl={app.icon_url} className={tile} /> : <span className={cn("shrink-0 bg-slate-400", tile)} />}
+      {app ? <AppTile name={app.name} color={app.color} iconUrl={app.icon_url} className={tile} /> : <GeneralTile className={tile} />}
       <span className="truncate">{app ? app.name : "General"}</span>
     </span>
   );
@@ -107,12 +118,23 @@ export function AppChip({ app, className, size = "sm" }: { app: AppLite | null |
  * letter on its colour. An icon that fails to load falls back to the letter
  * instead of leaving an empty box.
  */
+/** Store artwork goes through the panel's own relay (/api/icon), which the hosting CDN caches. */
+export function iconSrc(url: string): string {
+  try {
+    const h = new URL(url).hostname;
+    if (h === "play-lh.googleusercontent.com" || h.endsWith("mzstatic.com")) return `/api/icon?u=${encodeURIComponent(url)}`;
+  } catch {
+    /* not a URL: use as-is */
+  }
+  return url;
+}
+
 export function AppTile({ name, color, iconUrl, className }: { name: string; color: string; iconUrl?: string | null; className?: string }) {
   const [broken, setBroken] = useState<string | null>(null);
   if (iconUrl && broken !== iconUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={iconUrl} alt="" loading="lazy" decoding="async" onError={() => setBroken(iconUrl)} className={cn("shrink-0 rounded-xl bg-canvas object-cover ring-1 ring-inset ring-black/10", className)} />
+      <img src={iconSrc(iconUrl)} alt="" loading="lazy" decoding="async" onError={() => setBroken(iconUrl)} className={cn("shrink-0 rounded-xl bg-canvas object-cover ring-1 ring-inset ring-black/10", className)} />
     );
   }
   return (
@@ -129,7 +151,7 @@ export function AppTile({ name, color, iconUrl, className }: { name: string; col
 export function ReleaseStatusBadge({ status, className }: { status: ReleaseStatus; className?: string }) {
   const m = RELEASE_STATUS_META[status] ?? RELEASE_STATUS_META.planned;
   return (
-    <Badge tone={m.tone} className={className}>
+    <Badge tone={m.tone} className={cn("rounded-full", className)}>
       {m.label}
     </Badge>
   );
@@ -158,7 +180,7 @@ export function LabelChip({ label, className, onRemove }: { label: string; class
  */
 export function TargetChips({ targets, app, platform, max = 3, compact, className }: { targets?: TaskTarget[]; app?: AppLite | null; platform?: Platform | null; max?: number; compact?: boolean; className?: string }) {
   if (!targets?.length) {
-    if (!app) return <span className={cn("text-[11.5px] text-ink-subtle", className)}>General</span>;
+    if (!app) return <AppChip app={null} size="xs" className={className} />;
     return (
       <span className={cn("inline-flex items-center gap-1.5", className)}>
         <AppChip app={app} size="xs" />
@@ -202,9 +224,13 @@ export function TargetChips({ targets, app, platform, max = 3, compact, classNam
 /** "Attached to Weekly sync": the series a task reports into. */
 export function SeriesChip({ series, className }: { series?: { id: string; name: string; color: string } | null; className?: string }) {
   if (!series) return null;
+  // The presentation glyph in the series' colour says "meeting" at a glance;
+  // the word is spelled out unless the series name already carries it.
+  const saysMeeting = /meet/i.test(series.name);
   return (
-    <span className={cn("inline-flex items-center gap-1 text-[11.5px] font-medium text-ink-muted", className)} title={`On the ${series.name} meetings`}>
-      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: series.color }} />
+    <span className={cn("inline-flex items-center gap-1 whitespace-nowrap text-[11.5px] font-medium text-ink-muted", className)} title={`Reports into the "${series.name}" meetings until done`}>
+      <IconPresentation size={12} className="shrink-0" style={{ color: series.color }} />
+      {!saysMeeting && <span className="text-ink-subtle">Meeting ·</span>}
       {series.name}
     </span>
   );

@@ -49,6 +49,11 @@ export default function InboxPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const items = [...(data?.notifications ?? []), ...more.filter((m) => !(data?.notifications ?? []).some((n) => n.id === m.id))];
   const unread = data?.unread ?? 0;
+  // What was unread when the inbox opened stays highlighted until you leave,
+  // even though it is marked read in the background a moment later.
+  const [openedUnread, setOpenedUnread] = useState<Set<string> | null>(null);
+  if (data && openedUnread === null) setOpenedUnread(new Set(data.notifications.filter((n) => !n.read_at).map((n) => n.id)));
+  const isUnread = (n: { id: string; read_at: string | null }) => !n.read_at || !!openedUnread?.has(n.id);
 
   // Opening the inbox reads it: mark everything read shortly after it paints,
   // so the badge clears without a click — the Gmail/Linear convention.
@@ -103,19 +108,19 @@ export default function InboxPage() {
         title="Inbox"
         description="Assignments, approvals, comments and releases that concern you."
         actions={
-          unread > 0 ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={async () => {
-                await postJson("/api/notifications/read", { all: true });
-                mutate(url);
-                mutate("/api/notifications?limit=1");
-              }}
-            >
-              <IconCheck size={14} /> Mark all read
-            </Button>
-          ) : undefined
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={unread === 0}
+            title={unread === 0 ? "Everything is read" : undefined}
+            onClick={async () => {
+              await postJson("/api/notifications/read", { all: true });
+              mutate(url);
+              mutate("/api/notifications?limit=1");
+            }}
+          >
+            <IconCheck size={14} /> {unread === 0 ? "All read" : "Mark all read"}
+          </Button>
         }
       />
       {loading ? (
@@ -146,11 +151,11 @@ export default function InboxPage() {
                       </span>
                     </div>
                   </div>
-                  {!n.read_at && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-label="Unread" />}
+                  {isUnread(n) && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-label="Unread" />}
                 </>
               );
               return (
-                <li key={n.id} className={cn("cv-card", !n.read_at && "bg-brand-50/30")}>
+                <li key={n.id} className={cn("cv-card", isUnread(n) && "bg-brand-50/30")}>
                   {n.task_id ? (
                     <Link href={`/tasks/${n.task_id}`} className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-canvas/70 sm:px-5">
                       {inner}

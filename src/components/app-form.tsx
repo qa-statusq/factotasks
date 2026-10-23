@@ -91,12 +91,12 @@ export function AppFormSheet({ app, onClose, onSaved }: { app?: AppOverview | nu
         </Field>
         <div className="flex flex-col gap-3 rounded-xl border border-line p-3.5">
           <Switch checked={android} onChange={setAndroid} label="Android" description="Ships on Google Play" />
-          {android && <Input value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="Package id — com.example.app" />}
+          {android && <Input value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="Package id — com.example.app" aria-label="Android package id" />}
           <Switch checked={ios} onChange={setIos} label="iOS" description="Ships on the App Store" />
           {ios && (
             <>
-              <Input value={bundle} onChange={(e) => setBundle(e.target.value)} placeholder="Bundle id — com.example.app" />
-              <Input value={storeUrl} onChange={(e) => setStoreUrl(e.target.value)} placeholder="App Store link (https://apps.apple.com/…)" />
+              <Input value={bundle} onChange={(e) => setBundle(e.target.value)} placeholder="Bundle id — com.example.app" aria-label="iOS bundle id" />
+              <Input value={storeUrl} onChange={(e) => setStoreUrl(e.target.value)} placeholder="App Store link (https://apps.apple.com/…)" aria-label="App Store link" />
             </>
           )}
         </div>

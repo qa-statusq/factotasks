@@ -10,11 +10,11 @@ import { Segmented } from "@/components/ui/segmented";
 import { Breadcrumb, LoadError, EmptyState, Spinner, StatCard } from "@/components/ui/misc";
 import { ListSkeleton, PanelSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
-import { AppTile, PlatformBadge, PlatformGlyph } from "@/components/ui/task-chips";
+import { AppTile, PlatformGlyph } from "@/components/ui/task-chips";
 import { PeoplePicker } from "@/components/ui/people-picker";
 import { TaskList } from "@/components/task-list";
 import { AppFormSheet } from "@/components/app-form";
-import { ReleaseFormSheet, ReleaseRow, ReleaseViewSheet } from "@/components/release-ui";
+import { ReleaseFormSheet, ReleaseRow, ReleaseViewSheet, prettyDate } from "@/components/release-ui";
 import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
@@ -186,12 +186,13 @@ function ReleasesTab({ app, apps }: { app: AppOverview; apps: AppOverview[] }) {
   const canManage = isAdmin || app.members.some((m) => m.user.id === me?.id);
   const releases = data?.releases ?? [];
   const upcoming = releases.filter((r) => !["released", "cancelled", "rolled_back"].includes(r.status));
-  const shipped = releases.filter((r) => ["released", "cancelled", "rolled_back"].includes(r.status));
+  const shipped = releases.filter((r) => r.status === "released");
+  const dropped = releases.filter((r) => r.status === "cancelled" || r.status === "rolled_back");
   return (
     <>
       <div className="flex flex-col gap-5">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-ink-muted">Version-wise log per platform. Link tasks to a version from the task editor.</p>
+          <p className="text-sm text-ink-muted">Version-wise log per platform. Tick the tasks that ship in a version when you add or edit it.</p>
           {canManage && (
             <Button size="sm" onClick={() => setAdding(true)}>
               <IconPlus size={15} /> New release
@@ -229,6 +230,18 @@ function ReleasesTab({ app, apps }: { app: AppOverview; apps: AppOverview[] }) {
                 </CardHeader>
                 <ul className="divide-y divide-line/80">
                   {shipped.map((r) => (
+                    <ReleaseRow key={r.id} r={r} showApp={false} onOpen={setOpen} />
+                  ))}
+                </ul>
+              </Card>
+            )}
+            {dropped.length > 0 && (
+              <Card className="overflow-hidden">
+                <CardHeader>
+                  <CardTitle>Cancelled &amp; rolled back</CardTitle>
+                </CardHeader>
+                <ul className="divide-y divide-line/80">
+                  {dropped.map((r) => (
                     <ReleaseRow key={r.id} r={r} showApp={false} onOpen={setOpen} />
                   ))}
                 </ul>
@@ -340,23 +353,41 @@ function SettingsTab({ app, onEdit }: { app: AppOverview; onEdit: () => void }) 
   const router = useRouter();
   const { toast } = useToast();
   const { confirm } = useDialog();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const playUrl = app.android_package ? `https://play.google.com/store/apps/details?id=${encodeURIComponent(app.android_package)}` : null;
 
   async function setStatus(status: AppOverview["status"]) {
-    setBusy(true);
+    if (busy) return;
+    if (status === "archived" && !(await confirm({ title: `Archive ${app.name}?`, message: "It disappears from pickers, meeting scopes and the Apps list (under “archived”). Tasks, releases and history stay exactly as they are, and you can bring it back any time.", confirmLabel: "Archive" }))) return;
+    setBusy("status");
     const { ok, data } = await postJson(`/api/apps/${app.id}`, { status }, "PATCH");
-    setBusy(false);
+    setBusy(null);
     if (ok) {
-      toast(status === "archived" ? "App archived" : "App updated");
+      toast(status === "archived" ? "App archived" : "App is active again");
       mutate(`/api/apps/${app.id}`);
       mutate("/api/apps");
       mutatePrefix("/api/tasks");
     } else toast(data?.error || "Couldn't update", "error");
   }
 
+  async function refreshIcon() {
+    if (busy) return;
+    setBusy("icon");
+    const { ok, data } = await postJson(`/api/apps/${app.id}`, { refresh_icon: true }, "PATCH");
+    setBusy(null);
+    if (ok) {
+      toast("Store icon refreshed");
+      mutate(`/api/apps/${app.id}`);
+      mutate("/api/apps");
+    } else toast(data?.error || "Couldn't fetch the icon", "error");
+  }
+
   async function remove() {
-    if (!(await confirm({ title: `Delete ${app.name}?`, message: "Only possible when the app has no tasks or releases. Otherwise archive it.", confirmLabel: "Delete", tone: "danger" }))) return;
+    if (busy) return;
+    if (!(await confirm({ title: `Delete ${app.name}?`, message: "Only possible while the app has no tasks or releases; otherwise archive it. This cannot be undone.", confirmLabel: "Delete", tone: "danger" }))) return;
+    setBusy("delete");
     const { ok, data } = await deleteJson(`/api/apps/${app.id}`);
+    setBusy(null);
     if (ok) {
       toast("App deleted");
       mutate("/api/apps");
@@ -364,48 +395,76 @@ function SettingsTab({ app, onEdit }: { app: AppOverview; onEdit: () => void }) 
     } else toast(data?.error || "Couldn't delete", "error");
   }
 
+  const archived = app.status === "archived";
   return (
     <div className="grid gap-5 lg:grid-cols-2">
+      {/* Identity */}
       <Card>
-        <CardHeader>
-          <CardTitle>Details</CardTitle>
-        </CardHeader>
-        <CardBody className="flex flex-col gap-3 text-sm">
-          <Row label="Platforms">
-            <span className="inline-flex gap-1.5">
-              {app.has_android && <PlatformBadge platform="android" />}
-              {app.has_ios && <PlatformBadge platform="ios" />}
-            </span>
-          </Row>
-          <Row label="Android package">{app.android_package || "—"}</Row>
-          <Row label="iOS bundle id">{app.ios_bundle_id || "—"}</Row>
-          <Row label="App Store link">{app.appstore_url ? <a href={app.appstore_url} className="text-brand-700 hover:underline" target="_blank" rel="noopener noreferrer">{app.appstore_url}</a> : "—"}</Row>
-          <Button variant="secondary" size="sm" className="self-start" onClick={onEdit}>
+        <CardHeader className="flex items-center justify-between gap-3">
+          <CardTitle>Identity</CardTitle>
+          <Button variant="secondary" size="sm" onClick={onEdit}>
             <IconEdit size={14} /> Edit details
           </Button>
+        </CardHeader>
+        <CardBody className="flex flex-col gap-4">
+          <div className="flex items-start gap-4">
+            <AppTile name={app.name} color={app.color} iconUrl={app.icon_url} className="h-16 w-16 text-2xl" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[16px] font-semibold text-ink">{app.name}</span>
+                <Badge tone="neutral">{app.kind === "b2b" ? "Business app" : "Consumer app"}</Badge>
+                <Badge tone={archived ? "neutral" : "success"}>{archived ? "Archived" : app.status === "maintenance" ? "Maintenance" : "Active"}</Badge>
+              </div>
+              <p className="mt-1 text-[13px] text-ink-muted">{app.description?.trim() || <span className="text-ink-subtle">No description yet — say what the app does in a line.</span>}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-subtle">
+                <span>Added {prettyDate(app.created_at.slice(0, 10))}</span>
+                <span>· {app.members.length} member{app.members.length === 1 ? "" : "s"}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-canvas/70 px-3 py-2 text-[12.5px] text-ink-muted">
+            <span className="min-w-0 flex-1">{app.icon_url ? "The icon comes from the store listing." : "No store icon yet — add the package or bundle id and fetch it."}</span>
+            <Button variant="secondary" size="sm" onClick={refreshIcon} disabled={!!busy || (!app.android_package && !app.ios_bundle_id)}>
+              {busy === "icon" ? <Spinner /> : "Fetch icon"}
+            </Button>
+          </div>
         </CardBody>
       </Card>
+
+      {/* Store presence */}
       <Card>
+        <CardHeader>
+          <CardTitle>Platforms & stores</CardTitle>
+        </CardHeader>
+        <CardBody className="flex flex-col gap-3">
+          <StoreRow platform="android" on={app.has_android} id={app.android_package} idLabel="Package" link={playUrl} linkLabel="Google Play" latest={app.latest_android} />
+          <StoreRow platform="ios" on={app.has_ios} id={app.ios_bundle_id} idLabel="Bundle id" link={app.appstore_url} linkLabel="App Store" latest={app.latest_ios} />
+          <p className="text-[12px] text-ink-subtle">Platforms decide which targets a task can have and which releases the app can hold. Change them under Edit details.</p>
+        </CardBody>
+      </Card>
+
+      {/* Lifecycle */}
+      <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Lifecycle</CardTitle>
         </CardHeader>
-        <CardBody className="flex flex-col gap-3">
-          <p className="text-sm text-ink-muted">
-            {app.status === "archived" ? "Archived apps are hidden from pickers; their history stays intact." : "Active — tasks and releases can be added."}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {app.status !== "active" && (
-              <Button variant="secondary" size="sm" onClick={() => setStatus("active")} disabled={busy}>
-                Mark active
-              </Button>
-            )}
-                        {app.status !== "archived" && (
-              <Button variant="secondary" size="sm" onClick={() => setStatus("archived")} disabled={busy}>
-                <IconArchive size={14} /> Archive
-              </Button>
-            )}
-            <Button variant="danger" size="sm" onClick={remove} disabled={busy}>
-              <IconTrash size={14} /> Delete
+        <CardBody className="grid gap-4 md:grid-cols-2">
+          <div className="flex items-start justify-between gap-4 rounded-xl border border-line p-4">
+            <div className="min-w-0">
+              <p className="text-[13.5px] font-semibold text-ink">{archived ? "Bring back" : "Archive"}</p>
+              <p className="mt-0.5 text-[12.5px] text-ink-muted">{archived ? "Make the app active again: it returns to pickers, scopes and the Apps list." : "Hide the app from pickers and meeting scopes once it is retired. Nothing is deleted."}</p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => setStatus(archived ? "active" : "archived")} disabled={!!busy} className="shrink-0">
+              {busy === "status" ? <Spinner /> : archived ? "Mark active" : <><IconArchive size={14} /> Archive</>}
+            </Button>
+          </div>
+          <div className="flex items-start justify-between gap-4 rounded-xl border border-red-200 bg-red-50/40 p-4">
+            <div className="min-w-0">
+              <p className="text-[13.5px] font-semibold text-red-700">Delete app</p>
+              <p className="mt-0.5 text-[12.5px] text-ink-muted">Only while it has no tasks or releases. Otherwise archive it, so history stays intact.</p>
+            </div>
+            <Button variant="danger" size="sm" onClick={remove} disabled={!!busy} className="shrink-0">
+              {busy === "delete" ? <Spinner /> : <><IconTrash size={14} /> Delete</>}
             </Button>
           </div>
         </CardBody>
@@ -414,11 +473,35 @@ function SettingsTab({ app, onEdit }: { app: AppOverview; onEdit: () => void }) 
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function StoreRow({ platform, on, id, idLabel, link, linkLabel, latest }: { platform: "android" | "ios"; on: boolean; id: string | null; idLabel: string; link: string | null; linkLabel: string; latest: AppOverview["latest_android"] }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <span className="shrink-0 text-ink-subtle">{label}</span>
-      <span className="min-w-0 break-words text-right text-ink">{children}</span>
+    <div className={cn("flex items-start gap-3 rounded-xl border border-line p-3", !on && "opacity-60")}>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-canvas ring-1 ring-inset ring-line">
+        <PlatformGlyph platform={platform} size={18} />
+      </span>
+      <div className="min-w-0 flex-1 text-[13px]">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-ink">{platform === "android" ? "Android" : "iOS"}</span>
+          {on ? <Badge tone="success">On</Badge> : <Badge tone="neutral">Not shipped here</Badge>}
+          {on && <span className="text-ink-muted">{latest ? `latest v${latest.version_name}` : "no release yet"}</span>}
+        </div>
+        {on && (
+          <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12.5px]">
+            <dt className="text-ink-subtle">{idLabel}</dt>
+            <dd className="break-all font-mono text-[12px] text-ink">{id || <span className="font-sans text-ink-subtle">not set</span>}</dd>
+            <dt className="text-ink-subtle">Listing</dt>
+            <dd className="min-w-0">
+              {link ? (
+                <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-700 hover:underline">
+                  {linkLabel} <IconExternal size={12} />
+                </a>
+              ) : (
+                <span className="text-ink-subtle">no link yet</span>
+              )}
+            </dd>
+          </dl>
+        )}
+      </div>
     </div>
   );
 }

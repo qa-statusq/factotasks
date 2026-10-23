@@ -154,6 +154,8 @@ export interface AppOverview {
   color: string;
   icon_path: string | null;
   icon_url: string | null;
+  /** Hand-arranged position (Apps → Arrange); lists arrive sorted by it. */
+  sort_order?: number;
   created_at: string;
   updated_at: string;
   open_tasks: number;
@@ -213,7 +215,7 @@ export interface TeamMember extends UserBrief {
   in_progress?: number;
   overdue?: number;
   done_week?: number;
-  apps: { id: string; name: string; color: string; app_role: AppRole }[];
+  apps: { id: string; name: string; color: string; icon_url?: string | null; app_role: AppRole }[];
 }
 
 export interface DashboardPack {

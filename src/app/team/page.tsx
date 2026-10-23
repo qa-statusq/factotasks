@@ -11,6 +11,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { PageHeader, LoadError, EmptyState, Spinner } from "@/components/ui/misc";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
+import { AppTile } from "@/components/ui/task-chips";
 import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
@@ -49,8 +50,8 @@ export default function TeamPage() {
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
       <PageHeader
-        title="Team"
-        description={`${active} people across ${new Set(members.filter((m) => m.is_active).map((m) => m.department)).size} teams.`}
+        title="People"
+        description={`${active} people across ${new Set(members.filter((m) => m.is_active).map((m) => m.department)).size} departments.`}
         actions={
           isAdmin ? (
             <Button onClick={() => setInviting(true)}>
@@ -68,7 +69,7 @@ export default function TeamPage() {
           {members.length > 6 && (
             <div className="relative w-full sm:max-w-sm">
               <IconSearch size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search people…" className={cn(controlClass, "h-9 pl-9")} />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search people…" aria-label="Search people" className={cn(controlClass, "h-9 pl-9")} />
             </div>
           )}
           {groups.length === 0 ? (
@@ -107,7 +108,7 @@ export default function TeamPage() {
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
                             {m.apps.map((a) => (
                               <Link key={a.id} href={`/apps/${a.id}`} className="inline-flex items-center gap-1 rounded-md bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-ink-muted ring-1 ring-inset ring-line hover:text-ink">
-                                <span className="h-2 w-2 rounded-[3px]" style={{ backgroundColor: a.color }} /> {a.name}
+                                <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-4 w-4 rounded-[4px] text-[7px]" /> {a.name}
                               </Link>
                             ))}
                           </div>
@@ -181,7 +182,7 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
       } catch {
         /* clipboard may be unavailable */
       }
-      await confirm({ title: `${first} added`, message: `Temporary password: ${password}\n\nIt has been copied to your clipboard — share it with them; they'll set their own on first sign-in.`, confirmLabel: "Done" });
+      await confirm({ title: `${first} added`, message: `Temporary password: ${password}\n\nIt has been copied to your clipboard — share it with them; they'll set their own on first sign-in.`, confirmLabel: "Done", cancelLabel: null });
       onClose();
     } else setError(data?.error || "Couldn't add the teammate.");
   }
@@ -224,7 +225,7 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Input type={show ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" className="pr-10" />
-              <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-subtle hover:text-ink" aria-label={show ? "Hide" : "Show"} tabIndex={-1}>
+              <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-subtle hover:text-ink" aria-label={show ? "Hide password" : "Show password"}>
                 {show ? <IconEyeOff size={18} /> : <IconEye size={18} />}
               </button>
             </div>
@@ -234,7 +235,7 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
           </div>
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Team">
+          <Field label="Department">
             <Dropdown value={department} onChange={setDepartment} options={DEPT_OPTIONS} />
           </Field>
           <Field label="Role">
@@ -333,11 +334,11 @@ function MemberSheet({ member: m, meId, onClose }: { member: TeamMember; meId?: 
           <Field label="Last name">
             <Input value={last} onChange={(e) => setLast(e.target.value)} maxLength={NAME_MAX} />
           </Field>
-          <Field label="Team">
+          <Field label="Department">
             <Dropdown value={department} onChange={setDepartment} options={DEPT_OPTIONS} />
           </Field>
           <Field label="Role" hint={isMe ? "You can't change your own role." : undefined}>
-            <Dropdown value={role} onChange={(v) => setRole(v as "admin" | "member")} options={ROLE_OPTIONS} className={isMe ? "pointer-events-none opacity-60" : undefined} />
+            <Dropdown value={role} onChange={(v) => setRole(v as "admin" | "member")} options={ROLE_OPTIONS} disabled={isMe} />
           </Field>
         </div>
         <Field label="Designation">

@@ -31,6 +31,7 @@ export function PeoplePicker({
   max = 10,
   className,
   single,
+  id,
 }: {
   users: UserBrief[];
   value: string[];
@@ -40,12 +41,15 @@ export function PeoplePicker({
   className?: string;
   /** Pick exactly one person (closes on select). */
   single?: boolean;
+  /** Set by `Field`, so its label names this control. */
+  id?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const [pos, setPos] = useState<MenuPos | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -90,7 +94,7 @@ export function PeoplePicker({
   useEffect(() => {
     if (!open) return;
     const place = () => {
-      const b = btnRef.current?.getBoundingClientRect();
+      const b = (boxRef.current ?? btnRef.current)?.getBoundingClientRect();
       if (!b) return;
       const menuH = 320;
       const spaceBelow = window.innerHeight - b.bottom;
@@ -102,7 +106,7 @@ export function PeoplePicker({
     const t = window.setTimeout(() => searchRef.current?.focus(), 0);
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node;
-      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      if (boxRef.current?.contains(t) || btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
       setOpen(false);
     };
     const onScroll = (e: Event) => {
@@ -152,42 +156,46 @@ export function PeoplePicker({
 
   return (
     <div className={cn("relative", className)}>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className={cn(controlClass, "flex min-h-10 items-center justify-between gap-2 py-1.5 text-left")}
-      >
+      {/* The chips' remove controls are real buttons, so they sit BESIDE the
+          trigger (never inside it): the box looks like one control, the
+          trigger is the empty part of it. */}
+      <div ref={boxRef} className={cn(controlClass, "flex min-h-10 items-center gap-2 py-1.5 focus-within:border-ink focus-within:ring-[3px] focus-within:ring-ink/10", open && "border-ink")}>
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-          {selected.length === 0 ? (
-            <span className="text-ink-subtle">{placeholder}</span>
-          ) : (
+          {!single &&
             selected.map((u) => (
-              <span key={u.id} className="inline-flex items-center gap-1.5 rounded-full bg-canvas py-0.5 pl-0.5 pr-2 text-xs font-medium text-ink ring-1 ring-inset ring-line">
+              <span key={u.id} className="inline-flex items-center gap-1.5 rounded-full bg-canvas py-0.5 pl-0.5 pr-1 text-xs font-medium text-ink ring-1 ring-inset ring-line">
                 <Avatar user={u} size="xs" />
                 <span className="max-w-[140px] truncate">{u.name}</span>
-                {!single && (
-                  <span
-                    role="button"
-                    tabIndex={-1}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggle(u.id);
-                    }}
-                    className="-mr-1 rounded-full p-0.5 text-ink-subtle hover:text-ink"
-                    aria-label={`Remove ${u.name}`}
-                  >
-                    <IconX size={12} />
-                  </span>
-                )}
+                <button type="button" onClick={() => toggle(u.id)} className="rounded-full p-0.5 text-ink-subtle hover:bg-surface hover:text-ink" aria-label={`Remove ${u.name}`}>
+                  <IconX size={12} />
+                </button>
               </span>
-            ))
-          )}
+            ))}
+          <button
+            ref={btnRef}
+            id={id}
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            className="flex min-h-7 min-w-[6rem] flex-1 items-center justify-between gap-2 text-left focus-visible:outline-hidden"
+          >
+            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              {single && selected[0] ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-canvas py-0.5 pl-0.5 pr-2 text-xs font-medium text-ink ring-1 ring-inset ring-line">
+                  <Avatar user={selected[0]} size="xs" />
+                  <span className="max-w-[160px] truncate">{selected[0].name}</span>
+                </span>
+              ) : selected.length === 0 ? (
+                <span className="text-ink-subtle">{placeholder}</span>
+              ) : (
+                <span className="text-[12px] text-ink-subtle">{value.length < max ? "Add…" : "Full"}</span>
+              )}
+            </span>
+            <IconChevronDown size={16} className={cn("shrink-0 text-ink-subtle transition-transform", open && "rotate-180")} />
+          </button>
         </span>
-        <IconChevronDown size={16} className={cn("shrink-0 text-ink-subtle transition-transform", open && "rotate-180")} />
-      </button>
+      </div>
 
       {open &&
         pos &&

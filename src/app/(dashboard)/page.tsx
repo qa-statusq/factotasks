@@ -81,7 +81,7 @@ export default function DashboardPage() {
                 onChange={setTab}
                 options={[
                   { value: "mine", label: `My tasks · ${data.counts.my_open}` },
-                  { value: "team", label: `Due this week · ${data.due_soon.length}` },
+                  { value: "team", label: `Team due this week · ${data.due_soon.length}` },
                 ]}
                 aria-label="Dashboard list"
               />
@@ -96,7 +96,7 @@ export default function DashboardPage() {
                 <EmptyState icon={<IconCheckCircle size={20} />} title="Nothing assigned to you" description="Create a task or pick one from the team's open list." />
               )
             ) : (
-              <TaskList tasks={data.due_soon} empty="Nothing due in the next 7 days" />
+              <TaskList tasks={data.due_soon} empty="Nothing on the team is due this week" />
             )}
           </section>
 

@@ -7,16 +7,14 @@ import { Button } from "@/components/ui/button";
 import { PageHeader, LoadError, Spinner, EmptyState } from "@/components/ui/misc";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { TaskList, RequestSummary } from "@/components/task-list";
-import { AppTile, PlatformBadge } from "@/components/ui/task-chips";
-import { toneClass } from "@/components/status-menu";
+import { AppTile, PlatformBadge, StatusBadge } from "@/components/ui/task-chips";
 import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
 import { istTime } from "@/lib/time";
-import { cn } from "@/lib/cn";
-import { STATUS_META, taskRef } from "@/lib/domain";
+import { taskRef } from "@/lib/domain";
 import { prettyDate } from "@/components/release-ui";
 import { IconUserCheck, IconRocket, IconCheck } from "@/components/ui/icons";
 import type { Release, TaskCard } from "@/lib/types";
@@ -25,7 +23,7 @@ export default function ApprovalsPage() {
   const router = useRouter();
   const { me, isAdmin, loading: sessionLoading, error: sessionError, refresh: sessionRefresh } = useSession();
   const { data, loading, error, refresh } = useCachedFetch<{ tasks: TaskCard[] }>(isAdmin ? "/api/tasks?scope=approvals&sort=updated" : null);
-  const { data: rd, loading: rLoading, error: rError } = useCachedFetch<{ releases: Release[] }>(isAdmin ? "/api/releases?scope=requests" : null);
+  const { data: rd, loading: rLoading, error: rError, refresh: rRefresh } = useCachedFetch<{ releases: Release[] }>(isAdmin ? "/api/releases?scope=requests" : null);
   const { toast } = useToast();
   const { prompt, confirm } = useDialog();
   const [busy, setBusy] = useState<string | null>(null);
@@ -49,7 +47,7 @@ export default function ApprovalsPage() {
     if (busy) return;
     let note: string | null = null;
     if (action === "reject") {
-      note = await prompt({ title: `Send ${taskRef(t.number)} back`, message: "Tell them what to fix (optional).", placeholder: "e.g. Also test on Android 10", confirmLabel: "Reject" });
+      note = await prompt({ title: `Send ${taskRef(t.number)} back`, message: "Tell them what to fix (optional).", placeholder: "e.g. Also test on Android 10", confirmLabel: "Send back" });
       if (note === null) return;
     }
     setBusy(t.id);
@@ -128,7 +126,7 @@ export default function ApprovalsPage() {
       {loading || rLoading || sessionLoading ? (
         <ListSkeleton rows={5} />
       ) : (error && !data) || (rError && !rd) ? (
-        <LoadError title="Couldn't load the queue" onRetry={refresh} />
+        <LoadError title="Couldn't load the queue" onRetry={() => { refresh(); rRefresh(); }} />
       ) : nothing ? (
         <EmptyState icon={<IconUserCheck size={20} />} title="Nothing waiting for you" description="When a teammate marks a task done or a version released, it shows up here for a quick review." />
       ) : (
@@ -169,7 +167,7 @@ export default function ApprovalsPage() {
                                       <span className="break-words text-ink">{t.title}</span>
                                       {t.description?.trim() && <span className="mt-0.5 line-clamp-2 block whitespace-pre-wrap text-[11.5px] leading-snug text-ink-muted">{t.description.trim()}</span>}
                                     </span>
-                                    <span className={cn("ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold ring-1 ring-inset", toneClass(t.status))}>{STATUS_META[t.status].label}</span>
+                                    <StatusBadge status={t.status} className="ml-auto shrink-0" />
                                   </li>
                                 ))}
                               </ul>
@@ -202,16 +200,28 @@ export default function ApprovalsPage() {
               )}
               <TaskList
                 tasks={tasks}
-                renderBelow={(t) => <RequestSummary task={t} className="mt-1.5 pl-[22px]" />}
+                renderBelow={(t) => (
+                  <div className="mt-1.5 flex flex-col gap-2 pl-[22px]">
+                    <RequestSummary task={t} />
+                    <div className="flex items-center gap-2 sm:hidden">
+                      <Button size="sm" variant="secondary" onClick={() => decide(t, "reject")} disabled={busy === t.id}>
+                        Send back
+                      </Button>
+                      <Button size="sm" onClick={() => decide(t, "approve")} disabled={busy === t.id}>
+                        {busy === t.id ? <Spinner /> : "Approve"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 renderTrailing={(t) => (
-                  <>
+                  <span className="hidden items-center gap-2 sm:flex">
                     <Button size="sm" variant="secondary" onClick={() => decide(t, "reject")} disabled={busy === t.id}>
                       Send back
                     </Button>
                     <Button size="sm" onClick={() => decide(t, "approve")} disabled={busy === t.id}>
                       {busy === t.id ? <Spinner /> : "Approve"}
                     </Button>
-                  </>
+                  </span>
                 )}
               />
             </Card>

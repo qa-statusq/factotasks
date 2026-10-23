@@ -16,7 +16,7 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const STATUS_META: Record<TaskStatus, { label: string; tone: Tone; dot: string; hint: string }> = {
   todo: { label: "To do", tone: "neutral", dot: "bg-slate-400", hint: "Not started yet" },
   in_progress: { label: "In progress", tone: "info", dot: "bg-blue-500", hint: "Being worked on right now" },
-  in_review: { label: "In review", tone: "info", dot: "bg-sky-500", hint: "Waiting for code review / QA" },
+  in_review: { label: "In review", tone: "info", dot: "bg-violet-500", hint: "Waiting for code review / QA" },
   on_hold: { label: "On hold", tone: "warning", dot: "bg-amber-500", hint: "Blocked or paused" },
   partial: { label: "Partly released", tone: "info", dot: "bg-teal-500", hint: "Shipped on some apps/platforms, pending on others" },
   done: { label: "Done", tone: "success", dot: "bg-emerald-500", hint: "Completed" },

@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { istToday } from "@/lib/ist";
 import { taskRef } from "@/lib/domain";
 import { AvatarStack } from "@/components/ui/avatar";
-import { PlatformBadge, PriorityBadge, TargetChips, ReleaseProgress, SeriesChip, AppTile } from "@/components/ui/task-chips";
+import { PlatformBadge, PriorityBadge, TargetChips, ReleaseProgress, SeriesChip, AppTile, StatusBadge, GeneralTile } from "@/components/ui/task-chips";
 import { StatusMenu } from "@/components/status-menu";
 import { EmptyState } from "@/components/ui/misc";
 import { useNeedsApproval } from "@/lib/use-policy";
@@ -14,8 +14,6 @@ import { useSession } from "@/components/providers/session-provider";
 import { IconMessage, IconPaperclip, IconTasks, IconArrowRight } from "@/components/ui/icons";
 import { Avatar } from "@/components/ui/avatar";
 import { RelTime } from "@/components/ui/live-time";
-import { STATUS_META } from "@/lib/domain";
-import { toneClass } from "@/components/status-menu";
 import type { TaskCard } from "@/lib/types";
 
 /** "Due today" / "3d late" / "Fri 24 Oct" with a tone that escalates. */
@@ -118,8 +116,8 @@ interface Group {
   tasks: TaskCard[];
 }
 
-/** Group tasks by app, General last; keeps the incoming order inside each group. */
-export function groupByApp(tasks: TaskCard[]): Group[] {
+/** Group tasks by app in the Apps screen's order (`appOrder`), General last; keeps the incoming order inside each group. */
+export function groupByApp(tasks: TaskCard[], appOrder: string[] = []): Group[] {
   const map = new Map<string, Group>();
   for (const t of tasks) {
     const key = t.app?.id ?? "general";
@@ -131,7 +129,11 @@ export function groupByApp(tasks: TaskCard[]): Group[] {
     g.tasks.push(t);
   }
   const groups = [...map.values()];
-  groups.sort((a, b) => (a.key === "general" ? 1 : b.key === "general" ? -1 : a.name.localeCompare(b.name)));
+  const pos = (g: Group) => {
+    const i = appOrder.indexOf(g.key);
+    return i === -1 ? appOrder.length : i;
+  };
+  groups.sort((a, b) => (a.key === "general" ? 1 : b.key === "general" ? -1 : pos(a) - pos(b) || a.name.localeCompare(b.name)));
   return groups;
 }
 
@@ -142,6 +144,7 @@ export function TaskList({
   showApp = true,
   showDescription = false,
   groupBy,
+  appOrder,
   renderTrailing,
   renderBelow,
   className,
@@ -153,6 +156,8 @@ export function TaskList({
   /** Show each task's description under its title (release views). */
   showDescription?: boolean;
   groupBy?: "app";
+  /** App ids in the Apps screen's order; groups follow it. */
+  appOrder?: string[];
   renderTrailing?: (t: TaskCard) => React.ReactNode;
   renderBelow?: (t: TaskCard) => React.ReactNode;
   className?: string;
@@ -161,7 +166,7 @@ export function TaskList({
   const { me, isAdmin } = useSession();
   // The API lets an admin, the creator or an assignee change a status; the pill says so up front.
   const mayChange = (t: TaskCard) => isAdmin || t.created_by?.id === me?.id || t.assignees.some((a) => a.id === me?.id);
-  const groups = useMemo(() => (groupBy === "app" ? groupByApp(tasks) : null), [tasks, groupBy]);
+  const groups = useMemo(() => (groupBy === "app" ? groupByApp(tasks, appOrder) : null), [tasks, groupBy, appOrder]);
   if (!tasks.length) {
     return <EmptyState icon={<IconTasks size={20} />} title={empty || "No tasks here"} description={emptyDescription} />;
   }
@@ -171,7 +176,7 @@ export function TaskList({
         {groups.map((g) => (
           <section key={g.key} className="overflow-hidden rounded-xl border border-line bg-surface">
             <header className="flex items-center gap-2 border-b border-line/80 bg-canvas/60 px-3 py-2 sm:px-4">
-              <AppTile name={g.name} color={g.color} iconUrl={g.iconUrl} className="h-6 w-6 rounded-md text-[10px]" />
+              {g.key === "general" ? <GeneralTile className="h-6 w-6 rounded-md text-[10px]" /> : <AppTile name={g.name} color={g.color} iconUrl={g.iconUrl} className="h-6 w-6 rounded-md text-[10px]" />}
               <span className="text-[13px] font-semibold text-ink">{g.name}</span>
               <span className="text-xs text-ink-subtle">{g.tasks.length}</span>
             </header>
@@ -201,7 +206,7 @@ export function TaskList({
  */
 export function RequestSummary({ task, className }: { task: TaskCard; className?: string }) {
   if (!task.requested_status) return null;
-  const chip = (s: TaskCard["status"]) => <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[10.5px] font-semibold ring-1 ring-inset", toneClass(s))}><span className={cn("h-1.5 w-1.5 rounded-full", STATUS_META[s].dot)} />{STATUS_META[s].label}</span>;
+  const chip = (s: TaskCard["status"]) => <StatusBadge status={s} />;
   return (
     <div className={cn("flex flex-col gap-1 text-[12px] text-ink-muted", className)}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

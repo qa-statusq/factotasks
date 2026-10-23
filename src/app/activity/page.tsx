@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar } from "@/components/ui/avatar";
 import { Dropdown } from "@/components/ui/dropdown";
 import { PageHeader, EmptyState, LoadError, Spinner } from "@/components/ui/misc";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/components/providers/session-provider";
+import { useToast } from "@/components/ui/toast";
 import { useCachedFetch } from "@/lib/client-cache";
 import { timeoutSignal } from "@/lib/compat";
 import { istTime } from "@/lib/time";
@@ -60,6 +62,7 @@ const AREAS = [
 export default function ActivityPage() {
   const router = useRouter();
   const { me, isAdmin, loading: sessionLoading, error: sessionError, refresh: sessionRefresh } = useSession();
+  const { toast } = useToast();
   const [area, setArea] = useState("");
   const [userId, setUserId] = useState("");
   const url = `/api/activity?${new URLSearchParams({ ...(area ? { action: area } : {}), ...(userId ? { userId } : {}) }).toString()}`.replace(/\?$/, "");
@@ -97,7 +100,7 @@ export default function ActivityPage() {
       const page = (await r.json()) as Page;
       setMore((cur) => ({ url, rows: [...(cur?.url === url ? cur.rows : []), ...page.activity], cursor: page.nextCursor, hasMore: page.hasMore }));
     } catch {
-      /* retry via the button */
+      toast("Couldn't load more activity — try again", "error");
     } finally {
       setLoadingMore(false);
     }
@@ -108,27 +111,21 @@ export default function ActivityPage() {
     <div className="flex flex-col gap-5 animate-fade-in">
       <PageHeader title="Activity" description="Every action by every teammate — the audit trail. Kept for 14 days." />
       <div className="flex flex-wrap gap-2">
-        <div className="w-44">
-          <Dropdown value={area} onChange={setArea} options={AREAS} className="[&>button]:h-9" />
-        </div>
-        <div className="w-52">
-          <Dropdown value={userId} onChange={setUserId} options={[{ value: "", label: "Everyone" }, ...users.map((u) => ({ value: u.id, label: u.name }))]} className="[&>button]:h-9" />
-        </div>
+        <Dropdown fit value={area} onChange={setArea} options={AREAS} className="min-w-[10rem] [&>button]:h-9 [&>button]:w-full" />
+        <Dropdown fit value={userId} onChange={setUserId} options={[{ value: "", label: "Everyone" }, ...users.map((u) => ({ value: u.id, label: u.name }))]} className="min-w-[12rem] [&>button]:h-9 [&>button]:w-full" />
       </div>
       {loading || sessionLoading ? (
         <ListSkeleton rows={8} />
       ) : error && !data ? (
         <LoadError title="Couldn't load activity" onRetry={refresh} />
       ) : rows.length === 0 ? (
-        <EmptyState icon={<IconActivity size={20} />} title="No activity yet" />
+        <EmptyState icon={<IconActivity size={20} />} title={area || userId ? "Nothing matches these filters" : "No activity yet"} description={area || userId ? "Widen the area or pick everyone." : undefined} />
       ) : (
         <Card className="overflow-hidden">
           <ul className="divide-y divide-line/80">
             {rows.map((e) => (
               <li key={e.id} className="cv-card flex items-start gap-3 px-4 py-3 sm:px-5">
-                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold uppercase text-white" style={{ backgroundColor: e.user_color || "#64748b" }}>
-                  {Array.from(e.user_name || e.user_email || "?")[0]}
-                </span>
+                <Avatar user={{ first_name: (e.user_name || "").split(" ")[0] || null, last_name: (e.user_name || "").split(" ").slice(1).join(" ") || null, email: e.user_email, name: e.user_name || e.user_email || "system", color: e.user_color }} size="md" className="mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-ink">
                     {e.entity_type === "task" && e.entity_id ? (

@@ -3,18 +3,18 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Button, buttonClass } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/field";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DateRangeInput, type DateRange } from "@/components/ui/date-range";
-import { EmptyState, LoadError } from "@/components/ui/misc";
+import { EmptyState, LoadError, PageHeader } from "@/components/ui/misc";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch } from "@/lib/client-cache";
 import { istTime } from "@/lib/time";
 import { RelTime } from "@/components/ui/live-time";
-import { NewMeetingSheet, ManageSeriesSheet, SeriesBadge, ScopeLabel } from "@/components/meeting-series";
-import { IconPresentation, IconPlus, IconMaximize, IconSettings, IconSearch, IconX, IconCalendar } from "@/components/ui/icons";
+import { cn } from "@/lib/cn";
+import { NewMeetingSheet, ManageSeriesSheet, ScopeLabel, SeriesBadge, MeetingStatusBadge } from "@/components/meeting-series";
+import { IconPresentation, IconPlus, IconMaximize, IconSettings, IconSearch, IconX, IconCalendar, IconMessage } from "@/components/ui/icons";
 import type { AppOverview, Meeting, MeetingSeries } from "@/lib/types";
 
 const fmt = (iso: string) => istTime(iso).replace(/:\d\d (am|pm)/, " $1");
@@ -50,40 +50,32 @@ export default function MeetingsPage() {
 
   return (
     <div className="flex flex-col gap-4 animate-fade-in">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-[20px] font-bold tracking-[-0.02em] text-ink sm:text-[24px]">Meetings</h1>
-        {isAdmin && (
-          <div className="ml-auto flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setManaging(true)} title="Manage series">
-              <IconSettings size={14} /> Series
-            </Button>
-            <Button onClick={() => setCreating(true)}>
-              <IconPlus size={16} /> New meeting
-            </Button>
-          </div>
-        )}
-      </div>
-      <p className="-mt-2 text-[13px] text-ink-muted">
-        {active ? (
-          <>
-            {active.name}
-            {active.last_held_at ? ` · last held ${fmt(active.last_held_at)}` : " · no meetings yet"}. Each meeting covers its scope since the previous one in this series; pending work carries on to the next.
-          </>
-        ) : (
-          "Every meeting gathers what was done and what's still pending since the previous one of its series — grouped by app, ready to present."
-        )}
-      </p>
+      <PageHeader
+        title="Meetings"
+        description={active ? `${active.name}${active.last_held_at ? ` · last held ${fmt(active.last_held_at)}` : " · no meetings yet"}. Each meeting covers its scope since the previous one in this series; pending work carries on to the next.` : "Every meeting gathers what was done and what's still pending since the previous one of its series — grouped by app, ready to present."}
+        actions={
+          isAdmin ? (
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => setManaging(true)} title="Manage series">
+                <IconSettings size={15} /> Series
+              </Button>
+              <Button onClick={() => setCreating(true)}>
+                <IconPlus size={16} /> New meeting
+              </Button>
+            </div>
+          ) : undefined
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         {series.length > 0 && (
-          <div className="w-full sm:w-64">
-            <Dropdown
-              value={filter}
-              onChange={setFilter}
-              options={[{ value: "all", label: `All series · ${meetings.length}` }, ...series.map((s) => ({ value: s.id, label: `${s.name} · ${s.meeting_count ?? 0}` }))]}
-              className="[&>button]:h-9"
-            />
-          </div>
+          <Dropdown
+            fit
+            value={filter}
+            onChange={setFilter}
+            options={[{ value: "all", label: `All series · ${meetings.length}` }, ...series.map((s) => ({ value: s.id, label: `${s.name} · ${s.meeting_count ?? 0}` }))]}
+            className="[&>button]:h-9"
+          />
         )}
         <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
           <IconSearch size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
@@ -109,37 +101,12 @@ export default function MeetingsPage() {
       ) : shown.length === 0 && narrowed ? (
         <EmptyState icon={<IconSearch size={20} />} title="No meetings match" description="Try another word or widen the dates." />
       ) : shown.length === 0 ? (
-        <EmptyState icon={<IconPresentation size={20} />} title={active ? `No ${active.name} meetings yet` : "No meetings yet"} description="Create a meeting: pick its series and scope, the date and time you're meeting, and the agenda is built for you." action={isAdmin ? <Button onClick={() => setCreating(true)}>New meeting</Button> : undefined} />
+        <EmptyState icon={<IconPresentation size={20} />} title={active ? `No ${active.name} meetings yet` : "No meetings yet"} description="Create a meeting: pick its series and the date and time you're meeting — the agenda is built from the series' scope for you." action={isAdmin ? <Button onClick={() => setCreating(true)}>New meeting</Button> : undefined} />
       ) : (
-        <ul className="divide-y divide-line/70 overflow-hidden rounded-xl border border-line bg-surface">
+        <ul className="grid gap-3 md:grid-cols-2">
           {shown.map((m) => (
-            <li key={m.id} className="flex items-center gap-3 px-3 py-3.5 sm:px-4">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ring-1 ring-inset ring-black/10" style={{ backgroundColor: m.series?.color || "#64748b" }} title={m.series?.name}>
-                <IconPresentation size={18} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <Link href={`/meetings/${m.id}`} className="break-words text-[14px] font-semibold text-ink hover:underline">
-                    {m.title}
-                  </Link>
-                  <Badge tone={m.status === "open" ? "success" : "neutral"}>{m.status === "open" ? "Open" : "Closed"}</Badge>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-muted">
-                  <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                    <IconCalendar size={12} className="text-ink-subtle" />
-                    {fmt(m.held_at)} <span className="text-ink-subtle">· <RelTime iso={m.held_at} /></span>
-                  </span>
-                  {filter === "all" && <SeriesBadge series={m.series} />}
-                  <ScopeLabel scope={m} apps={ad?.apps} />
-                  {typeof m.note_count === "number" && m.note_count > 0 && <span className="text-ink-subtle">{m.note_count} note{m.note_count === 1 ? "" : "s"}</span>}
-                </div>
-              </div>
-              <Link href={`/meetings/${m.id}/present`} className={buttonClass("secondary", "sm")} title="Present full-screen">
-                <IconMaximize size={14} /> <span className="hidden sm:inline">Present</span>
-              </Link>
-              <Link href={`/meetings/${m.id}`} className={buttonClass("primary", "sm")}>
-                Open
-              </Link>
+            <li key={m.id} className="min-w-0">
+              <MeetingCard m={m} apps={ad?.apps} />
             </li>
           ))}
         </ul>
@@ -148,5 +115,65 @@ export default function MeetingsPage() {
       {creating && <NewMeetingSheet onClose={() => setCreating(false)} defaultSeriesId={filter === "all" ? null : filter} />}
       {managing && <ManageSeriesSheet onClose={() => setManaging(false)} />}
     </div>
+  );
+}
+
+/** One meeting as a card: series colour on top, title and state, when it was held, what it covers, and the two ways in. */
+function MeetingCard({ m, apps }: { m: Meeting; apps?: AppOverview[] }) {
+  const color = m.series?.color || "#64748b";
+  return (
+    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-line bg-surface transition-shadow hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+      <div className="h-1 w-full" style={{ backgroundColor: color }} aria-hidden />
+      <div className="flex items-start gap-3 px-4 pt-3.5">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ring-black/5" style={{ backgroundColor: `${color}1f`, color }} title={m.series?.name}>
+          <IconPresentation size={20} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <Link href={`/meetings/${m.id}`} className="block break-words text-[14.5px] font-semibold leading-snug text-ink hover:text-brand-700">
+            {m.title}
+          </Link>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-muted">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+              <IconCalendar size={12} className="text-ink-subtle" />
+              {fmt(m.held_at)}
+            </span>
+            <span className="text-ink-subtle">
+              · <RelTime iso={m.held_at} />
+            </span>
+          </div>
+        </div>
+        <MeetingStatusBadge status={m.status} className="shrink-0" />
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 px-4 pb-3.5 pt-3 text-[12px]">
+        {m.series && (
+          <>
+            <dt className="text-ink-subtle">Series</dt>
+            <dd className="min-w-0">
+              <SeriesBadge series={m.series} />
+            </dd>
+          </>
+        )}
+        <dt className="text-ink-subtle">Covers</dt>
+        <dd className="min-w-0 text-ink-muted">
+          <ScopeLabel scope={m} apps={apps} />
+        </dd>
+        {typeof m.note_count === "number" && m.note_count > 0 && (
+          <>
+            <dt className="text-ink-subtle">Minutes</dt>
+            <dd className="inline-flex items-center gap-1 text-ink-muted">
+              <IconMessage size={12} className="text-ink-subtle" /> {m.note_count} note{m.note_count === 1 ? "" : "s"}
+            </dd>
+          </>
+        )}
+      </dl>
+      <footer className="mt-auto flex items-center gap-2 border-t border-line/70 bg-canvas/40 px-4 py-2.5">
+        <Link href={`/meetings/${m.id}/present`} className={buttonClass("secondary", "sm")} title="Present full-screen">
+          <IconMaximize size={14} /> Present
+        </Link>
+        <Link href={`/meetings/${m.id}`} className={cn(buttonClass("primary", "sm"), "ml-auto")}>
+          Open
+        </Link>
+      </footer>
+    </article>
   );
 }

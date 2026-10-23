@@ -41,6 +41,12 @@ const nextConfig = {
         source: "/api/:path*",
         headers: [{ key: "Cache-Control", value: "no-store, no-cache, must-revalidate, max-age=0" }],
       },
+      // Store-icon relay: public artwork, long-lived — the CDN serves repeats
+      // (listed after /api/:path* so this value wins for that path).
+      {
+        source: "/api/icon",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=2592000" }],
+      },
       // Brand assets are public, unhashed and effectively immutable.
       {
         source: "/brand/:path*",

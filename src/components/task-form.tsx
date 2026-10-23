@@ -9,14 +9,14 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { Sheet } from "@/components/ui/sheet";
 import { PeoplePicker } from "@/components/ui/people-picker";
 import { DateInput } from "@/components/ui/date-input";
-import { LabelChip, AppTile, PlatformGlyph } from "@/components/ui/task-chips";
-import { Spinner } from "@/components/ui/misc";
+import { LabelChip, AppTile } from "@/components/ui/task-chips";
+import { Spinner, LoadError } from "@/components/ui/misc";
 import { useSession } from "@/components/providers/session-provider";
 import { useToast } from "@/components/ui/toast";
 import { useCachedFetch } from "@/lib/client-cache";
 import { cn } from "@/lib/cn";
 import { LIMITS, PRIORITIES, PRIORITY_META, TASK_TYPES, TYPE_META, type Priority, type TaskType } from "@/lib/domain";
-import { IconAndroid, IconApple, IconCheck, IconX, IconSearch } from "@/components/ui/icons";
+import { IconAndroid, IconApple, IconCheck, IconSearch } from "@/components/ui/icons";
 import { Segmented } from "@/components/ui/segmented";
 import type { AppOverview, UserBrief } from "@/lib/types";
 
@@ -88,29 +88,22 @@ export function TargetPicker({ apps, value, onChange }: { apps: AppOverview[]; v
         <p className="text-[12.5px] text-ink-subtle">Not tied to any app: process work, documentation, store accounts, anything team-wide. It reaches a meeting only when attached to a series below.</p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface">
-          {/* Selected targets */}
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-line/70 bg-canvas/60 px-3 py-2">
+          {/* Summary line: fixed height, so ticking an app never pushes the list down */}
+          <div className="flex h-9 items-center gap-2 border-b border-line/70 bg-canvas/60 px-3 text-[12px]">
             {value.length === 0 ? (
-              <span className="text-[12px] text-ink-subtle">Nothing picked yet. Tick the apps and platforms below.</span>
+              <span className="text-ink-subtle">Nothing picked yet — tick the apps and platforms below.</span>
             ) : (
               <>
-                <span className="mr-1 text-[11.5px] font-medium text-ink-muted">
+                <span className="font-medium text-ink">
                   {value.length} target{value.length === 1 ? "" : "s"} · {appCount} app{appCount === 1 ? "" : "s"}
                 </span>
-                {value.map((t) => {
-                  const a = byId.get(t.app_id);
-                  return (
-                    <span key={`${t.app_id}:${t.platform}`} className="inline-flex h-6 items-center gap-1 rounded-md bg-surface pl-1 pr-1 text-[11.5px] font-medium text-ink ring-1 ring-inset ring-line">
-                      {a && <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-4 w-4 rounded-[4px] text-[7px]" />}
-                      {a?.name ?? "App"}
-                      <PlatformGlyph platform={t.platform} size={12} />
-                      <button type="button" onClick={() => toggle(t.app_id, t.platform)} className="rounded p-0.5 text-ink-subtle hover:text-red-600" aria-label={`Remove ${a?.name ?? "app"} ${t.platform}`}>
-                        <IconX size={11} />
-                      </button>
-                    </span>
-                  );
-                })}
-                <button type="button" onClick={() => onChange([])} className="ml-auto text-[11.5px] font-medium text-ink-subtle hover:text-ink">
+                <span className="inline-flex min-w-0 flex-1 items-center gap-1 overflow-hidden" title={[...new Set(value.map((t) => byId.get(t.app_id)?.name ?? ""))].filter(Boolean).join(", ")}>
+                  {[...new Map(value.map((t) => [t.app_id, byId.get(t.app_id)])).values()].filter((a): a is AppOverview => !!a).slice(0, 8).map((a) => (
+                    <AppTile key={a.id} name={a.name} color={a.color} iconUrl={a.icon_url} className="h-4 w-4 rounded-[4px] text-[7px]" />
+                  ))}
+                  {appCount > 8 && <span className="text-ink-subtle">+{appCount - 8}</span>}
+                </span>
+                <button type="button" onClick={() => onChange([])} className="ml-auto shrink-0 text-[11.5px] font-medium text-ink-subtle hover:text-ink">
                   Clear
                 </button>
               </>
@@ -182,8 +175,8 @@ export function TaskFormSheet({
 }) {
   const { me } = useSession();
   const { toast } = useToast();
-  const { data: usersData } = useCachedFetch<{ users: UserBrief[] }>("/api/users");
-  const { data: appsData } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
+  const { data: usersData, error: usersErr, refresh: usersRetry } = useCachedFetch<{ users: UserBrief[] }>("/api/users");
+  const { data: appsData, error: appsErr, refresh: appsRetry } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
   const allUsers = useMemo(() => usersData?.users ?? [], [usersData]);
   const apps = useMemo(() => appsData?.apps ?? [], [appsData]);
 
@@ -218,7 +211,7 @@ export function TaskFormSheet({
   const [estimate, setEstimate] = useState(initial?.estimate_hours != null ? String(initial.estimate_hours) : "");
   const [seriesId, setSeriesId] = useState<string>(initial?.series_id ?? "");
   const { data: seriesData } = useCachedFetch<{ series: { id: string; name: string; color: string }[] }>("/api/meeting-series");
-  const seriesOptions = useMemo(() => [{ value: "", label: "Not on a meeting" }, ...(seriesData?.series ?? []).map((s) => ({ value: s.id, label: s.name }))], [seriesData]);
+  const seriesOptions = useMemo(() => [{ value: "", label: "Not attached to a series" }, ...(seriesData?.series ?? []).map((s) => ({ value: s.id, label: s.name }))], [seriesData]);
   const [busy, setBusy] = useState<false | "primary" | "secondary">(false);
   // Validation and save problems surface as error toasts, not inline text.
   const setError = (m: string) => {
@@ -336,7 +329,7 @@ export function TaskFormSheet({
         </Field>
 
         <Field label="Where it ships">
-          {appsData ? <TargetPicker apps={apps} value={targets} onChange={changeTargets} /> : <div className={cn(controlClass, "flex h-10 items-center text-ink-subtle")}>Loading apps…</div>}
+          {appsData ? <TargetPicker apps={apps} value={targets} onChange={changeTargets} /> : appsErr ? <LoadError title="Couldn't load the apps" onRetry={appsRetry} /> : <div className={cn(controlClass, "flex h-10 items-center gap-2 text-ink-subtle")}><Spinner className="h-3.5 w-3.5" /> Loading apps…</div>}
         </Field>
 
         <Field label="Meeting" hint={targets.length ? "Optional: app tasks already reach the meetings that cover their app." : "A general task only reaches a meeting when attached here. It then shows on that series' meetings until it's done."}>
@@ -353,8 +346,8 @@ export function TaskFormSheet({
         </div>
 
         <Field label="Assignees">
-          <PeoplePicker users={users} value={assignees} onChange={setAssignees} max={LIMITS.assigneesPerTask} placeholder={targets.length && !users.length ? "No one is on this app yet" : "Assign teammates…"} />
-          {targets.length > 0 && <p className="text-[11.5px] text-ink-subtle">Members of {targetAppNames.join(" / ") || "the chosen app"} only. An admin adds people from the app&rsquo;s People tab.</p>}
+          {!usersData && usersErr ? <LoadError title="Couldn't load teammates" onRetry={usersRetry} /> : <PeoplePicker users={users} value={assignees} onChange={setAssignees} max={LIMITS.assigneesPerTask} placeholder={!usersData ? "Loading teammates…" : targets.length && !users.length ? "No one is on this app yet" : "Assign teammates…"} />}
+          {targets.length > 0 && <p className="text-[11.5px] text-ink-subtle">Members of {targetAppNames.join(" / ") || "the chosen app"} only. An admin adds people from the app&rsquo;s Members tab.</p>}
           {me && !assignees.includes(me.id) && users.some((u) => u.id === me.id) && (
             <button type="button" onClick={() => setAssignees((a) => [...a, me.id])} className="self-start text-xs font-medium text-brand-700 hover:text-brand-800">
               + Assign to me

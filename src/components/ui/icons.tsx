@@ -445,6 +445,14 @@ export const IconXCircle = (p: IconProps) => (
     <path d="m9 9 6 6M15 9l-6 6" />
   </Svg>
 );
+/** Six-dot grip: the handle of anything that can be dragged into order. */
+export const IconGrip = (p: IconProps) => (
+  <Svg {...p} stroke="none" fill="currentColor">
+    <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" />
+    <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
+    <circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
+  </Svg>
+);
 export const IconChevronUp = (p: IconProps) => (
   <Svg {...p}>
     <path d="m6 15 6-6 6 6" />

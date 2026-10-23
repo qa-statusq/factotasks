@@ -186,12 +186,16 @@ assert((await one("select task_visible($1, $2) as v", [t1.id, dev.id])).v === fa
 await db.query("insert into app_members (app_id, user_id, app_role) values ($1, $2, 'developer')", [app.id, dev.id]);
 const dashOut = await json("select dashboard_pack($1, false)", [outsider.id]);
 assert(dashOut.counts.team_open === visOut.length - (await one("select count(*)::int as n from tasks where id = any($1::uuid[]) and status in ('done','cancelled')", [visOut])).n, "dashboard_pack: member team counts are scoped");
-const anOut = await json("select analytics_pack(6, $1)", [outsider.id]);
+const anOut = await json("select analytics_pack((ist_today() - 180)::date, ist_today(), $1)", [outsider.id]);
 assert(anOut.by_app.length === 0 && anOut.totals.done === 0, "analytics_pack: member sees no app they do not belong to");
 await db.query("delete from users where id = $1", [outsider.id]);
 
-const an = await json("select analytics_pack(6)");
-assert(an.months.length === 6 && an.totals.done === 1 && an.by_app.length === 1 && an.by_person.length === 3 && typeof an.by_app[0].months === "object", "analytics_pack months/by_app/by_person");
+const an = await json("select analytics_pack((ist_today() - 180)::date, ist_today())");
+assert(an.range.bucket === "month" && an.periods.length >= 6 && an.totals.done === 1 && an.by_app.length === 1 && an.by_person.length === 3 && typeof an.by_app[0].periods === "object" && Array.isArray(an.cycle_buckets) && Array.isArray(an.aging) && typeof an.releases.released === "number", "analytics_pack range/periods/by_app/by_person/buckets");
+const anWeek = await json("select analytics_pack((ist_today() - 27)::date, ist_today())");
+assert(anWeek.range.bucket === "week" && anWeek.periods.length >= 4 && anWeek.periods.length <= 5, "analytics_pack: short ranges bucket by week");
+await db.query("select apps_reorder(array[$1]::uuid[])", [apps[0].id]);
+assert((await json("select apps_overview()"))[0].id === apps[0].id, "apps_reorder keeps the app first");
 const rep = await json("select report_pack(current_date - 30, current_date)");
 assert(rep.totals.done === 1 && rep.by_day.length === 31 && rep.people.length === 3, "report_pack totals/by_day/people");
 assert(rep.by_day.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date)), `report_pack by_day dates are plain YYYY-MM-DD (got ${rep.by_day[0]?.date})`);

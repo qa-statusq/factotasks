@@ -3,23 +3,22 @@
 import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, buttonClass } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
 import { Badge } from "@/components/ui/badge";
-import { PageHeader, LoadError, EmptyState } from "@/components/ui/misc";
+import { PageHeader, LoadError, EmptyState, Breadcrumb } from "@/components/ui/misc";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { DateRangeInput } from "@/components/ui/date-range";
-import { ReleaseStatusBadge, PlatformBadge, AppTile } from "@/components/ui/task-chips";
-import { toneClass } from "@/components/status-menu";
+import { ReleaseStatusBadge, PlatformBadge, AppTile, StatusBadge } from "@/components/ui/task-chips";
 import { ReleaseViewSheet, prettyDate } from "@/components/release-ui";
 import { useCachedFetch } from "@/lib/client-cache";
 import { usePref } from "@/lib/use-pref";
 import { istTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
-import { PLATFORM_META, RELEASE_STATUSES, RELEASE_STATUS_META, STATUS_META, taskRef, type ReleaseStatus } from "@/lib/domain";
-import { IconBack, IconRocket, IconCalendar, IconCheck, IconChevronDown, IconEdit, IconUserCheck, IconX, IconSearch } from "@/components/ui/icons";
+import { PLATFORM_META, RELEASE_STATUSES, RELEASE_STATUS_META, taskRef, type ReleaseStatus } from "@/lib/domain";
+import { IconRocket, IconCalendar, IconCheck, IconChevronDown, IconEdit, IconUserCheck, IconX, IconSearch } from "@/components/ui/icons";
 import type { AppOverview, Release } from "@/lib/types";
 import type { ReleaseEvent } from "@/app/api/releases/history/route";
 
@@ -99,19 +98,12 @@ function HistoryScreen() {
 
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
-      <PageHeader
-        title="Release history"
-        description="Every version, with how its date and status moved and what shipped in it."
-        actions={
-          <Link href="/releases" className={buttonClass("secondary", "sm")}>
-            <IconBack size={14} /> Releases
-          </Link>
-        }
-      />
+      <Breadcrumb items={[{ label: "Releases", href: "/releases" }, { label: "History" }]} />
+      <PageHeader title="Release history" description="Every version, with how its date and status moved and what shipped in it." className="-mt-2" />
 
       <div className="flex flex-wrap items-end gap-3">
         <Cell label="App">
-          <Dropdown value={app} onChange={(v) => set({ app: v || undefined })} options={[{ value: "", label: "All apps" }, ...apps.map((a) => ({ value: a.id, label: a.name }))]} className="w-52 [&>button]:h-9" />
+          <Dropdown fit value={app} onChange={(v) => set({ app: v || undefined })} options={[{ value: "", label: "All apps" }, ...apps.map((a) => ({ value: a.id, label: a.name }))]} className="min-w-[11rem] [&>button]:h-9 [&>button]:w-full" />
         </Cell>
         <Cell label="Platform">
           <Dropdown value={platform} onChange={(v) => set({ platform: v || undefined })} options={[{ value: "", label: "Both platforms" }, { value: "android", label: PLATFORM_META.android.label }, { value: "ios", label: PLATFORM_META.ios.label }]} className="w-44 [&>button]:h-9" />
@@ -251,10 +243,10 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
                     <Link href={`/tasks/${t.id}`} className="break-words text-ink hover:underline">
                       {t.title}
                     </Link>
-                    {t.released_at ? <IconCheck size={12} className="ml-1 inline-block align-[-1px] text-emerald-600" /> : null}
+                    {t.released_at ? <span className="ml-1.5 inline-flex items-center gap-0.5 align-[-1px] text-[11px] font-semibold text-emerald-700"><IconCheck size={11} /> shipped</span> : null}
                     {t.description?.trim() && <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap break-words text-[11.5px] leading-snug text-ink-muted">{t.description.trim()}</p>}
                   </div>
-                  <span className={cn("ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold ring-1 ring-inset", toneClass(t.status))}>{STATUS_META[t.status].label}</span>
+                  <StatusBadge status={t.status} className="ml-auto shrink-0" />
                 </li>
               ))}
             </ul>

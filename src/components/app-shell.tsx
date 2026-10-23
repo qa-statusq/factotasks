@@ -56,7 +56,7 @@ function screenContext(pathname: string): { label: string; icon: React.ReactNode
   if (pathname === "/meetings") return { label: "Meetings", icon: <IconPresentation size={15} /> };
   if (pathname === "/approvals") return { label: "Approvals", icon: <IconUserCheck size={15} /> };
   if (pathname === "/analytics") return { label: "Analytics", icon: <IconAnalytics size={15} /> };
-  if (pathname === "/team") return { label: "Team", icon: <IconUsers size={15} /> };
+  if (pathname === "/team") return { label: "People", icon: <IconUsers size={15} /> };
   if (pathname === "/activity") return { label: "Activity", icon: <IconActivity size={15} /> };
   if (pathname === "/settings") return { label: "Settings", icon: <IconSettings size={15} /> };
   if (pathname === "/notifications") return { label: "Inbox", icon: <IconBell size={15} /> };
@@ -659,7 +659,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {item("/releases", "Releases", <IconRocket size={18} />, pathname === "/releases", undefined, ["/api/releases", "/api/apps"])}
           {isAdmin && item("/meetings", "Meetings", <IconPresentation size={18} />, pathname === "/meetings" || pathname.startsWith("/meetings/"), undefined, ["/api/meetings"])}
           {isAdmin && item("/approvals", "Approvals", <IconUserCheck size={18} />, pathname === "/approvals", countBadge(approvals), ["/api/tasks?scope=approvals"])}
-          {item("/analytics", "Analytics", <IconAnalytics size={18} />, pathname === "/analytics", undefined, ["/api/analytics?months=6"])}
+          {item("/analytics", "Analytics", <IconAnalytics size={18} />, pathname === "/analytics", undefined, [])}
         </div>
 
         {groupLabel("Team")}

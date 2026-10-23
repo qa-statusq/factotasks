@@ -156,6 +156,7 @@ create table if not exists apps (
   constraint apps_platform_chk check (has_android or has_ios)
 );
 alter table apps add column if not exists icon_url text; -- (001 → 002 upgrade path)
+alter table apps add column if not exists sort_order int not null default 0; -- (014) hand-arranged order, Apps screen
 create unique index if not exists apps_name_uq on apps (lower(name));
 drop trigger if exists apps_touch on apps;
 create trigger apps_touch before update on apps for each row execute function touch_updated_at();
@@ -653,7 +654,7 @@ as $$
         'release', (select jsonb_build_object('id', r.id, 'version_name', r.version_name, 'platform', r.platform, 'status', r.status, 'planned_date', r.planned_date)
                       from releases r where r.id = tt.release_id),
         'released_at', tt.released_at
-      ) order by a.name, tt.platform)
+      ) order by a.sort_order, a.name, tt.platform)
       from task_targets tt join apps a on a.id = tt.app_id where tt.task_id = t.id
     ), '[]'::jsonb),
     'release_progress', (select jsonb_build_object('released', count(*) filter (where tt.released_at is not null), 'total', count(*))
@@ -926,9 +927,22 @@ as $$
                                                  'status', r.status, 'planned_date', r.planned_date)
                          from releases r where r.app_id = a.id and r.status not in ('released','cancelled','rolled_back')
                         order by r.planned_date nulls last, r.created_at limit 1)
-  ) order by (a.status = 'archived'), a.name), '[]'::jsonb)
+  ) order by (a.status = 'archived'), a.sort_order, a.name), '[]'::jsonb)
   from apps a;
 $$;
+
+-- (014) Hand-arranged order of apps: ids in the order shown; anything not
+-- listed keeps its place after them. Admin only (the API checks).
+create or replace function apps_reorder(p_ids uuid[])
+returns void
+language sql
+set search_path = public
+as $$
+  update apps a set sort_order = x.ord
+  from unnest(p_ids) with ordinality as x(id, ord)
+  where a.id = x.id;
+$$;
+
 
 -- Team directory with workload per person.
 create or replace function team_overview()
@@ -945,7 +959,7 @@ as $$
       'in_progress', (select count(*) from task_assignees ta join tasks t on t.id = ta.task_id where ta.user_id = u.id and t.status = 'in_progress'),
       'overdue',     (select count(*) from task_assignees ta join tasks t on t.id = ta.task_id where ta.user_id = u.id and t.status not in ('done','cancelled') and t.due_date < ist_today()),
       'done_week',   (select count(*) from task_assignees ta join tasks t on t.id = ta.task_id where ta.user_id = u.id and t.completed_at >= ist_week_start()),
-      'apps', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'app_role', m.app_role) order by a.name)
+      'apps', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'app_role', m.app_role) order by a.sort_order, a.name)
                           from app_members m join apps a on a.id = m.app_id where m.user_id = u.id), '[]'::jsonb)
     ) order by (not u.is_active), u.department, u.first_name, u.email
   ), '[]'::jsonb)
@@ -1083,7 +1097,7 @@ as $$
         'done', (select count(*) from done d where task_targets_app((d.t).id, a.id)),
         'pending', (select count(*) from pending p where task_targets_app((p.t).id, a.id)),
         'carried', (select count(*) from pending p where task_targets_app((p.t).id, a.id) and p.carry > 0)
-      ) order by a.name)
+      ) order by a.sort_order, a.name)
       from apps a, scope s where a.status <> 'archived' and (s.all_apps or a.id = any(s.app_ids))
     ), '[]'::jsonb),
     'notes', coalesce((
@@ -1169,79 +1183,182 @@ $$;
 -- Analytics: month-wise throughput, per app and per person, plus the live
 -- status mix. p_months = how many months back (incl. the current one).
 drop function if exists analytics_pack(int);
-create or replace function analytics_pack(p_months int default 6, p_user uuid default null)
+drop function if exists analytics_pack(int, uuid);
+-- (014) Analytics over an explicit IST date range. Periods are weeks for
+-- short ranges and months from ~3 months up. p_user null = whole team.
+create or replace function analytics_pack(p_from date, p_to date, p_user uuid default null)
 returns jsonb
 language sql
 stable
 set search_path = public
 as $$
   with bounds as (
-    select date_trunc('month', (now() at time zone 'Asia/Kolkata')) - make_interval(months => greatest(1, least(p_months, 24)) - 1) as from_m
+    select p_from as from_d, p_to as to_d,
+           (p_from::timestamp at time zone 'Asia/Kolkata') as from_at,
+           ((p_to + 1)::timestamp at time zone 'Asia/Kolkata') as to_at,
+           case when p_to - p_from >= 84 then 'month' else 'week' end as bucket
   ),
-  months as (
-    select to_char(m, 'YYYY-MM') as month, m as m_start, m + interval '1 month' as m_end
-    from bounds, generate_series(bounds.from_m, date_trunc('month', (now() at time zone 'Asia/Kolkata')), interval '1 month') g(m)
+  periods as (
+    select case when b.bucket = 'month' then to_char(g, 'YYYY-MM') else to_char(g, 'YYYY-MM-DD') end as key,
+           g::date as p_start,
+           case when b.bucket = 'month' then (g + interval '1 month')::date else (g + interval '7 days')::date end as p_end
+    from bounds b
+    cross join lateral generate_series(
+      case when b.bucket = 'month' then date_trunc('month', b.from_d::timestamp) else date_trunc('week', b.from_d::timestamp) end,
+      b.to_d::timestamp,
+      case when b.bucket = 'month' then interval '1 month' else interval '7 days' end
+    ) g
   ),
   -- p_user null = the whole team (admins); otherwise only what that member may see.
   vis as (select t.* from tasks t where p_user is null or (t.app_ids <> '{}'::uuid[] and t.app_ids && visible_app_ids(p_user)) or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user))),
   done as (
-    select t.*, to_char(t.completed_at at time zone 'Asia/Kolkata', 'YYYY-MM') as month
+    select t.*, (t.completed_at at time zone 'Asia/Kolkata')::date as day,
+           extract(epoch from (t.completed_at - t.created_at)) / 3600 as lead_h,
+           (t.due_date is not null) as has_due,
+           (t.due_date is not null and (t.completed_at at time zone 'Asia/Kolkata')::date <= t.due_date) as on_time
     from vis t, bounds b
-    where t.status = 'done' and t.completed_at is not null
-      and (t.completed_at at time zone 'Asia/Kolkata') >= b.from_m
+    where t.status = 'done' and t.completed_at is not null and t.completed_at >= b.from_at and t.completed_at < b.to_at
   ),
   created as (
-    select t.*, to_char(t.created_at at time zone 'Asia/Kolkata', 'YYYY-MM') as month
-    from vis t, bounds b
-    where (t.created_at at time zone 'Asia/Kolkata') >= b.from_m
+    select t.*, (t.created_at at time zone 'Asia/Kolkata')::date as day
+    from vis t, bounds b where t.created_at >= b.from_at and t.created_at < b.to_at
+  ),
+  openx as (
+    select t.*, (ist_today() - (t.created_at at time zone 'Asia/Kolkata')::date) as age_days
+    from vis t where t.status not in ('done','cancelled')
+  ),
+  rel as (
+    select r.*, (r.released_at at time zone 'Asia/Kolkata')::date as day
+    from releases r, bounds b
+    where r.status = 'released' and r.released_at >= b.from_at and r.released_at < b.to_at
+      and (p_user is null or r.app_id = any(visible_app_ids(p_user)))
+  ),
+  held as (
+    select m.* from meetings m, bounds b where m.held_at >= b.from_at and m.held_at < b.to_at
   )
   select jsonb_build_object(
-    'months', coalesce((
+    'range', jsonb_build_object('from', p_from, 'to', p_to, 'bucket', (select bucket from bounds)),
+    'periods', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'month', mo.month,
-        'done', (select count(*) from done d where d.month = mo.month),
-        'created', (select count(*) from created c where c.month = mo.month),
-        'avg_lead_hours', (select round(avg(extract(epoch from (d.completed_at - d.created_at)) / 3600)::numeric, 1) from done d where d.month = mo.month),
-        'avg_active_hours', (select round(avg(d.active_seconds) / 3600.0, 1) from done d where d.month = mo.month),
-        'releases', (select count(*) from releases r where r.status = 'released' and to_char(r.released_at at time zone 'Asia/Kolkata', 'YYYY-MM') = mo.month and (p_user is null or r.app_id = any(visible_app_ids(p_user))))
-      ) order by mo.month)
-      from months mo
+        'key', pe.key, 'start', pe.p_start,
+        'done', (select count(*) from done d where d.day >= pe.p_start and d.day < pe.p_end),
+        'created', (select count(*) from created c where c.day >= pe.p_start and c.day < pe.p_end),
+        'released', (select count(*) from rel r where r.day >= pe.p_start and r.day < pe.p_end),
+        'avg_lead_hours', (select round(avg(d.lead_h)::numeric, 1) from done d where d.day >= pe.p_start and d.day < pe.p_end),
+        'avg_active_hours', (select round(avg(d.active_seconds) / 3600.0, 1) from done d where d.day >= pe.p_start and d.day < pe.p_end)
+      ) order by pe.p_start)
+      from periods pe
     ), '[]'::jsonb),
     'by_app', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', a.id, 'name', a.name, 'color', a.color,
+        'id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url,
         'done', (select count(*) from done d where a.id = any(d.app_ids)),
-        'open', (select count(*) from vis t where a.id = any(t.app_ids) and t.status not in ('done','cancelled')),
-        'overdue', (select count(*) from vis t where a.id = any(t.app_ids) and t.status not in ('done','cancelled') and t.due_date < ist_today()),
-        'months', coalesce((select jsonb_object_agg(mo.month, (select count(*) from done d where a.id = any(d.app_ids) and d.month = mo.month)) from months mo), '{}'::jsonb)
-      ) order by a.name)
+        'created', (select count(*) from created c where a.id = any(c.app_ids)),
+        'open', (select count(*) from openx t where a.id = any(t.app_ids)),
+        'in_progress', (select count(*) from openx t where a.id = any(t.app_ids) and t.status = 'in_progress'),
+        'overdue', (select count(*) from openx t where a.id = any(t.app_ids) and t.due_date < ist_today()),
+        'avg_lead_hours', (select round(avg(d.lead_h)::numeric, 1) from done d where a.id = any(d.app_ids)),
+        'with_due', (select count(*) from done d where a.id = any(d.app_ids) and d.has_due),
+        'on_time', (select count(*) from done d where a.id = any(d.app_ids) and d.on_time),
+        'releases', (select count(*) from rel r where r.app_id = a.id),
+        'periods', coalesce((select jsonb_object_agg(pe.key, (select count(*) from done d where a.id = any(d.app_ids) and d.day >= pe.p_start and d.day < pe.p_end)) from periods pe), '{}'::jsonb)
+      ) order by a.sort_order, a.name)
       from apps a where a.status <> 'archived' and (p_user is null or a.id = any(visible_app_ids(p_user)))
     ), '[]'::jsonb),
     'general', jsonb_build_object(
-      'done', (select count(*) from done d where d.app_id is null),
-      'open', (select count(*) from vis t where t.app_id is null and t.status not in ('done','cancelled')),
-      'months', coalesce((select jsonb_object_agg(mo.month, (select count(*) from done d where d.app_id is null and d.month = mo.month)) from months mo), '{}'::jsonb)
+      'done', (select count(*) from done d where d.app_ids = '{}'::uuid[]),
+      'created', (select count(*) from created c where c.app_ids = '{}'::uuid[]),
+      'open', (select count(*) from openx t where t.app_ids = '{}'::uuid[]),
+      'in_progress', (select count(*) from openx t where t.app_ids = '{}'::uuid[] and t.status = 'in_progress'),
+      'overdue', (select count(*) from openx t where t.app_ids = '{}'::uuid[] and t.due_date < ist_today()),
+      'avg_lead_hours', (select round(avg(d.lead_h)::numeric, 1) from done d where d.app_ids = '{}'::uuid[]),
+      'with_due', (select count(*) from done d where d.app_ids = '{}'::uuid[] and d.has_due),
+      'on_time', (select count(*) from done d where d.app_ids = '{}'::uuid[] and d.on_time),
+      'releases', 0,
+      'periods', coalesce((select jsonb_object_agg(pe.key, (select count(*) from done d where d.app_ids = '{}'::uuid[] and d.day >= pe.p_start and d.day < pe.p_end)) from periods pe), '{}'::jsonb)
     ),
     'by_person', coalesce((
       select jsonb_agg(user_brief(u) || jsonb_build_object(
-        'done', (select count(*) from task_assignees ta join done d on d.id = ta.task_id where ta.user_id = u.id),
-        'open', (select count(*) from task_assignees ta join tasks t on t.id = ta.task_id where ta.user_id = u.id and t.status not in ('done','cancelled')),
-        'in_progress', (select count(*) from task_assignees ta join tasks t on t.id = ta.task_id where ta.user_id = u.id and t.status = 'in_progress'),
-        'overdue', (select count(*) from task_assignees ta join tasks t on t.id = ta.task_id where ta.user_id = u.id and t.status not in ('done','cancelled') and t.due_date < ist_today()),
-        'avg_lead_hours', (select round(avg(extract(epoch from (d.completed_at - d.created_at)) / 3600)::numeric, 1) from task_assignees ta join done d on d.id = ta.task_id where ta.user_id = u.id),
-        'months', coalesce((select jsonb_object_agg(mo.month, (select count(*) from task_assignees ta join done d on d.id = ta.task_id where ta.user_id = u.id and d.month = mo.month)) from months mo), '{}'::jsonb)
+        'done', (select count(*) from done d where u.id = any(d.assignee_ids)),
+        'created', (select count(*) from created c where c.created_by = u.id),
+        'open', (select count(*) from openx t where u.id = any(t.assignee_ids)),
+        'in_progress', (select count(*) from openx t where u.id = any(t.assignee_ids) and t.status = 'in_progress'),
+        'overdue', (select count(*) from openx t where u.id = any(t.assignee_ids) and t.due_date < ist_today()),
+        'avg_lead_hours', (select round(avg(d.lead_h)::numeric, 1) from done d where u.id = any(d.assignee_ids)),
+        'with_due', (select count(*) from done d where u.id = any(d.assignee_ids) and d.has_due),
+        'on_time', (select count(*) from done d where u.id = any(d.assignee_ids) and d.on_time),
+        'periods', coalesce((select jsonb_object_agg(pe.key, (select count(*) from done d where u.id = any(d.assignee_ids) and d.day >= pe.p_start and d.day < pe.p_end)) from periods pe), '{}'::jsonb)
       ) order by u.department, u.first_name, u.email)
       from users u where u.is_active
     ), '[]'::jsonb),
     'status_now', coalesce((select jsonb_object_agg(status, c) from (select status, count(*) c from vis group by status) x), '{}'::jsonb),
-    'type_done', coalesce((select jsonb_object_agg(type, c) from (select type, count(*) c from done group by type) x), '{}'::jsonb),
+    'type_mix', coalesce((
+      select jsonb_object_agg(k, v) from (
+        select type as k, jsonb_build_object('done', (select count(*) from done d where d.type = x.type), 'open', (select count(*) from openx o where o.type = x.type)) as v
+        from (select distinct type from vis) x
+      ) y
+    ), '{}'::jsonb),
+    'priority_mix', coalesce((
+      select jsonb_object_agg(k, v) from (
+        select priority as k, jsonb_build_object('done', (select count(*) from done d where d.priority = x.priority), 'open', (select count(*) from openx o where o.priority = x.priority)) as v
+        from (select distinct priority from vis) x
+      ) y
+    ), '{}'::jsonb),
+    'cycle_buckets', jsonb_build_array(
+      jsonb_build_object('key', '<1d', 'n', (select count(*) from done where lead_h < 24)),
+      jsonb_build_object('key', '1–3d', 'n', (select count(*) from done where lead_h >= 24 and lead_h < 72)),
+      jsonb_build_object('key', '3–7d', 'n', (select count(*) from done where lead_h >= 72 and lead_h < 168)),
+      jsonb_build_object('key', '1–2w', 'n', (select count(*) from done where lead_h >= 168 and lead_h < 336)),
+      jsonb_build_object('key', '2–4w', 'n', (select count(*) from done where lead_h >= 336 and lead_h < 672)),
+      jsonb_build_object('key', '>4w', 'n', (select count(*) from done where lead_h >= 672))
+    ),
+    'aging', jsonb_build_array(
+      jsonb_build_object('key', '<7d', 'n', (select count(*) from openx where age_days < 7)),
+      jsonb_build_object('key', '7–14d', 'n', (select count(*) from openx where age_days >= 7 and age_days < 14)),
+      jsonb_build_object('key', '14–30d', 'n', (select count(*) from openx where age_days >= 14 and age_days < 30)),
+      jsonb_build_object('key', '30–60d', 'n', (select count(*) from openx where age_days >= 30 and age_days < 60)),
+      jsonb_build_object('key', '>60d', 'n', (select count(*) from openx where age_days >= 60))
+    ),
+    'oldest_open', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', t.id, 'number', t.number, 'title', t.title, 'status', t.status, 'priority', t.priority, 'age_days', t.age_days, 'due_date', t.due_date,
+        'app', (select jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url) from apps a where a.id = t.app_ids[1]),
+        'assignees', coalesce((select jsonb_agg(user_brief(u) order by u.first_name) from task_assignees ta join users u on u.id = ta.user_id where ta.task_id = t.id), '[]'::jsonb)
+      ) order by t.age_days desc, t.number)
+      from (select * from openx order by created_at limit 8) t
+    ), '[]'::jsonb),
+    'releases', jsonb_build_object(
+      'released', (select count(*) from rel),
+      'android', (select count(*) from rel where platform = 'android'),
+      'ios', (select count(*) from rel where platform = 'ios'),
+      'with_plan', (select count(*) from rel where planned_date is not null),
+      'on_time', (select count(*) from rel where planned_date is not null and day <= planned_date),
+      'avg_slip_days', (select round(avg(day - planned_date)::numeric, 1) from rel where planned_date is not null),
+      'apps', (select count(distinct app_id) from rel),
+      'pipeline', coalesce((select jsonb_object_agg(status, c) from (select status, count(*) c from releases r where r.status in ('planned','in_progress','testing','submitted') and (p_user is null or r.app_id = any(visible_app_ids(p_user))) group by status) x), '{}'::jsonb),
+      'periods', coalesce((select jsonb_object_agg(pe.key, (select count(*) from rel r where r.day >= pe.p_start and r.day < pe.p_end)) from periods pe), '{}'::jsonb)
+    ),
+    'meetings', jsonb_build_object(
+      'held', (select count(*) from held),
+      'notes', (select count(*) from meeting_notes n where n.meeting_id in (select id from held)),
+      'decisions', (select count(*) from meeting_notes n where n.kind = 'decision' and n.meeting_id in (select id from held)),
+      'actions', (select count(*) from meeting_notes n where n.kind = 'action' and n.meeting_id in (select id from held)),
+      'blockers', (select count(*) from meeting_notes n where n.kind = 'blocker' and n.meeting_id in (select id from held))
+    ),
     'totals', jsonb_build_object(
       'done', (select count(*) from done),
       'created', (select count(*) from created),
-      'open_now', (select count(*) from vis where status not in ('done','cancelled')),
-      'overdue_now', (select count(*) from vis where status not in ('done','cancelled') and due_date < ist_today()),
-      'median_lead_hours', (select round((percentile_cont(0.5) within group (order by extract(epoch from (completed_at - created_at)) / 3600))::numeric, 1) from done),
-      'avg_active_hours', (select round(avg(active_seconds) / 3600.0, 1) from done)
+      'cancelled', (select count(*) from vis t, bounds b where t.status = 'cancelled' and t.updated_at >= b.from_at and t.updated_at < b.to_at),
+      'open_now', (select count(*) from openx),
+      'wip_now', (select count(*) from openx where status in ('in_progress','in_review')),
+      'blocked_now', (select count(*) from openx where status = 'on_hold'),
+      'overdue_now', (select count(*) from openx where due_date < ist_today()),
+      'with_due', (select count(*) from done where has_due),
+      'on_time', (select count(*) from done where on_time),
+      'median_lead_hours', (select round((percentile_cont(0.5) within group (order by lead_h))::numeric, 1) from done),
+      'p90_lead_hours', (select round((percentile_cont(0.9) within group (order by lead_h))::numeric, 1) from done),
+      'avg_active_hours', (select round(avg(active_seconds) / 3600.0, 1) from done),
+      'avg_open_age_days', (select round(avg(age_days)::numeric, 1) from openx)
     )
   );
 $$;

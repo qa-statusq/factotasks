@@ -93,7 +93,9 @@ export async function proxy(req: NextRequest) {
     // Only DYNAMIC responses pass through here (the matcher excludes static
     // assets), so a blanket no-store is correct — it keeps a logged-out Back
     // press from repainting an authed page out of the HTTP/bfcache.
-    res.headers.set("Cache-Control", "no-store, must-revalidate");
+    // The store-icon relay (/api/icon) sets its own long-lived cache header;
+    // everything else dynamic is personal and must not be cached.
+    if (!pathname.startsWith("/api/icon")) res.headers.set("Cache-Control", "no-store, must-revalidate");
     res.headers.delete("x-powered-by");
     res.headers.delete("x-nextjs-cache");
     res.headers.delete("x-nextjs-prerender");
@@ -105,7 +107,9 @@ export async function proxy(req: NextRequest) {
   const withCsp = harden;
 
   // Public paths. /login is handled below — an authed user is bounced off it.
-  if (pathname.startsWith("/api/auth") || pathname.startsWith("/api/cron")) {
+  // Public: sign-in, the cron hook (secret-checked inside) and the store-icon
+  // relay (public artwork; its host allowlist lives in the route).
+  if (pathname.startsWith("/api/auth") || pathname.startsWith("/api/cron") || pathname.startsWith("/api/icon")) {
     return rendered();
   }
 

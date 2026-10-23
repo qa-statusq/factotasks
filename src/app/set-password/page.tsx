@@ -90,7 +90,6 @@ export default function SetPasswordPage() {
                 onClick={() => setShow((v) => !v)}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-subtle transition-colors hover:text-ink"
                 aria-label={show ? "Hide password" : "Show password"}
-                tabIndex={-1}
               >
                 {show ? <IconEyeOff size={18} /> : <IconEye size={18} />}
               </button>

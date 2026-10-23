@@ -18,21 +18,26 @@ export const DECK_STATUS_ORDER: TaskStatus[] = ["done", "partial", "in_progress"
 
 type AppLike = { id: string; name: string; color: string; icon_url?: string | null };
 
+/** Key of the deck's group for tasks that span several apps. */
+export const SHARED_KEY = "shared";
+
 /**
  * Groups a meeting pack's tasks and releases per app, General first, then
- * the series' presentation order, then the rest by name.
+ * the series' presentation order, then the Apps screen's order (the pack's
+ * apps arrive sorted by it).
  *
- * `dedupe`: a task on several apps appears ONCE, under the first of its apps
- * in that order (the deck); without it the task is listed under every app
+ * `dedupe`: a task on several apps appears ONCE — in its own "Across apps"
+ * group (`SHARED_KEY`, placed last), where every app and platform it ships
+ * on is shown side by side; without it the task is listed under every app
  * it targets (the editing view).
  */
 export function buildAgenda(pack: MeetingPack, opts: { dedupe?: boolean } = {}): AgendaGroup[] {
   const map = new Map<string, AgendaGroup>();
-  const groupFor = (app: AppLike | null) => {
-    const key = app?.id ?? "general";
+  const groupFor = (app: AppLike | null, key = app?.id ?? "general") => {
     let g = map.get(key);
     if (!g) {
-      g = { key, name: app?.name ?? "General", color: app?.color ?? "#94a3b8", iconUrl: app?.icon_url ?? null, pending: [], done: [], releases: [], carried: 0, overdue: 0 };
+      const name = key === SHARED_KEY ? "Across apps" : app?.name ?? "General";
+      g = { key, name, color: app?.color ?? (key === SHARED_KEY ? "#0f766e" : "#94a3b8"), iconUrl: app?.icon_url ?? null, pending: [], done: [], releases: [], carried: 0, overdue: 0 };
       map.set(key, g);
     }
     return g;
@@ -47,18 +52,21 @@ export function buildAgenda(pack: MeetingPack, opts: { dedupe?: boolean } = {}):
   // order below is complete.
   for (const a of pack.apps) groupFor(a);
   const order = pack.series?.app_order ?? [];
-  const rank = (key: string, name: string) => (key === "general" ? [-1, ""] : [order.indexOf(key) === -1 ? order.length : order.indexOf(key), name.toLowerCase()]) as [number, string];
+  const screenOrder = pack.apps.map((a) => a.id);
+  // General first; then the series' own order; then the Apps screen's order; "Across apps" last.
+  const rank = (key: string): number => {
+    if (key === "general") return -1;
+    if (key === SHARED_KEY) return Number.MAX_SAFE_INTEGER;
+    const i = order.indexOf(key);
+    if (i !== -1) return i;
+    const j = screenOrder.indexOf(key);
+    return order.length + (j === -1 ? screenOrder.length : j);
+  };
   const groupsOf = (t: TaskCard): AgendaGroup[] => {
     const apps = appsOf(t);
     if (!apps.length) return [groupFor(null)];
-    const gs = apps.map(groupFor);
-    if (!opts.dedupe) return gs;
-    gs.sort((a, b) => {
-      const [ra, na] = rank(a.key, a.name);
-      const [rb, nb] = rank(b.key, b.name);
-      return ra - rb || na.localeCompare(nb);
-    });
-    return [gs[0]];
+    if (!opts.dedupe) return apps.map((a) => groupFor(a));
+    return apps.length > 1 ? [groupFor(null, SHARED_KEY)] : [groupFor(apps[0])];
   };
   const overdueIds = new Set(pack.overdue.map((t) => t.id));
   const seen = new Set<string>();
@@ -84,11 +92,7 @@ export function buildAgenda(pack: MeetingPack, opts: { dedupe?: boolean } = {}):
     g.releases.sort((a, b) => (b.released_at || b.planned_date || "").localeCompare(a.released_at || a.planned_date || ""));
   }
   const groups = [...map.values()].filter((g) => g.pending.length || g.done.length || g.releases.length);
-  return groups.sort((a, b) => {
-    const [ra, na] = rank(a.key, a.name);
-    const [rb, nb] = rank(b.key, b.name);
-    return ra - rb || na.localeCompare(nb);
-  });
+  return groups.sort((a, b) => rank(a.key) - rank(b.key) || a.name.localeCompare(b.name));
 }
 
 /** One flat list for a slide: by status (done → in progress → … → cancelled), newest first within a status. */
@@ -105,6 +109,26 @@ export function otherApps(t: TaskCard, exceptId: string): AppLike[] {
   const seen = new Map<string, AppLike>();
   for (const x of t.targets ?? []) if (x.app.id !== exceptId) seen.set(x.app.id, x.app);
   return [...seen.values()];
+}
+
+/** A task's targets grouped per app, Android before iOS — the release matrix of the deck. */
+export function targetMatrix(t: TaskCard): { app: AppLike; items: TaskCard["targets"] }[] {
+  const m = new Map<string, { app: AppLike; items: TaskCard["targets"] }>();
+  for (const x of t.targets ?? []) {
+    const g = m.get(x.app.id) ?? { app: x.app, items: [] };
+    g.items.push(x);
+    m.set(x.app.id, g);
+  }
+  for (const g of m.values()) g.items.sort((a, b) => (a.platform === b.platform ? 0 : a.platform === "android" ? -1 : 1));
+  return [...m.values()];
+}
+
+/** The platforms a task ships on for ONE app (both when it targets both). */
+export function platformsOn(t: TaskCard, appId: string): ("android" | "ios")[] {
+  const out = new Set<"android" | "ios">();
+  for (const x of t.targets ?? []) if (x.app.id === appId) out.add(x.platform);
+  if (!out.size && t.platform) (t.platform === "both" ? ["android", "ios"] : [t.platform]).forEach((p) => out.add(p as "android" | "ios"));
+  return [...out].sort((a, b) => (a === b ? 0 : a === "android" ? -1 : 1));
 }
 
 type Person = Pick<UserBrief, "id" | "name"> & { first_name?: string | null; last_name?: string | null };

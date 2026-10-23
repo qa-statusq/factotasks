@@ -10,6 +10,7 @@ import { Breadcrumb, LoadError, Spinner } from "@/components/ui/misc";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { RichText } from "@/components/ui/rich-text";
+import { SeriesBadge, MeetingStatusBadge } from "@/components/meeting-series";
 import { PriorityBadge, TypeBadge, PlatformBadge, LabelChip, ReleaseStatusBadge, TargetChips, ReleaseProgress, AppTile, SeriesChip } from "@/components/ui/task-chips";
 import { DueChip } from "@/components/task-list";
 import { StatusMenu } from "@/components/status-menu";
@@ -192,12 +193,8 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
                       <Link href={`/meetings/${mm.id}`} className="font-medium text-ink hover:underline">
                         {mm.title}
                       </Link>
-                      {mm.series && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: mm.series.color }} /> {mm.series.name}
-                        </span>
-                      )}
-                      <Badge tone={mm.status === "open" ? "success" : "neutral"}>{mm.status === "open" ? "Open" : "Closed"}</Badge>
+                      {mm.series && <SeriesBadge series={mm.series} />}
+                      <MeetingStatusBadge status={mm.status} />
                       <span className="ml-auto text-[11.5px] text-ink-subtle">{istTime(mm.held_at).replace(/:\d\d (am|pm)/, " $1")}</span>
                     </li>
                   ))}
@@ -325,7 +322,7 @@ function Details({ task }: { task: TaskDetail }) {
             {task.targets.map((t) => (
               <li key={`${t.app.id}:${t.platform}`} className="flex items-center gap-2 py-1.5 text-[12.5px]">
                 <AppTile name={t.app.name} color={t.app.color} iconUrl={t.app.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />
-                <Link href={`/apps/${t.app.id}`} className="min-w-0 flex-1 truncate font-medium text-ink hover:underline">
+                <Link href={`/apps/${t.app.id}`} className="min-w-0 flex-1 break-words font-medium leading-tight text-ink hover:underline">
                   {t.app.name}
                 </Link>
                 <PlatformBadge platform={t.platform} />
@@ -520,18 +517,16 @@ function Comments({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) {
                 void send();
               }
             }}
-            rows={body ? 3 : 1}
+            rows={2}
             placeholder="Write a comment… (Ctrl+Enter)"
             maxLength={LIMITS.comment}
             className="py-2"
           />
-          {body.trim() && (
-            <div className="flex justify-end">
-              <Button size="sm" onClick={send} disabled={busy}>
-                {busy ? <Spinner /> : <IconSend size={14} />} Post
-              </Button>
-            </div>
-          )}
+          <div className="flex justify-end">
+            <Button size="sm" onClick={send} disabled={busy || !body.trim()}>
+              {busy ? <Spinner /> : <IconSend size={14} />} Post
+            </Button>
+          </div>
         </div>
       </div>
     </section>

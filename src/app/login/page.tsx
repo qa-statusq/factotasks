@@ -113,7 +113,6 @@ export default function LoginPage() {
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-ink-subtle transition-colors hover:text-ink"
                   aria-label={showPw ? "Hide password" : "Show password"}
                   title={showPw ? "Hide password" : "Show password"}
-                  tabIndex={-1}
                 >
                   {showPw ? <IconEyeOff size={18} /> : <IconEye size={18} />}
                 </button>

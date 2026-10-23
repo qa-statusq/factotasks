@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/field";
@@ -39,6 +39,15 @@ export function NoteComposer({
   autoFocus?: boolean;
   defaultKind?: NoteKind;
 }) {
+  // "+ Note" on a task row re-targets this composer: bring it into view and focus it.
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!task) return;
+    const el = areaRef.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    el.focus();
+  }, [task]);
   const { toast } = useToast();
   const [kind, setKind] = useState<NoteKind>(defaultKind);
   const [body, setBody] = useState("");
@@ -82,6 +91,7 @@ export function NoteComposer({
           }
         }}
         rows={2}
+        ref={areaRef}
         autoFocus={autoFocus}
         placeholder={task ? `What was said about ${taskRef(task.number)}? (Ctrl+Enter)` : "Decision, action item, blocker or a general note… (Ctrl+Enter)"}
         maxLength={LIMITS.note}

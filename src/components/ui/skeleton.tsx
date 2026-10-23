@@ -30,7 +30,7 @@ function StatSkeletonRow() {
 /** Generic list/table card placeholder (rows of avatar + two lines). */
 export function ListSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+    <div className="overflow-hidden rounded-xl border border-line bg-surface">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 border-b border-line px-5 py-4 last:border-0">
           <Skeleton className="h-9 w-9 rounded-xl" />

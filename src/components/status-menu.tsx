@@ -145,7 +145,7 @@ export function toneClass(status: TaskStatus): string {
     case "in_progress":
       return "bg-blue-50 text-blue-700 ring-blue-200";
     case "in_review":
-      return "bg-sky-50 text-sky-700 ring-sky-200";
+      return "bg-violet-50 text-violet-700 ring-violet-200";
     case "on_hold":
       return "bg-amber-50 text-amber-700 ring-amber-200";
     case "partial":

@@ -13,7 +13,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 // transitions. No gradients, glows, or scale effects. 2.0: a silkier 200ms
 // curve and a secondary hover that firms the hairline as well as the fill.
 const base =
-  "inline-flex select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-semibold tracking-[-0.005em] transition-[background-color,border-color,color,transform] duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[0.985] disabled:pointer-events-none disabled:opacity-50";
+  "inline-flex select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-semibold tracking-[-0.005em] transition-[background-color,border-color,color,transform] duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100";
 
 const variants: Record<Variant, string> = {
   primary: "bg-ink text-white hover:bg-[#2a2a27]",

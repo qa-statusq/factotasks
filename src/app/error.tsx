@@ -44,13 +44,13 @@ export default function ErrorBoundary({
         aria-hidden="true"
         className="select-none text-[72px] font-bold leading-none tracking-[-0.05em] text-brand-600 tabular-nums sm:text-[88px]"
       >
-        500
+        !
       </p>
       <h1 className="mt-5 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-ink">
         Something went wrong on this screen
       </h1>
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-ink-muted">
-        Your data is safe — this is only a display error. Try again, or reload the panel.
+        Your data is safe — this is only a display error. Try again, or go back to the dashboard.
       </p>
       {/* flex-wrap: the two labels together are ~270px, which fits a 360px
           phone but not a 320px one (iPhone SE 1). Wrapping is free insurance —

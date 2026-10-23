@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/ui/misc";
 
 export const metadata: Metadata = { title: "Keyboard shortcuts" };
 
-const GROUPS: { title: string; keys: [string, string][] }[] = [
+const GROUPS: { title: string; keys: [string | string[], string][] }[] = [
   {
     title: "Anywhere",
     keys: [
@@ -23,7 +23,7 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       ["g m", "Meetings (admins)"],
       ["g n", "Inbox"],
       ["g o", "Analytics"],
-      ["g e", "Team"],
+      ["g e", "People"],
       ["g p", "Approvals (admin)"],
       ["g v", "Activity (admin)"],
       ["g s", "Settings (admin)"],
@@ -33,18 +33,21 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
   {
     title: "Forms & comments",
     keys: [
-      ["Ctrl + Enter", "Save / post"],
-      ["Enter, ,", "Add a label (in the labels box)"],
+      [["Ctrl", "Enter"], "Save / post"],
+      [["Enter"], "Add a label (in the labels box) — a comma works too"],
     ],
   },
   {
     title: "Presentation",
     keys: [
-      ["→ / ↓ / Space", "Next slide"],
-      ["← / ↑", "Previous slide"],
-      ["Home / End", "First / last slide"],
-      ["f", "Toggle full screen"],
-      ["Esc", "Exit"],
+      [["→", "Space"], "Next slide"],
+      [["←"], "Previous slide"],
+      [["↓", "↑"], "Scroll a long section, then turn the slide"],
+      [["Home", "End"], "First / last slide"],
+      [["a"], "Jump to a section"],
+      [["1", "…", "9"], "Jump to the nth section"],
+      [["f"], "Toggle full screen"],
+      [["Esc"], "Exit"],
     ],
   },
 ];
@@ -61,10 +64,10 @@ export default function ShortcutsPage() {
             </CardHeader>
             <CardBody className="flex flex-col divide-y divide-line/70 py-1">
               {g.keys.map(([k, what]) => (
-                <div key={k} className="flex items-center justify-between gap-4 py-2 text-sm">
+                <div key={Array.isArray(k) ? k.join(" ") : k} className="flex items-center justify-between gap-4 py-2 text-sm">
                   <span className="text-ink-muted">{what}</span>
                   <span className="flex gap-1">
-                    {k.split(" ").map((part, i) => (
+                    {(Array.isArray(k) ? k : k.split(" ")).map((part, i) => (
                       <kbd key={i} className="rounded border border-line bg-canvas px-1.5 py-0.5 font-sans text-xs font-medium text-ink">
                         {part}
                       </kbd>

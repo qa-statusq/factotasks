@@ -161,10 +161,24 @@ r = await member.call("POST", "/api/tasks", { title: "Sneaky", targets: [{ app_i
 check(r.status === 400, "member cannot put a task on an app they are not on → 400", r);
 r = await admin.call("POST", "/api/tasks", { title: "Wrong assignee", targets: [{ app_id: otherAppId, platform: "android" }], assignee_ids: [memberId] });
 check(r.status === 400 && /member of/.test(r.data?.error || ""), "assigning a non-member to an app task → 400", r);
-r = await admin.call("GET", "/api/analytics?months=3");
-check(r.status === 200 && Array.isArray(r.data?.by_person), "admin analytics has by_person", r);
-r = await member.call("GET", "/api/analytics?months=3");
+r = await admin.call("GET", "/api/analytics?from=2026-01-01&to=2026-12-31");
+check(r.status === 200 && Array.isArray(r.data?.by_person) && Array.isArray(r.data?.periods) && Array.isArray(r.data?.cycle_buckets) && typeof r.data?.releases?.released === "number" && typeof r.data?.meetings?.held === "number", "admin analytics (range) has by_person, periods, buckets, releases, meetings", r);
+r = await admin.call("GET", "/api/analytics?from=2026-10-01&to=2026-10-20");
+check(r.status === 200 && r.data?.range?.bucket === "week", "short analytics range buckets by week", r);
+r = await admin.call("GET", "/api/analytics?from=20-10-2026&to=x");
+check(r.status === 400, "bad analytics dates → 400", r);
+r = await member.call("GET", "/api/analytics");
 check(r.status === 200 && !("by_person" in (r.data || {})) && !r.data?.by_app?.some((a) => a.id === otherAppId), "member analytics: no by_person, no other app", r);
+r = await member.call("PATCH", "/api/apps/reorder", { ids: [appId] });
+check(r.status === 403, "members cannot arrange apps → 403", r);
+r = await admin.call("PATCH", "/api/apps/reorder", { ids: [otherAppId, appId] });
+check(r.status === 200, "admin arranges apps", r);
+r = await admin.call("GET", "/api/apps");
+{
+  const ids = (r.data?.apps || []).map((a) => a.id);
+  check(ids.indexOf(otherAppId) < ids.indexOf(appId), "apps list follows the arranged order", { ids });
+}
+r = await admin.call("PATCH", "/api/apps/reorder", { ids: [appId, otherAppId] });
 r = await member.call("GET", "/api/meetings");
 check(r.status === 403, "meetings are admin-only for members → 403", r);
 r = await member.call("DELETE", `/api/tasks/${task.id}`);

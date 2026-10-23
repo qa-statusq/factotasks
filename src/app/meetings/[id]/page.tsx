@@ -9,12 +9,12 @@ import { Textarea } from "@/components/ui/field";
 import { Breadcrumb, LoadError, Spinner, EmptyState } from "@/components/ui/misc";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
-import { ReleaseStatusBadge, PlatformBadge, PriorityBadge, AppTile, TargetChips, ReleaseProgress } from "@/components/ui/task-chips";
-import { StatusMenu, toneClass } from "@/components/status-menu";
+import { ReleaseStatusBadge, PlatformBadge, PriorityBadge, AppTile, TargetChips, ReleaseProgress, StatusBadge } from "@/components/ui/task-chips";
+import { StatusMenu } from "@/components/status-menu";
 import { DueChip, PILL_WIDTH } from "@/components/task-list";
 import { NoteComposer, NoteList } from "@/components/meeting-notes";
 import { AddTaskSheet } from "@/components/add-task-sheet";
-import { SeriesBadge, ScopeLabel } from "@/components/meeting-series";
+import { SeriesBadge, ScopeLabel, MeetingStatusBadge } from "@/components/meeting-series";
 import { useToast } from "@/components/ui/toast";
 import { ClampedText } from "@/components/ui/clamped-text";
 import { prettyDate } from "@/components/release-ui";
@@ -28,7 +28,7 @@ import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText, type Agend
 import { postJson, deleteJson } from "@/lib/http";
 import { istTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
-import { LIMITS, STATUS_META, taskRef } from "@/lib/domain";
+import { LIMITS, taskRef } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
 import { IconMaximize, IconPrint, IconCheck, IconTrash, IconEdit, IconPresentation, IconChevronDown, IconPlus, IconX } from "@/components/ui/icons";
 import type { AppOverview, MeetingNote, MeetingPack, TaskCard } from "@/lib/types";
@@ -64,7 +64,8 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
   const needsApproval = useNeedsApproval();
   const m = pack.meeting;
   const finalized = m.status === "finalized";
-  const readOnly = finalized && !isAdmin;
+  // Closed = locked for everyone (an admin reopens to change anything), so the copy stays true.
+  const readOnly = finalized;
   const [noteTask, setNoteTask] = useState<TaskCard | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -115,7 +116,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="break-words text-[20px] font-bold leading-tight tracking-[-0.02em] text-ink sm:text-[24px]">{m.title}</h1>
-          <Badge tone={finalized ? "neutral" : "success"}>{finalized ? "Closed" : "Open"}</Badge>
+          <MeetingStatusBadge status={m.status} />
           <SeriesBadge series={pack.series} />
           {isAdmin && (
             <button type="button" onClick={rename} className="rounded p-1 text-ink-subtle hover:text-ink" aria-label="Rename">
@@ -159,7 +160,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
       </div>
 
       {/* Numbers strip */}
-      <div className="grid grid-cols-3 divide-x divide-line/70 rounded-xl border border-line bg-surface sm:grid-cols-6">
+      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line bg-line/70 sm:grid-cols-6 [&>*]:bg-surface">
         <Stat label="Done" value={pack.done.length} tone="success" />
         <Stat label="Pending" value={totalPending} />
         <Stat label="Carried" value={pack.carried.length} tone={pack.carried.length ? "warning" : undefined} />
@@ -283,7 +284,7 @@ function AppSection({ group: g, notes, labels, cacheKey, readOnly, needsApproval
 
 function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }) {
   const desc = r.description?.trim();
-  const when = r.status === "released" && r.released_at ? `Released ${fmt(r.released_at)}` : r.planned_date ? `Planned ${prettyDate(r.planned_date)}` : "No date yet";
+  const when = r.status === "released" && r.released_at ? `Released ${fmt(r.released_at)}` : r.planned_date ? `Release date ${prettyDate(r.planned_date)}` : "No date yet";
   return (
     <li className="px-3 py-2.5 sm:px-4">
       <div className="flex items-start gap-3">
@@ -306,7 +307,7 @@ function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }
                     <Link href={`/tasks/${t.id}`} className="min-w-0 break-words font-medium text-ink hover:text-brand-700">
                       {t.title}
                     </Link>
-                    <span className={cn("ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold ring-1 ring-inset", toneClass(t.status))}>{STATUS_META[t.status].label}</span>
+                    <StatusBadge status={t.status} className="ml-auto shrink-0" />
                   </div>
                   <ClampedText text={t.description} rich lines={2} className="mt-0.5 text-[12px] text-ink-muted" />
                 </li>

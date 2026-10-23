@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { closeForNavigation } from "@/components/ui/use-modal-chrome";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Field, Input } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/sheet";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DateInput, istNowLocal, istLocalToIso } from "@/components/ui/date-input";
-import { Spinner } from "@/components/ui/misc";
+import { Spinner, LoadError } from "@/components/ui/misc";
 import { AppTile } from "@/components/ui/task-chips";
 import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
@@ -17,7 +18,8 @@ import { postJson, deleteJson } from "@/lib/http";
 import { useOnChange } from "@/lib/use-on-change";
 import { useSubmitShortcut } from "@/lib/use-submit-shortcut";
 import { cn } from "@/lib/cn";
-import { IconCheck, IconTrash, IconChevronUp, IconChevronDown } from "@/components/ui/icons";
+import { IconCheck, IconTrash, IconPresentation } from "@/components/ui/icons";
+import { SortableList } from "@/components/ui/sortable";
 import type { AppOverview, Meeting, MeetingSeries } from "@/lib/types";
 
 const NEW = "__new__";
@@ -26,10 +28,21 @@ const NEW = "__new__";
 export function SeriesBadge({ series, className }: { series: { name: string; color: string } | null | undefined; className?: string }) {
   if (!series) return null;
   return (
-    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-surface px-1.5 py-[1px] text-[11px] font-semibold text-ink ring-1 ring-inset ring-line", className)}>
-      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: series.color }} />
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-surface px-1.5 py-[1px] text-[11px] font-semibold text-ink ring-1 ring-inset ring-line", className)} title={`${series.name} — meeting series`}>
+      <IconPresentation size={12} className="shrink-0" style={{ color: series.color }} />
       {series.name}
     </span>
+  );
+}
+
+/** Open (still gathering) or Closed (minutes locked) — the same badge on every screen. */
+export function MeetingStatusBadge({ status, className }: { status: "open" | "finalized"; className?: string }) {
+  const open = status === "open";
+  return (
+    <Badge tone={open ? "success" : "neutral"} className={cn("gap-1 rounded-full", className)} title={open ? "Open — figures keep updating until it is closed" : "Closed — minutes are locked"}>
+      {open && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+      {open ? "Open" : "Closed"}
+    </Badge>
   );
 }
 
@@ -96,7 +109,7 @@ export function NewMeetingSheet({ onClose, defaultSeriesId }: { onClose: () => v
   const router = useRouter();
   const { confirm } = useDialog();
   const { toast } = useToast();
-  const { data: sd } = useCachedFetch<{ series: MeetingSeries[] }>("/api/meeting-series");
+  const { data: sd, error: sErr, refresh: sRefresh } = useCachedFetch<{ series: MeetingSeries[] }>("/api/meeting-series");
   const { data: ad } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
   const series = sd?.series ?? [];
   const [seriesId, setSeriesId] = useState<string>(defaultSeriesId || "");
@@ -181,7 +194,7 @@ export function NewMeetingSheet({ onClose, defaultSeriesId }: { onClose: () => v
         className="flex flex-col gap-4"
       >
         <Field label="Series" hint={current ? <ScopeLabel scope={current} apps={ad?.apps} /> : "Meetings of one kind; carry-forward is counted within the series."}>
-          <Dropdown value={seriesId} onChange={setSeriesId} options={options} placeholder={sd ? "Pick a series" : "Loading…"} />
+          {!sd && sErr ? <LoadError title="Couldn't load the series" onRetry={sRefresh} /> : <Dropdown value={seriesId} onChange={setSeriesId} options={options} placeholder={sd ? "Pick a series" : "Loading…"} />}
         </Field>
         {seriesId === NEW && (
           <>
@@ -203,13 +216,19 @@ export function NewMeetingSheet({ onClose, defaultSeriesId }: { onClose: () => v
 /* ---------------------------- Manage series ------------------------------- */
 
 export function ManageSeriesSheet({ onClose }: { onClose: () => void }) {
-  const { data: sd, refresh } = useCachedFetch<{ series: MeetingSeries[] }>("/api/meeting-series");
+  const { data: sd, error: sErr, refresh } = useCachedFetch<{ series: MeetingSeries[] }>("/api/meeting-series");
   const { data: ad } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
   const [adding, setAdding] = useState(false);
   const list = sd?.series ?? [];
   return (
     <Sheet title="Meeting series" description="One series per kind of meeting. Each keeps its own carry-forward and scope; colours are assigned automatically." onClose={onClose} wide>
       <div className="flex flex-col gap-3">
+        {!sd && sErr && <LoadError title="Couldn't load the series" onRetry={refresh} />}
+        {!sd && !sErr && (
+          <div className="flex justify-center py-6">
+            <Spinner />
+          </div>
+        )}
         {list.map((s) => (
           <SeriesEditor key={s.id} series={s} apps={ad?.apps ?? []} onChanged={refresh} canDelete={list.length > 1} />
         ))}
@@ -242,18 +261,11 @@ function SeriesEditor({ series, apps, onChanged, onCancel, canDelete }: { series
   const [busy, setBusy] = useState(false);
   // The apps this series presents, in their current order: listed ones first, then the rest by name.
   const inScope = apps.filter((a) => a.status !== "archived" && (scope.app_ids.length === 0 || scope.app_ids.includes(a.id)));
+  // Listed apps first in their order; the rest keep the Apps screen's arrangement.
   const ordered = [...inScope].sort((a, b) => {
     const ia = order.indexOf(a.id), ib = order.indexOf(b.id);
-    return (ia === -1 ? order.length : ia) - (ib === -1 ? order.length : ib) || a.name.localeCompare(b.name);
+    return (ia === -1 ? order.length : ia) - (ib === -1 ? order.length : ib) || inScope.indexOf(a) - inScope.indexOf(b);
   });
-  const move = (id: string, dir: -1 | 1) => {
-    const ids = ordered.map((a) => a.id);
-    const i = ids.indexOf(id);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= ids.length) return;
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-    setOrder(ids);
-  };
   const dirty = !series || name.trim() !== series.name || scope.app_ids.join() !== series.app_ids.join() || scope.include_general !== (series.include_general ?? true) || order.join() !== (series.app_order ?? []).join();
 
   async function save() {
@@ -284,7 +296,7 @@ function SeriesEditor({ series, apps, onChanged, onCancel, canDelete }: { series
   return (
     <div className="rounded-xl border border-line bg-surface p-4">
       <div className="flex items-center gap-3">
-        {series && <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: series.color }} aria-hidden />}
+        {series && <IconPresentation size={16} className="shrink-0" style={{ color: series.color }} aria-hidden />}
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Series name" maxLength={60} className="min-w-0 flex-1" autoFocus={!series} />
       </div>
       <div className="mt-3">
@@ -293,22 +305,15 @@ function SeriesEditor({ series, apps, onChanged, onCancel, canDelete }: { series
       </div>
       {ordered.length > 1 && (
         <div className="mt-3">
-          <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-ink-subtle">Presentation order <span className="font-normal normal-case tracking-normal">· General tasks always come first</span></p>
-          <ol className="divide-y divide-line/70 overflow-hidden rounded-lg border border-line">
-            {ordered.map((a, i) => (
-              <li key={a.id} className="flex items-center gap-2 bg-surface px-2.5 py-1.5 text-[13px]">
-                <span className="w-5 shrink-0 text-right tabular-nums text-ink-subtle">{i + 1}</span>
+          <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-ink-subtle">Presentation order <span className="font-normal normal-case tracking-normal">· drag to arrange · General tasks always come first</span></p>
+          <SortableList items={ordered} keyOf={(a) => a.id} onChange={(next) => setOrder(next.map((a) => a.id))}>
+            {(a) => (
+              <>
                 <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />
                 <span className="min-w-0 flex-1 truncate text-ink">{a.name}</span>
-                <button type="button" onClick={() => move(a.id, -1)} disabled={i === 0} className="tap rounded-md p-1 text-ink-subtle hover:bg-canvas hover:text-ink disabled:opacity-30" aria-label={`Move ${a.name} up`}>
-                  <IconChevronUp size={14} />
-                </button>
-                <button type="button" onClick={() => move(a.id, 1)} disabled={i === ordered.length - 1} className="tap rounded-md p-1 text-ink-subtle hover:bg-canvas hover:text-ink disabled:opacity-30" aria-label={`Move ${a.name} down`}>
-                  <IconChevronDown size={14} />
-                </button>
-              </li>
-            ))}
-          </ol>
+              </>
+            )}
+          </SortableList>
         </div>
       )}
       <div className="mt-3 flex items-center gap-2 text-[12px] text-ink-subtle">
