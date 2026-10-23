@@ -71,7 +71,7 @@ export function TaskRow({ task, showApp = true, showDescription = false, trailin
           </div>
           {showDescription && task.description?.trim() && <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap break-words pl-[22px] text-[12px] leading-snug text-ink-muted">{task.description.trim()}</p>}
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-[22px] text-[11.5px] text-ink-subtle">
-            <span className="tabular-nums">{taskRef(task.number)}</span>
+            <span className="whitespace-nowrap tabular-nums">{taskRef(task.number)}</span>
             {showApp || (task.targets?.length ?? 0) > 1 ? (
               <TargetChips targets={task.targets} app={task.app} platform={task.platform} max={showApp ? 3 : 4} compact />
             ) : (

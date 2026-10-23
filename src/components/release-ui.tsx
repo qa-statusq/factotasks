@@ -129,7 +129,7 @@ function ReleaseTaskPicker({ appId, platform, releaseId, value, onChange }: { ap
                   <button type="button" onClick={() => toggle(t.id)} className={cn("flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-canvas/70", on && "bg-emerald-50/50")} aria-pressed={on}>
                     <span className={cn("mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] ring-1 ring-inset", on ? "bg-emerald-600 text-white ring-emerald-600" : "bg-surface ring-line")}>{on && <IconCheck size={12} />}</span>
                     <PriorityBadge priority={t.priority} compact className="mt-0.5 shrink-0" />
-                    <span className="shrink-0 text-[12px] tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
+                    <span className="shrink-0 text-[12px] tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block break-words text-[13px] font-medium text-ink">{t.title}</span>
                       {t.description && <span className="mt-0.5 line-clamp-2 block whitespace-pre-wrap text-[12px] leading-snug text-ink-muted">{t.description}</span>}
@@ -544,7 +544,7 @@ export function ReleaseTaskSummary({ tasks, className }: { tasks: ReleaseTaskLit
     <ul className={cn("flex flex-col gap-0.5", className)}>
       {tasks.map((t) => (
         <li key={t.id} className="flex items-baseline gap-1.5 text-[12.5px]">
-          <span className="shrink-0 tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
+          <span className="shrink-0 tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
           <span className="min-w-0 break-words text-ink">{t.title}</span>
           <StatusBadge status={t.status} className="ml-auto shrink-0" />
         </li>

@@ -176,7 +176,7 @@ function Approvals({ tasks, total }: { tasks: TaskCard[]; total: number }) {
           <li key={t.id} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3">
             <Link href={`/tasks/${t.id}`} className="min-w-0 flex-1">
               <div className="break-words text-sm font-medium text-ink">
-                <span className="mr-1.5 text-xs text-ink-subtle">{taskRef(t.number)}</span>
+                <span className="mr-1.5 text-xs whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
                 {t.title}
               </div>
               <RequestSummary task={t} className="mt-1" />

@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRef } from "@/lib/domain";
 import { dueInfo } from "@/components/task-list";
 import { Logo } from "@/components/ui/logo";
-import { AppTile } from "@/components/ui/task-chips";
+import { AppTile, EagerIconsContext } from "@/components/ui/task-chips";
 import { IconPrint, IconBack } from "@/components/ui/icons";
 import type { MeetingNote, MeetingPack, TaskCard } from "@/lib/types";
 
@@ -46,13 +46,19 @@ function PrintDoc() {
   const printed = useRef(false);
   useEffect(() => {
     if (!auto || !data || printed.current) return;
-    // Let fonts and app icons settle before the dialog freezes the page.
+    // Print once fonts and every app icon are in, so the PDF never shows blank tiles.
     // Once only: a background refresh of the pack must not re-open the dialog.
-    const t = window.setTimeout(() => {
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      await Promise.race([settleAssets(), new Promise((r) => setTimeout(r, 5000))]);
+      if (cancelled || printed.current) return;
       printed.current = true;
       window.print();
-    }, 600);
-    return () => window.clearTimeout(t);
+    }, 150);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
   }, [auto, data]);
 
   if (loading) return <Shell>Preparing the minutes…</Shell>;
@@ -85,30 +91,28 @@ function PrintDoc() {
         </button>
       </div>
 
+      <EagerIconsContext.Provider value={true}>
       <article className="print-doc mx-auto w-[210mm] max-w-[96vw] bg-white px-[16mm] py-[14mm] text-[10.5pt] leading-[1.4] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08),0_12px_40px_rgba(0,0,0,0.12)] print:max-w-none print:px-0 print:py-0 print:shadow-none">
         {/* Masthead */}
-        <header className="flex items-start justify-between border-b-2 border-ink pb-3">
-          <div>
-            <div className="flex items-center gap-2 text-[9pt] font-semibold uppercase tracking-[0.18em] text-ink-muted">
-              <Logo size={16} /> FactoTasks · {p.workspace_name}
-            </div>
-            <h1 className="mt-2 text-[20pt] font-bold leading-tight tracking-[-0.02em]">{m.title}</h1>
-            <p className="mt-1 text-[9.5pt] text-ink-muted">Minutes of meeting{p.series ? ` · ${p.series.name}` : ""}</p>
+        <header className="border-b-2 border-ink pb-3">
+          <div className="flex items-center justify-between gap-4 text-[8.5pt] font-semibold uppercase tracking-[0.18em] text-ink-muted">
+            <span className="inline-flex items-center gap-2"><Logo size={16} /> FactoTasks · {p.workspace_name}</span>
+            <span className="shrink-0">Minutes of meeting</span>
           </div>
-          <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-right text-[9pt]">
-            <dt className="text-ink-subtle">Held</dt>
-            <dd className="font-medium">{fmtWhen(m.held_at)} IST</dd>
-            <dt className="text-ink-subtle">Covering</dt>
-            <dd className="font-medium">{windowText}</dd>
-            <dt className="text-ink-subtle">Status</dt>
-            <dd className="font-medium">{m.status === "finalized" ? "Closed" : "Open"}</dd>
-            {p.apps.length > 0 && (
-              <>
-                <dt className="text-ink-subtle">Scope</dt>
-                <dd className="font-medium">{m.app_ids?.length ? `${p.apps.map((a) => a.name).join(", ")}${m.include_general !== false ? " + general tasks" : ""}` : "All apps & general tasks"}</dd>
-              </>
-            )}
+          <h1 className="mt-3 text-[21pt] font-bold leading-tight tracking-[-0.02em]">{m.title}</h1>
+          {p.series && !m.title.startsWith(p.series.name) && <p className="mt-0.5 text-[9.5pt] text-ink-muted">{p.series.name}</p>}
+          <dl className="mt-3 grid grid-cols-3 gap-x-6 text-[9.5pt]">
+            <Fact label="Held">{fmtWhen(m.held_at)} IST</Fact>
+            <Fact label="Covering">{windowText}</Fact>
+            <Fact label="Status">{m.status === "finalized" ? "Closed" : "Open"}</Fact>
           </dl>
+          {p.apps.length > 0 && (
+            <p className="mt-2.5 text-[9pt]">
+              <span className="mr-2 text-[7.5pt] font-semibold uppercase tracking-[0.14em] text-ink-subtle">Scope</span>
+              <span className="font-medium">{m.app_ids?.length ? p.apps.map((a) => a.name).join(", ") : "All apps"}</span>
+              {(!m.app_ids?.length || m.include_general !== false) && <span className="text-ink-muted"> + general tasks</span>}
+            </p>
+          )}
         </header>
 
         {/* Summary strip */}
@@ -133,8 +137,8 @@ function PrintDoc() {
         )}
 
         {agenda.map((g) => (
-          <section key={g.key} className="mt-6 break-inside-avoid-page">
-            <div className="flex items-center gap-2.5 border-b border-ink pb-1.5">
+          <section key={g.key} className="mt-6">
+            <div className="flex items-center gap-2.5 border-b border-ink pb-1.5 break-after-avoid-page">
               <AppTile name={g.name} color={g.color} iconUrl={g.iconUrl} className="h-6 w-6 rounded-md text-[9px]" />
               <h2 className="text-[13pt] font-bold tracking-[-0.01em]">{g.name}</h2>
               <span className="ml-auto text-[8.5pt] text-ink-muted">
@@ -152,7 +156,7 @@ function PrintDoc() {
                   <col style={{ width: "17%" }} />
                   <col />
                 </colgroup>
-                <thead>
+                <thead className="break-after-avoid-page">
                   <tr>
                     <Th>Version</Th>
                     <Th>Platform</Th>
@@ -200,7 +204,7 @@ function PrintDoc() {
                   <col style={{ width: "12%" }} />
                   <col style={{ width: "13%" }} />
                 </colgroup>
-                <thead>
+                <thead className="break-after-avoid-page">
                   <tr>
                     <Th>#</Th>
                     <Th>Task</Th>
@@ -225,7 +229,7 @@ function PrintDoc() {
         ))}
 
         {p.approvals.length > 0 && (
-          <section className="mt-6 break-inside-avoid-page">
+          <section className="mt-6">
             <H2>Awaiting approval</H2>
             <table className="w-full border-collapse text-[9.5pt]">
               <colgroup>
@@ -254,7 +258,7 @@ function PrintDoc() {
         )}
 
         {minutes.length > 0 && (
-          <section className="mt-6 break-inside-avoid-page">
+          <section className="mt-6">
             <H2>Minutes</H2>
             <table className="w-full border-collapse text-[9.5pt]">
               <colgroup>
@@ -309,7 +313,19 @@ function PrintDoc() {
           <span>Generated {fmtWhen(new Date().toISOString())} IST · FactoTasks</span>
         </footer>
       </article>
+      </EagerIconsContext.Provider>
     </div>
+  );
+}
+
+/** Resolves when fonts are ready and every image on the page has loaded (or failed) and decoded. */
+async function settleAssets() {
+  await document.fonts?.ready;
+  await Promise.all(
+    Array.from(document.images).map(async (img) => {
+      if (!img.complete) await new Promise<void>((r) => { img.addEventListener("load", () => r(), { once: true }); img.addEventListener("error", () => r(), { once: true }); });
+      if (img.naturalWidth) await img.decode().catch(() => undefined);
+    }),
   );
 }
 
@@ -318,7 +334,16 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function H2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mb-2 border-b border-ink pb-1 text-[13pt] font-bold tracking-[-0.01em]">{children}</h2>;
+  return <h2 className="mb-2 border-b border-ink pb-1 text-[13pt] font-bold tracking-[-0.01em] break-after-avoid-page">{children}</h2>;
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[7.5pt] font-semibold uppercase tracking-[0.14em] text-ink-subtle">{label}</dt>
+      <dd className="mt-0.5 truncate font-medium">{children}</dd>
+    </div>
+  );
 }
 
 function Figure({ n, label, tone }: { n: number; label: string; tone?: string }) {
@@ -338,7 +363,7 @@ function Td({ children, className }: { children: React.ReactNode; className?: st
 }
 function SectionRow({ label, tone }: { label: string; tone?: "done" }) {
   return (
-    <tr>
+    <tr className="break-after-avoid-page">
       <td colSpan={5} className={cn("bg-canvas px-1.5 py-0.5 text-[7.5pt] font-semibold uppercase tracking-[0.14em]", tone === "done" ? "text-emerald-700" : "text-ink-muted")}>
         {label}
       </td>

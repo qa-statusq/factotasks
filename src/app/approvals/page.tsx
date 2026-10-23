@@ -162,7 +162,7 @@ export default function ApprovalsPage() {
                               <ul className="flex flex-col gap-0.5">
                                 {open.map((t) => (
                                   <li key={t.id} className="flex items-baseline gap-1.5 text-[12.5px]">
-                                    <span className="shrink-0 tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
+                                    <span className="shrink-0 tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
                                     <span className="min-w-0 flex-1">
                                       <span className="break-words text-ink">{t.title}</span>
                                       {t.description?.trim() && <span className="mt-0.5 line-clamp-2 block whitespace-pre-wrap text-[11.5px] leading-snug text-ink-muted">{t.description.trim()}</span>}

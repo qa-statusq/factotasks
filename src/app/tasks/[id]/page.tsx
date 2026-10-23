@@ -20,6 +20,7 @@ import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { useClock } from "@/components/providers/clock-provider";
+import { useNameLabels } from "@/lib/use-name-labels";
 import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { reviewTask, applyTaskCard, refreshTaskViews } from "@/lib/task-actions";
@@ -136,7 +137,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
       {/* Header: title + the status pill that does the work */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold tabular-nums text-ink-subtle">{taskRef(task.number)}</span>
+          <span className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(task.number)}</span>
           <StatusMenu task={task} size="md" canChange={task.can.status} needsApproval={task.can.needs_approval} />
           <div className="ml-auto flex items-center gap-2">
             {task.can.edit && (
@@ -304,6 +305,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 /** Facts + live durations in a compact sidebar. */
 function Details({ task }: { task: TaskDetail }) {
+  const label = useNameLabels();
   useClock();
   const now = new Date().toISOString();
   const active = Number(task.active_seconds) + (task.status === "in_progress" ? secondsBetween(task.status_since, now) : 0);
@@ -361,7 +363,7 @@ function Details({ task }: { task: TaskDetail }) {
         <Row label="Created">
           <span title={istTime(task.created_at)}>
             <RelTime iso={task.created_at} />
-            {task.created_by && <span className="text-ink-subtle"> by {task.created_by.name.split(" ")[0]}</span>}
+            {task.created_by && <span className="text-ink-subtle"> by {label(task.created_by)}</span>}
           </span>
         </Row>
         {task.started_at && (

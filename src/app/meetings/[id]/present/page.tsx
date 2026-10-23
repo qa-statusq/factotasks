@@ -8,15 +8,15 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
-import { buildAgenda, notesByTask, deckRows, nameLabels, packPeople, ownerText, targetMatrix, platformsOn, SHARED_KEY, type AgendaGroup } from "@/lib/meeting-agenda";
+import { buildAgenda, notesByTask, deckRows, nameLabels, packPeople, ownerText, targetMatrix, SHARED_KEY, type AgendaGroup } from "@/lib/meeting-agenda";
 import { istTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
-import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, TASK_STATUSES, taskRef, type TaskStatus, type ReleaseStatus } from "@/lib/domain";
+import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRef, type TaskStatus, type ReleaseStatus } from "@/lib/domain";
 import { dueInfo } from "@/components/task-list";
-import { AppTile, PlatformGlyph } from "@/components/ui/task-chips";
+import { AppTile, PlatformGlyph, EagerIconsContext } from "@/components/ui/task-chips";
 import { nameInitials } from "@/lib/name";
 import { ClampedText } from "@/components/ui/clamped-text";
-import { IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconApps, IconUserCheck, IconMessage, IconArrowRight } from "@/components/ui/icons";
+import { IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconApps, IconUserCheck, IconMessage, IconArrowRight, IconAndroid, IconApple, IconCheck } from "@/components/ui/icons";
 import type { MeetingNote, MeetingPack, TaskCard, UserBrief } from "@/lib/types";
 
 /**
@@ -32,6 +32,13 @@ type Pack = MeetingPack & { workspace_name: string };
 type Release = MeetingPack["releases"][number];
 
 const fmtDay = (iso: string) => istTime(iso).replace(/, \d\d:\d\d(:\d\d)? (am|pm) IST$/, "");
+/** Cover title as lines: the name, then the date on its own line (no separator dot). */
+function titleParts(title: string, heldAt: string): string[] {
+  const i = title.lastIndexOf(" · ");
+  if (i > 0) return [title.slice(0, i).trim(), title.slice(i + 3).trim()];
+  const day = fmtDay(heldAt);
+  return title.includes(day) ? [title] : [title, day];
+}
 const fmtWhen = (iso: string) => istTime(iso).replace(/:\d\d (am|pm) IST$/, " $1");
 const ymdPretty = (ymd: string) => new Date(ymd + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 const NOTES_SHOWN_PER_TASK = 3;
@@ -234,6 +241,12 @@ function Deck() {
 
   const jumps = slides.map((s, i) => ({ s, i })).filter((x) => x.s.jump);
   const currentJump = [...jumps].reverse().find((x) => x.i <= index)?.i;
+  // Tiles share ~46cqw of the band (nav container units): 3.2cqw each until there are many sections.
+  const tile = Math.max(1.9, Math.min(3.2, 46 / Math.max(1, jumps.length)));
+  // Width the strip really occupies, in stage units (its container is 70% of the stage):
+  // tiles + gaps, two arrows, the counter, the divider, four buttons and the paddings (≈44 nav-cqw of fixed chrome).
+  const stripWidth = (44 + jumps.length * (tile + 0.4)) * 0.7;
+  const titleMax = Math.max(22, 100 - 4 - stripWidth - 1.5);
 
   return (
     <div
@@ -250,32 +263,71 @@ function Deck() {
     >
       <style>{`@media print { @page { size: landscape; margin: 0; } }`}</style>
       {/* 16:9 stage */}
+      <EagerIconsContext.Provider value={true}>
       <div className="deck-stage relative overflow-hidden bg-canvas text-ink shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_30px_80px_rgba(0,0,0,0.6)]" style={{ width: "min(100vw, calc(100vh * 16 / 9))", height: "min(100vh, calc(100vw * 9 / 16))" }}>
+        {/* The title band lives once, above every slide, so it never blinks on a slide change. Each slide keeps an invisible copy for print. */}
+        <div className="deck-chrome absolute inset-x-0 top-0 flex items-center bg-[#1c1c1a] px-[4cqw] text-[1.05cqw] text-white/60" style={{ height: "9.6%", containerType: "inline-size" }}>
+          <span className="inline-flex min-w-0 items-center gap-[0.8cqw]" style={{ maxWidth: `${titleMax}cqw` }}>
+            <Mark className="h-[1.9cqw] w-[1.9cqw] text-white" />
+            <span className="truncate font-semibold text-white/90">{data.meeting.title}</span>
+            {!data.meeting.title.includes(fmtDay(data.meeting.held_at)) && <span className="shrink-0">· {fmtDay(data.meeting.held_at)}</span>}
+          </span>
+        </div>
         {slides.map((s, i) => (
           <section key={s.key} className={cn("deck-slide absolute inset-0 flex flex-col transition-opacity duration-200", i === index ? "opacity-100" : "pointer-events-none opacity-0")} aria-hidden={i !== index} inert={i !== index ? true : undefined}>
             {s.render(i + 1, total)}
           </section>
         ))}
+        {/* Section strip in the title band: every section one tap away, never over the content. */}
+        <nav className="deck-chrome absolute right-0 top-0 flex items-center justify-end" style={{ height: "9.6%", width: "70%", containerType: "inline-size" }} aria-label="Sections">
+          <div className="flex h-full w-full items-center justify-end gap-[0.45cqw] pl-[1cqw] pr-[5.4cqw]">
+            <button type="button" onClick={prev} disabled={index === 0} className="flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-white disabled:opacity-25" aria-label="Previous slide">
+              <IconChevronLeft className="h-[60%] w-[60%]" />
+            </button>
+            <div className="flex h-full min-w-0 shrink items-center justify-end gap-[0.4cqw]">
+              {jumps.map(({ s, i }, k) => {
+                const on = i === currentJump;
+                const j = s.jump!;
+                return (
+                  <button key={s.key} type="button" onClick={() => go(i)} title={`${j.label}${j.sub ? ` · ${j.sub}` : ""}${k < 9 ? ` (${k + 1})` : ""}`} aria-current={on ? "step" : undefined} style={{ width: `${tile}cqw`, height: `${tile}cqw` }} className={cn("flex shrink-0 items-center justify-center rounded-[0.8cqw] transition-[opacity,background-color]", on ? "bg-white/20 opacity-100 ring-[0.22cqw] ring-white" : "opacity-55 hover:bg-white/10 hover:opacity-100")}>
+                    {j.icon ? (
+                      <AppTile name={j.icon.name} color={j.icon.color} iconUrl={j.icon.iconUrl} className="h-[72%] w-[72%] rounded-[0.5cqw] text-[1.2cqw]" />
+                    ) : (
+                      <span className={cn("flex h-[72%] w-[72%] items-center justify-center rounded-[0.55cqw] text-[1.3cqw] font-bold text-white", j.kind === "shared" ? "bg-teal-600" : j.kind === "general" ? "bg-slate-500" : "bg-white/15")}>
+                        {j.kind === "cover" ? <Mark className="h-[85%] w-[85%]" /> : j.kind === "shared" ? "⇄" : j.kind === "general" ? "G" : j.kind === "approvals" ? <IconUserCheck className="h-[62%] w-[62%]" /> : j.kind === "minutes" ? <IconMessage className="h-[62%] w-[62%]" /> : <IconArrowRight className="h-[62%] w-[62%]" />}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" onClick={next} disabled={index === last} className="flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-white disabled:opacity-25" aria-label="Next slide">
+              <IconChevronRight className="h-[60%] w-[60%]" />
+            </button>
+            <span className="mx-[0.4cqw] shrink-0 whitespace-nowrap text-[1.6cqw] tabular-nums text-white/60">
+              {index + 1} / {total}
+            </span>
+            <span className="mx-[0.5cqw] h-[48%] w-px shrink-0 bg-white/15" aria-hidden />
+            <button type="button" onClick={() => setJumpOpen((o) => !o)} className={cn("flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-white", jumpOpen && "bg-white/15 text-white")} aria-label="Jump to a section" title="Jump to a section (a)">
+              <IconApps className="h-[58%] w-[58%]" />
+            </button>
+            <button type="button" onClick={() => window.open(`/meetings/${id}/print`, "_blank", "noopener")} className="flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-white" aria-label="Print" title="Minutes as an A4 document — print or save as PDF">
+              <IconPrint className="h-[58%] w-[58%]" />
+            </button>
+            <button type="button" onClick={toggleFullscreen} className="flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-white" aria-label="Full screen" title="Full screen (f)">
+              <IconMaximize className="h-[58%] w-[58%]" />
+            </button>
+            <button type="button" onClick={exit} className="flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-white" aria-label="Exit" title="Exit (Esc)">
+              <IconX className="h-[66%] w-[66%]" />
+            </button>
+          </div>
+        </nav>
         {/* Thin edge strips inside the slide's side padding — they never sit over content. */}
         <button type="button" onClick={prev} className="deck-chrome absolute inset-y-[12%] left-0 w-[3%] opacity-0" aria-label="Previous slide" tabIndex={-1} />
         <button type="button" onClick={next} className="deck-chrome absolute inset-y-[12%] right-0 w-[3%] opacity-0" aria-label="Next slide" tabIndex={-1} />
       </div>
+      </EagerIconsContext.Provider>
 
-      {/* Controls live outside the stage so they never print or cover content. */}
-      <div className={cn("deck-chrome absolute right-3 top-3 z-10 flex items-center gap-0.5 rounded-xl border border-white/10 bg-[#1f1f1c]/90 p-0.5 text-white/70 backdrop-blur transition-opacity duration-300", !chrome && "pointer-events-none opacity-0")}>
-        <button type="button" onClick={() => setJumpOpen((o) => !o)} className={cn("rounded-lg p-2 hover:bg-white/10 hover:text-white", jumpOpen && "bg-white/15 text-white")} aria-label="Jump to a section" title="Jump to a section (a)">
-          <IconApps size={17} />
-        </button>
-        <button type="button" onClick={() => window.open(`/meetings/${id}/print`, "_blank", "noopener")} className="rounded-lg p-2 hover:bg-white/10 hover:text-white" aria-label="Print" title="Minutes as an A4 document — print or save as PDF">
-          <IconPrint size={17} />
-        </button>
-        <button type="button" onClick={toggleFullscreen} className="rounded-lg p-2 hover:bg-white/10 hover:text-white" aria-label="Full screen" title="Full screen (f)">
-          <IconMaximize size={17} />
-        </button>
-        <button type="button" onClick={exit} className="rounded-lg p-2 hover:bg-white/10 hover:text-white" aria-label="Exit" title="Exit (Esc)">
-          <IconX size={19} />
-        </button>
-      </div>
       {jumpOpen && (
         <div className="absolute inset-0 z-20 flex items-start justify-center bg-black/50 p-6 pt-16" onClick={() => setJumpOpen(false)}>
           <div className="w-full max-w-[760px] rounded-2xl border border-white/10 bg-[#1f1f1c] p-3 text-white shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Jump to">
@@ -295,38 +347,7 @@ function Deck() {
           </div>
         </div>
       )}
-      {/* Dock: every section one tap away — app tiles with their names, the current one lit. */}
-      <nav className={cn("deck-chrome absolute bottom-1.5 left-1/2 z-10 max-w-[96vw] -translate-x-1/2 transition-opacity duration-300", !chrome && "pointer-events-none opacity-0")} aria-label="Sections">
-        <div className="flex items-stretch gap-1 rounded-2xl border border-white/10 bg-[#1f1f1c]/95 p-1 text-white/70 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur">
-          <button type="button" onClick={prev} disabled={index === 0} className="flex w-8 shrink-0 items-center justify-center rounded-xl hover:bg-white/10 hover:text-white disabled:opacity-30" aria-label="Previous slide">
-            <IconChevronLeft size={16} />
-          </button>
-          <div className="flex min-w-0 items-stretch gap-0.5 overflow-x-auto no-scrollbar">
-            {jumps.map(({ s, i }, k) => {
-              const on = i === currentJump;
-              const j = s.jump!;
-              return (
-                <button key={s.key} type="button" onClick={() => go(i)} title={`${j.label}${j.sub ? ` · ${j.sub}` : ""}${k < 9 ? ` (${k + 1})` : ""}`} aria-current={on ? "step" : undefined} className={cn("flex w-[66px] shrink-0 flex-col items-center gap-[3px] rounded-xl px-1 py-1 transition-colors", on ? "bg-white text-[#141412]" : "hover:bg-white/10 hover:text-white")}>
-                  {j.icon ? (
-                    <AppTile name={j.icon.name} color={j.icon.color} iconUrl={j.icon.iconUrl} className="h-5 w-5 rounded-md text-[8px]" />
-                  ) : (
-                    <span className={cn("flex h-5 w-5 items-center justify-center rounded-md text-[9px] font-bold", on ? "bg-[#141412]/10 text-[#141412]" : "bg-white/15 text-white", j.kind === "shared" && "bg-teal-700 text-white", j.kind === "general" && "bg-slate-500 text-white")}>
-                      {j.kind === "cover" ? <Mark className="h-4 w-4" /> : j.kind === "shared" ? "⇄" : j.kind === "general" ? "G" : j.kind === "approvals" ? <IconUserCheck size={12} /> : j.kind === "minutes" ? <IconMessage size={12} /> : <IconArrowRight size={12} />}
-                    </span>
-                  )}
-                  <span className="line-clamp-2 w-full text-center text-[9.5px] font-medium leading-[1.1]">{j.short ?? j.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          <span className="flex shrink-0 items-center whitespace-nowrap px-1.5 text-[11px] tabular-nums text-white/60">
-            {index + 1} / {total}
-          </span>
-          <button type="button" onClick={next} disabled={index === last} className="flex w-8 shrink-0 items-center justify-center rounded-xl hover:bg-white/10 hover:text-white disabled:opacity-30" aria-label="Next slide">
-            <IconChevronRight size={16} />
-          </button>
-        </div>
-      </nav>
+
     </div>
   );
 }
@@ -342,93 +363,58 @@ function buildSlides(p: Pack): Slide[] {
   const appMeta = new Map(p.apps.map((a) => [a.id, a]));
   const windowText = p.previous_meeting ? `${fmtDay(p.previous_meeting)} – ${fmtDay(m.held_at)}` : `7 days to ${fmtDay(m.held_at)}`;
   const frame = (n: number, total: number) => ({ meeting: m, workspace: p.workspace_name, n, total });
-  const statusesUsed = new Set<TaskStatus>([...p.pending, ...p.done].map((t) => t.status));
 
-  /* Cover: title and the headline figures across the top; the agenda and the
-     meeting's facts beneath — the shape of a report's first page. */
-  const scopeTiles = m.app_ids?.length ? p.apps : [];
+  /* Cover: minimal — the title block, four plain figures, and the agenda as
+     a quiet list. No panels, nothing scrolls. */
+  const dense = agenda.length > 8;
+  const agendaCols = agenda.length <= 4 ? 1 : dense ? 3 : 2;
+  const agendaRows = Math.ceil(agenda.length / agendaCols);
   slides.push({
     key: "cover",
     jump: { label: "Cover", sub: m.title, short: "Cover", kind: "cover" },
     render: (n, total) => (
       <Frame {...frame(n, total)} bare>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <header className="flex items-end justify-between gap-[3cqw] border-b border-line pb-[1.5cqw]">
-            <div className="min-w-0">
-              <p className="text-[1.05cqw] font-semibold uppercase tracking-[0.22em] text-ink-subtle">Minutes of meeting{p.series ? ` · ${p.series.name}` : ""}</p>
-              <h1 className="mt-[0.7cqw] max-w-[60cqw] break-words text-[3.2cqw] font-bold leading-[1.08] tracking-[-0.03em] text-ink [text-wrap:balance]">{m.title}</h1>
-              <p className="mt-[0.7cqw] text-[1.25cqw] text-ink-muted">
-                Held {fmtWhen(m.held_at)} IST · covering {windowText}
-                {m.status === "finalized" ? " · closed, minutes locked" : " · open, live figures"}
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-[0.7cqw]">
-              <Tile n={p.done.length} label="Done" tone="emerald" />
-              <Tile n={p.pending.length} label="Pending" />
-              <Tile n={p.carried.length} label="Carried" tone={p.carried.length ? "amber" : undefined} />
-              <Tile n={p.overdue.length} label="Overdue" tone={p.overdue.length ? "red" : undefined} />
-            </div>
-          </header>
-          <div className="mt-[1.5cqw] grid min-h-0 flex-1 grid-cols-[1.3fr_1fr] gap-[2cqw]">
-            <div className={PANEL_SCROLL} data-deck-scroll>
-              <p className={cn(PANEL_LABEL, "sticky top-0 z-[1]")}>Agenda · {agenda.length} section{agenda.length === 1 ? "" : "s"}</p>
-              {agenda.length === 0 ? (
-                <p className="px-[1.3cqw] py-[1.2cqw] text-[1.25cqw] text-ink-muted">Nothing changed since the last meeting.</p>
-              ) : (
-                <ol className="divide-y divide-line/70 px-[1.3cqw]">
-                  {agenda.map((g, i) => (
-                    <li key={g.key} className={cn("flex items-center gap-[0.9cqw] text-ink", agenda.length > 8 ? "py-[0.5cqw] text-[1.1cqw]" : "py-[0.75cqw] text-[1.25cqw]")}>
-                      <span className="w-[1.6cqw] shrink-0 text-right text-[0.95cqw] tabular-nums text-ink-subtle">{i + 1}</span>
-                      <GroupTile g={g} className={agenda.length > 8 ? "h-[1.9cqw] w-[1.9cqw] rounded-[0.45cqw] text-[0.8cqw]" : "h-[2.2cqw] w-[2.2cqw] rounded-[0.5cqw] text-[0.9cqw]"} />
-                      <span className="min-w-0 flex-1 break-words font-semibold leading-tight">{g.name}</span>
-                      <span className="flex shrink-0 items-center gap-[0.5cqw] tabular-nums">
-                        {g.done.length > 0 && <span className={cn(BADGE_SM, "bg-emerald-600 text-white")}>{g.done.length} done</span>}
-                        {g.pending.length > 0 && <span className={cn(BADGE_SM, "bg-slate-200 text-slate-800")}>{g.pending.length} open</span>}
-                        {g.releases.length > 0 && <span className={cn(BADGE_SM, "bg-ink text-white")}>{g.releases.length} rel</span>}
-                        {!g.done.length && !g.pending.length && !g.releases.length && <span className="text-[1cqw] text-ink-subtle">—</span>}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
-            <div className="flex min-h-0 flex-col gap-[1.2cqw]">
-              <div className={PANEL}>
-                <p className={PANEL_LABEL}>Scope</p>
-                <div className="px-[1.3cqw] py-[1cqw]">
-                  {scopeTiles.length ? (
-                    <div className="flex flex-wrap gap-[0.5cqw]" title={scopeTiles.map((a) => a.name).join(", ")}>
-                      {scopeTiles.map((a) => (
-                        <AppTile key={a.id} name={a.name} color={a.color} iconUrl={a.icon_url} className="h-[2.4cqw] w-[2.4cqw] rounded-[0.55cqw] text-[0.95cqw]" />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-[1.2cqw] text-ink">Every app</p>
-                  )}
-                  <p className="mt-[0.6cqw] text-[1.05cqw] text-ink-muted">
-                    {scopeTiles.length ? `${scopeTiles.length} app${scopeTiles.length === 1 ? "" : "s"}` : `${p.apps.length} app${p.apps.length === 1 ? "" : "s"}`} · {p.people.length} {p.people.length === 1 ? "person" : "people"}
-                    {p.releases.length ? ` · ${p.releases.length} release${p.releases.length === 1 ? "" : "s"}` : ""}
-                  </p>
-                </div>
+        <div className="flex min-h-0 flex-1 flex-col pt-[1.2cqw]">
+          <p className="text-[1.05cqw] font-semibold uppercase tracking-[0.24em] text-ink-subtle">Minutes of meeting{p.series ? ` · ${p.series.name}` : ""}</p>
+          <h1 className="mt-[1cqw] max-w-[78cqw] break-words text-[4cqw] font-bold leading-[1.06] tracking-[-0.03em] text-ink">
+            {titleParts(m.title, m.held_at).map((part, i) => (
+              <span key={i} className={cn("block", i > 0 && "mt-[1.1cqw] text-[2.4cqw] font-semibold leading-none text-ink-muted")}>{part}</span>
+            ))}
+          </h1>
+          <p className="mt-[1cqw] text-[1.3cqw] text-ink-muted">
+            Held {fmtWhen(m.held_at)} IST · covering {windowText} · {m.app_ids?.length ? `${p.apps.length} app${p.apps.length === 1 ? "" : "s"}` : "every app"} · {p.people.length} {p.people.length === 1 ? "person" : "people"}
+          </p>
+          <dl className="mt-[2.2cqw] flex gap-[4cqw] border-y border-line py-[1.4cqw]">
+            {[
+              ["Done", p.done.length, "text-emerald-700"],
+              ["Pending", p.pending.length, "text-ink"],
+              ["Carried", p.carried.length, p.carried.length ? "text-amber-700" : "text-ink"],
+              ["Overdue", p.overdue.length, p.overdue.length ? "text-red-600" : "text-ink"],
+              ["Releases", p.releases.length, "text-ink"],
+            ].map(([label, n, tone]) => (
+              <div key={label as string}>
+                <dt className="text-[0.95cqw] font-semibold uppercase tracking-[0.16em] text-ink-subtle">{label}</dt>
+                <dd className={cn("mt-[0.3cqw] text-[3cqw] font-bold leading-none tabular-nums tracking-[-0.02em]", tone as string)}>{n as number}</dd>
               </div>
-              <div className={PANEL}>
-                <p className={PANEL_LABEL}>Status colours</p>
-                <div className="flex flex-wrap gap-[0.5cqw] px-[1.3cqw] py-[1cqw]">
-                  {TASK_STATUSES.filter((st) => statusesUsed.has(st) || st === "done" || st === "in_progress" || st === "todo").map((st) => (
-                    <span key={st} className={cn(BADGE, DECK_STATUS[st])}>{STATUS_META[st].label}</span>
-                  ))}
-                </div>
-              </div>
-              <div className={cn(PANEL, "flex-1")}>
-                <p className={PANEL_LABEL}>How to read</p>
-                <ul className="flex flex-col gap-[0.45cqw] px-[1.3cqw] py-[1cqw] text-[1.05cqw] leading-snug text-ink-muted">
-                  <li>One section per app: its releases, then every task — done first, then in progress, then waiting.</li>
-                  <li>Work on several apps sits under <b className="text-ink">Across apps</b> with where each one stands.</li>
-                  <li>Carried = still open from an earlier meeting of this series.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
+            ))}
+          </dl>
+          <p className="mt-[1.8cqw] text-[0.95cqw] font-semibold uppercase tracking-[0.16em] text-ink-subtle">Agenda</p>
+          {agenda.length === 0 ? (
+            <p className="mt-[0.8cqw] text-[1.25cqw] text-ink-muted">Nothing changed since the last meeting.</p>
+          ) : (
+            <ol className="mt-[0.6cqw] grid min-h-0 gap-x-[4cqw]" style={{ gridTemplateColumns: `repeat(${agendaCols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${agendaRows}, auto)`, gridAutoFlow: "column" }}>
+              {agenda.map((g, i) => (
+                <li key={g.key} className={cn("flex items-center gap-[0.8cqw] border-b border-line/60 text-ink", dense ? "py-[0.5cqw] text-[1.1cqw]" : "py-[0.7cqw] text-[1.25cqw]")}>
+                  <span className="w-[1.4cqw] shrink-0 text-right text-[0.95cqw] tabular-nums text-ink-subtle">{i + 1}</span>
+                  <GroupTile g={g} className={dense ? "h-[1.9cqw] w-[1.9cqw] rounded-[0.45cqw] text-[0.8cqw]" : "h-[2.2cqw] w-[2.2cqw] rounded-[0.5cqw] text-[0.9cqw]"} />
+                  <span className="min-w-0 flex-1 break-words font-semibold leading-tight">{g.name}</span>
+                  <span className="shrink-0 whitespace-nowrap text-[0.95em] tabular-nums text-ink-muted">
+                    {[g.done.length ? `${g.done.length} done` : "", g.pending.length ? `${g.pending.length} open` : "", g.releases.length ? `${g.releases.length} release${g.releases.length === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ") || "—"}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
       </Frame>
     ),
@@ -447,7 +433,7 @@ function buildSlides(p: Pack): Slide[] {
         jump: ((jumped = true), jump),
         render: (n, total) => (
           <Frame {...frame(n, total)} app={app} section="Releases" part={`${g.releases.length} version${g.releases.length === 1 ? "" : "s"}`}>
-            <ReleaseCards releases={g.releases} />
+            <ReleaseCards releases={g.releases} labels={labels} />
           </Frame>
         ),
       });
@@ -458,7 +444,7 @@ function buildSlides(p: Pack): Slide[] {
       key: `app-${g.key}`,
       jump: jumped ? undefined : ((jumped = true), jump),
       render: (n, total) => (
-        <Frame {...frame(n, total)} app={app} section={shared ? undefined : "Tasks"} title={shared ? "Across apps" : undefined} subtitle={shared ? "Work that ships on more than one app — where each one stands" : undefined} part={`${rows.length} task${rows.length === 1 ? "" : "s"}`}>
+        <Frame {...frame(n, total)} app={app} section={shared ? undefined : "Tasks"} title={shared ? "Across apps" : undefined} subtitle={shared ? "Tasks that ship on more than one app — a green tick marks a platform already released" : undefined} part={`${rows.length} task${rows.length === 1 ? "" : "s"}`}>
           <TaskTable rows={rows} notes={notes} labels={labels} currentApp={shared ? undefined : g.key} matrix={shared} />
         </Frame>
       ),
@@ -510,7 +496,7 @@ function buildSlides(p: Pack): Slide[] {
   }
 
   /* Next steps: everything still open, in the same table as the app slides. */
-  const carried = [...p.pending].sort((a, b) => (b.carry ?? 0) - (a.carry ?? 0) || a.number - b.number);
+  const carried = deckRows({ key: "next", name: "Next steps", color: "", iconUrl: null, pending: p.pending, done: [], releases: [], carried: 0, overdue: 0 });
   slides.push({
     key: "end",
     jump: { label: "Next steps", short: "Next steps", kind: "next", sub: `${p.pending.length} open` },
@@ -594,8 +580,8 @@ function Frame({
   return (
     <>
       {/* Title band */}
-      <div className="flex h-[4.6cqw] shrink-0 items-center justify-between bg-[#1c1c1a] px-[4cqw] text-[1.05cqw] text-white/60">
-        <span className="inline-flex min-w-0 items-center gap-[0.8cqw]">
+      <div className="invisible flex h-[5.4cqw] shrink-0 items-center justify-between bg-[#1c1c1a] px-[4cqw] text-[1.05cqw] text-white/60 print:visible">
+        <span className="inline-flex min-w-0 max-w-[24cqw] items-center gap-[0.8cqw]">
           <Mark className="h-[1.9cqw] w-[1.9cqw] text-white" />
           <span className="truncate font-semibold text-white/90">{meeting.title}</span>
           {!meeting.title.includes(fmtDay(meeting.held_at)) && <span className="shrink-0">· {fmtDay(meeting.held_at)}</span>}
@@ -698,7 +684,6 @@ const PANEL = "overflow-hidden rounded-[1cqw] border border-line bg-surface shad
 const TH = "bg-canvas px-[1.3cqw] py-[0.9cqw] text-left text-[0.95cqw] font-semibold uppercase tracking-[0.16em] text-ink-subtle";
 /* Same look as a table header, for a panel caption that is not a <th>. */
 const PANEL_SCROLL = PANEL.replace("overflow-hidden", "min-h-0 max-h-full overflow-y-auto overflow-x-hidden overscroll-contain");
-const PANEL_LABEL = "block border-b border-line/70 " + TH;
 const TD = "px-[1.3cqw] py-[1.1cqw] align-top text-[1.35cqw] leading-snug";
 const BADGE = "inline-flex items-center whitespace-nowrap rounded-full px-[1cqw] py-[0.4cqw] text-[1.05cqw] font-bold leading-none";
 const BADGE_SM = "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-[0.8cqw] py-[0.3cqw] text-[0.95cqw] font-bold leading-none";
@@ -738,41 +723,63 @@ function Owners({ users, labels, compact }: { users: UserBrief[]; labels: Map<st
   );
 }
 
-/** Where a task ships, app by app: one row per app, a fixed column per platform so the chips line up. */
-function ShipMatrix({ t }: { t: TaskCard }) {
-  const rows = targetMatrix(t);
-  if (!rows.length) return <span className="text-ink-subtle">—</span>;
-  const cell = (x: TaskCard["targets"][number] | undefined, platform: "android" | "ios") => {
-    if (!x) return <span className="flex h-[2.3cqw] items-center justify-center rounded-[0.5cqw] border border-dashed border-line text-[0.9cqw] text-ink-subtle/60" aria-label={`Not on ${PLATFORM_META[platform].label}`}>—</span>;
-    const tone = x.released_at ? "bg-emerald-600 text-white ring-emerald-600" : x.release ? "bg-amber-50 text-amber-800 ring-amber-300" : "bg-canvas text-ink-muted ring-line";
-    const text = x.released_at ? "Released" : x.release ? `v${x.release.version_name}` : "Pending";
-    return (
-      <span className={cn("flex h-[2.3cqw] items-center justify-center gap-[0.4cqw] rounded-[0.5cqw] px-[0.5cqw] text-[0.95cqw] font-bold leading-none ring-1 ring-inset", tone)} title={`${PLATFORM_META[platform].label}: ${x.released_at ? `released in v${x.release?.version_name ?? ""}` : x.release ? `in v${x.release.version_name} (${RELEASE_STATUS_META[x.release.status].label})` : "no release yet"}`}>
-        <PlatformGlyph platform={platform} size={10} className={cn("[&>svg]:h-[1cqw] [&>svg]:w-[1cqw]", x.released_at && "[&_svg]:text-white")} />
-        <span className="truncate">{text}</span>
-      </span>
-    );
-  };
+/**
+ * Where a task ships, compactly: one line per app — tile, name, then a glyph
+ * per platform with a green tick once that target is released ("NEW PF ·
+ * Android ✓ · iOS v1.1.4"). On an app's own slide only the platforms show.
+ */
+/** A platform on a task: filled green with a check once released there, quiet grey while it waits. */
+function PlatformMark({ x }: { x: TaskCard["targets"][number] }) {
+  const released = !!x.released_at;
+  const label = `${PLATFORM_META[x.platform].label}: ${released ? `released in v${x.release?.version_name ?? ""}` : x.release ? `in v${x.release.version_name} (${RELEASE_STATUS_META[x.release.status].label})` : "no release yet"}`;
   return (
-    <div className="flex flex-col gap-[0.4cqw]">
-      <div className="grid grid-cols-[minmax(0,1fr)_7.2cqw_7.2cqw] gap-x-[0.5cqw] text-[0.8cqw] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
-        <span />
-        <span className="text-center">Android</span>
-        <span className="text-center">iOS</span>
-      </div>
-      {rows.map(({ app, items }) => (
-        <div key={app.id} className="grid grid-cols-[minmax(0,1fr)_7.2cqw_7.2cqw] items-center gap-x-[0.5cqw]">
-          <span className="flex min-w-0 items-center gap-[0.5cqw]">
-            <AppTile name={app.name} color={app.color} iconUrl={app.icon_url} className="h-[1.9cqw] w-[1.9cqw] rounded-[0.45cqw] text-[0.8cqw]" />
-            <span className="min-w-0 break-words text-[1.1cqw] font-medium leading-tight text-ink">{app.name}</span>
-          </span>
-          {cell(items.find((x) => x.platform === "android"), "android")}
-          {cell(items.find((x) => x.platform === "ios"), "ios")}
-        </div>
-      ))}
-    </div>
+    <span className={cn("relative inline-flex h-[2.4cqw] w-[2.4cqw] shrink-0 items-center justify-center rounded-[0.55cqw]", released ? "bg-emerald-600 [&_svg]:text-white" : "bg-ink/[0.06] [&_svg]:text-ink-subtle")} title={label} aria-label={label}>
+      {x.platform === "android" ? <IconAndroid className="h-[1.35cqw] w-[1.35cqw]" /> : <IconApple className="h-[1.35cqw] w-[1.35cqw]" />}
+      {released && (
+        <span className="absolute -bottom-[0.3cqw] -right-[0.3cqw] flex h-[1.05cqw] w-[1.05cqw] items-center justify-center rounded-full bg-white shadow-[0_0_0_0.15cqw_#059669]">
+          <IconCheck className="h-[0.7cqw] w-[0.7cqw] !text-emerald-700" strokeWidth={3.5} />
+        </span>
+      )}
+    </span>
   );
 }
+
+/** An icon that names itself on hover — large enough to read from the back of the room. */
+function AppHint({ name, children }: { name: string; children: React.ReactNode }) {
+  return (
+    <span className="group relative inline-flex" title={name}>
+      {children}
+      <span className="pointer-events-none absolute left-full top-1/2 z-10 ml-[0.6cqw] -translate-y-1/2 whitespace-nowrap rounded-[0.5cqw] bg-ink px-[0.9cqw] py-[0.45cqw] text-[1.15cqw] font-semibold text-white opacity-0 shadow-[0_0.4cqw_1.2cqw_rgba(0,0,0,0.25)] transition-opacity duration-150 group-hover:opacity-100">
+        {name}
+      </span>
+    </span>
+  );
+}
+
+function DeckTargets({ t, currentApp }: { t: TaskCard; currentApp?: string }) {
+  const rows = targetMatrix(t).filter((x) => !currentApp || x.app.id === currentApp);
+  if (!rows.length) return null;
+  const marks = (items: TaskCard["targets"]) => (
+    <span className="inline-flex items-center gap-[0.35cqw]">
+      {items.map((x) => (
+        <PlatformMark key={x.platform} x={x} />
+      ))}
+    </span>
+  );
+  if (currentApp) return marks(rows[0].items);
+  return (
+    <span className="mt-[0.5cqw] flex flex-wrap items-center gap-x-[1.2cqw] gap-y-[0.5cqw]">
+      {rows.map(({ app, items }) => (
+        <span key={app.id} className="inline-flex items-center gap-[0.5cqw]" title={`${app.name}: ${items.map((x) => `${PLATFORM_META[x.platform].label} ${x.released_at ? "released" : x.release ? `in v${x.release.version_name}` : "pending"}`).join(", ")}`}>
+          <AppTile name={app.name} color={app.color} iconUrl={app.icon_url} className="h-[2.1cqw] w-[2.1cqw] rounded-[0.5cqw] text-[0.85cqw]" />
+          <span className="text-[1.05cqw] font-medium text-ink-muted">{app.name}</span>
+          {marks(items)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 
 function TaskTable({
   rows,
@@ -796,10 +803,9 @@ function TaskTable({
       <table className="w-full border-collapse">
         <colgroup>
           <col style={{ width: "6%" }} />
-          {showApp && <col style={{ width: "15%" }} />}
+          {showApp && <col style={{ width: "14%" }} />}
           <col />
-          {matrix && <col style={{ width: "30%" }} />}
-          <col style={{ width: matrix ? "15%" : "19%" }} />
+          <col style={{ width: "19%" }} />
           <col style={{ width: "9%" }} />
           <col style={{ width: "12%" }} />
         </colgroup>
@@ -808,7 +814,6 @@ function TaskTable({
             <th className={TH}>#</th>
             {showApp && <th className={TH}>App</th>}
             <th className={TH}>Task</th>
-            {matrix && <th className={TH}>Ships on</th>}
             <th className={TH}>Owner</th>
             <th className={TH}>Due</th>
             <th className={cn(TH, "text-right")}>Status</th>
@@ -819,44 +824,39 @@ function TaskTable({
             const taskNotes = notes.get(t.id) || [];
             const desc = t.description?.trim();
             const due = dueInfo(t.due_date, t.status);
-            const plats = currentApp ? platformsOn(t, currentApp) : [];
-            const apps = showApp ? targetMatrix(t).map((x) => x.app) : [];
+            const appRows = showApp ? targetMatrix(t) : [];
             return (
               <tr key={t.id} className="border-b border-line/70 last:border-b-0">
-                <td className={cn(TD, "tabular-nums text-ink-subtle")}>{taskRef(t.number)}</td>
+                <td className={cn(TD, "whitespace-nowrap tabular-nums text-ink-subtle")}>{taskRef(t.number)}</td>
                 {showApp && (
                   <td className={cn(TD, "text-ink-muted")}>
-                    {apps.length ? (
-                      <span className="flex flex-wrap items-center gap-[0.5cqw]">
-                        {apps.map((a) => (
-                          <span key={a.id} className="inline-flex items-center gap-[0.4cqw]" title={a.name}>
-                            <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-[1.8cqw] w-[1.8cqw] rounded-[0.4cqw] text-[0.8cqw]" />
-                            {apps.length === 1 && <span className="break-words">{a.name}</span>}
+                    <span className="flex flex-col gap-[0.5cqw]">
+                      {appRows.length ? (
+                        appRows.map(({ app: a, items }) => (
+                          <span key={a.id} className="inline-flex items-center gap-[0.4cqw]">
+                            <AppHint name={a.name}>
+                              <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-[2.4cqw] w-[2.4cqw] rounded-[0.55cqw] text-[1cqw]" />
+                            </AppHint>
+                            {items.map((x) => (
+                              <PlatformMark key={x.platform} x={x} />
+                            ))}
                           </span>
-                        ))}
-                      </span>
-                    ) : (
-                      <span className="text-ink-subtle">General</span>
-                    )}
+                        ))
+                      ) : (
+                        <span className="text-[1.15cqw] text-ink-subtle">General</span>
+                      )}
+                    </span>
                   </td>
                 )}
                 <td className={cn(TD, "pr-[1.6cqw]")}>
                   <div className="flex flex-wrap items-center gap-x-[0.8cqw] gap-y-[0.35cqw]">
                     <span className={cn("break-words font-semibold", done ? "text-ink-muted" : "text-ink")}>{t.title}</span>
-                    {plats.length > 0 && (
-                      <span className="inline-flex items-center gap-[0.5cqw] text-[1.05cqw] text-ink-subtle">
-                        {plats.map((pl) => (
-                          <span key={pl} className="inline-flex items-center gap-[0.25cqw]">
-                            <PlatformGlyph platform={pl} size={12} className="[&>svg]:h-[1.1cqw] [&>svg]:w-[1.1cqw]" />
-                            {PLATFORM_META[pl].label}
-                          </span>
-                        ))}
-                      </span>
-                    )}
+                    {currentApp && <DeckTargets t={t} currentApp={currentApp} />}
                     {typeof t.carry === "number" && t.carry > 0 && <CarryChip carry={t.carry} />}
                     {t.pinned && <span className="shrink-0 rounded-full bg-canvas px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold text-ink-muted ring-1 ring-inset ring-line">Pinned</span>}
                   </div>
                   <ClampedText text={desc} lines={2} className="mt-[0.4cqw] text-[1.15cqw] leading-snug text-ink-muted" buttonClassName="text-[1.05cqw]" moreLabel="Show more" lessLabel="Show less" />
+                  {matrix && <DeckTargets t={t} />}
                   {t.requested_status && <p className="mt-[0.4cqw] text-[1.1cqw] font-medium text-amber-700">Asked to move to {STATUS_META[t.requested_status].label} — awaiting approval</p>}
                   {taskNotes.length > 0 && (
                     <ul className="mt-[0.8cqw] flex flex-col gap-[0.5cqw] border-l-[0.25cqw] border-line pl-[1cqw]">
@@ -870,11 +870,6 @@ function TaskTable({
                     </ul>
                   )}
                 </td>
-                {matrix && (
-                  <td className={TD}>
-                    <ShipMatrix t={t} />
-                  </td>
-                )}
                 <td className={cn(TD, "text-ink-muted")}>
                   <Owners users={t.assignees} labels={labels} />
                 </td>
@@ -897,7 +892,7 @@ function TaskTable({
  * lists what it ships (title AND description, in full) and the release notes.
  * Cards take the height they need and the column scrolls when there are several.
  */
-function ReleaseCards({ releases }: { releases: Release[] }) {
+function ReleaseCards({ releases, labels }: { releases: Release[]; labels: Map<string, string> }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-[1.1cqw] overflow-y-auto overscroll-contain pr-[0.3cqw]" data-deck-scroll>
       {releases.map((r) => {
@@ -930,11 +925,11 @@ function ReleaseCards({ releases }: { releases: Release[] }) {
                   <ol className="mt-[0.6cqw] flex flex-col divide-y divide-line/60">
                     {r.tasks!.map((t) => (
                       <li key={t.id} className="grid grid-cols-[4.2cqw_minmax(0,1fr)_auto] gap-x-[1cqw] py-[0.8cqw] first:pt-0 last:pb-0">
-                        <span className="pt-[0.15cqw] text-[1.05cqw] tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
+                        <span className="pt-[0.15cqw] text-[1.05cqw] tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
                         <div className="min-w-0">
                           <p className="break-words text-[1.3cqw] font-semibold leading-snug text-ink">{t.title}</p>
                           {t.description?.trim() ? <p className="mt-[0.35cqw] whitespace-pre-wrap break-words text-[1.1cqw] leading-snug text-ink-muted">{t.description.trim()}</p> : <p className="mt-[0.3cqw] text-[1cqw] text-ink-subtle">No description.</p>}
-                          {t.assignees.length > 0 && <p className="mt-[0.35cqw] text-[1cqw] text-ink-subtle">{t.assignees.map((u) => u.name.split(" ")[0]).join(", ")}</p>}
+                          {t.assignees.length > 0 && <p className="mt-[0.35cqw] text-[1cqw] text-ink-subtle">{ownerText(t.assignees, labels)}</p>}
                         </div>
                         <span className={cn(BADGE_SM, "self-start", DECK_STATUS[t.status])}>{STATUS_META[t.status].label}</span>
                       </li>
@@ -985,7 +980,7 @@ function MinutesTable({ notes, labels }: { notes: MeetingNote[]; labels: Map<str
               <td className={TD}>
                 {x.task ? (
                   <>
-                    <span className="mr-[0.5cqw] tabular-nums text-ink-subtle">{taskRef(x.task.number)}</span>
+                    <span className="mr-[0.5cqw] tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(x.task.number)}</span>
                     <span className="break-words font-medium text-ink">{x.task.title}</span>
                   </>
                 ) : x.about ? (

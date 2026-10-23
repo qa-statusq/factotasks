@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner, LoadError } from "@/components/ui/misc";
 import { AppTile, PriorityBadge, StatusBadge } from "@/components/ui/task-chips";
 import { useToast } from "@/components/ui/toast";
+import { useNameList } from "@/lib/use-name-labels";
 import { SeriesBadge } from "@/components/meeting-series";
 import { mutate, useCachedFetch } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
@@ -21,6 +22,7 @@ import type { Meeting, TaskCard } from "@/lib/types";
  * (open first), click to add; already-pinned ones show a tick.
  */
 export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meetingId: string; cacheKey: string; pinned: string[]; onClose: () => void }) {
+  const names = useNameList();
   const { toast } = useToast();
   const [q, setQ] = useState("");
   const [scope, setScope] = useState<"open" | "all">("open");
@@ -94,7 +96,7 @@ export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meeting
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <PriorityBadge priority={t.priority} compact className="shrink-0" />
-                        <span className="text-[12px] tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
+                        <span className="text-[12px] tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
                         <span className="break-words text-[13.5px] font-medium text-ink">{t.title}</span>
                       </div>
                       <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-ink-subtle">
@@ -105,7 +107,7 @@ export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meeting
                         ) : (
                           "General"
                         )}
-                        {t.assignees.length > 0 && <span>· {t.assignees.map((a) => a.name.split(" ")[0]).join(", ")}</span>}
+                        {t.assignees.length > 0 && <span>· {names(t.assignees)}</span>}
                       </div>
                     </div>
                     <StatusBadge status={t.status} className="shrink-0" />

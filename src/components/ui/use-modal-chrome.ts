@@ -91,11 +91,41 @@ export function isTopModal(id: string): boolean {
  * "New meeting"): the sheet's history entry is then stripped in place instead
  * of popped, so the pop can't race the navigation and cancel it. */
 let navigatingAway = false;
+let navigatingTimer = 0;
 export function closeForNavigation() {
   navigatingAway = true;
-  window.setTimeout(() => {
+  // Long enough for a slow phone to commit the navigation; consumed by the
+  // first dialog that closes, so it never lingers in practice.
+  window.clearTimeout(navigatingTimer);
+  navigatingTimer = window.setTimeout(() => {
     navigatingAway = false;
-  }, 1000);
+  }, 10_000);
+}
+
+// Any in-app link activated while a dialog (or the phone's navigation drawer)
+// is open is a navigation out of that dialog: mark it BEFORE the click
+// bubbles, so the dialog's closing never pops the history entry the router is
+// about to push. Without this, on a phone, tapping "Tasks" in the drawer
+// closed the drawer, the pop cancelled the push, and nothing opened.
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!modalStack.length || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+      let url: URL;
+      try {
+        url = new URL(a.href, window.location.href);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return; // same page: the close is a plain close
+      closeForNavigation();
+    },
+    true
+  );
 }
 
 /** True while a popstate (browser Back / back gesture) is being dispatched.

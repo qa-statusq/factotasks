@@ -1050,7 +1050,14 @@ as $$
   asof as (select to_at as at from win),
   -- In scope: app tasks the scope covers, plus any task attached to this
   -- series. General tasks join only by attachment or by being pinned.
-  scope as (select app_ids, cardinality(app_ids) = 0 as all_apps, series_id from m),
+  -- (017) An OPEN meeting follows its series' CURRENT scope — an app added to
+  -- the series joins the running meeting; a closed one keeps the scope it was
+  -- closed with (the API snapshots it on close).
+  scope as (
+    select sc.app_ids, cardinality(sc.app_ids) = 0 as all_apps, m.series_id
+    from m left join meeting_series ms on ms.id = m.series_id,
+    lateral (select case when m.status = 'finalized' or ms.id is null then m.app_ids else ms.app_ids end as app_ids) sc
+  ),
   pinned as (select task_id from meeting_tasks where meeting_id = p_meeting),
   carried as (
     select t.id,
@@ -1129,18 +1136,16 @@ as $$
       from releases r join apps a on a.id = r.app_id, win, scope s
       where (s.all_apps or r.app_id = any(s.app_ids))
         and (
-          -- (015) shipped inside the window, compared by IST DAY: a version dated
-          -- the day the window opens belongs to it, whatever the minute.
-          (r.released_at is not null
-             and (r.released_at at time zone 'Asia/Kolkata')::date >= (win.from_at at time zone 'Asia/Kolkata')::date
-             and (r.released_at at time zone 'Asia/Kolkata')::date <= (win.to_at at time zone 'Asia/Kolkata')::date)
-          -- still in the pipeline and due soon
-          or (r.status not in ('released','cancelled','rolled_back')
-              and (r.planned_date is null or r.planned_date <= (win.to_at at time zone 'Asia/Kolkata')::date + 21))
-          -- (015) or it carries a task that is on this meeting, so "Released 1/1" on a
-          -- task always has its version on the Releases slide
-          or exists (select 1 from task_targets tt where tt.release_id = r.id
-                       and (tt.task_id in (select (d.t).id from done d) or tt.task_id in (select (p.t).id from pending p)))
+          -- (017) shipped: the release day (IST) falls inside the window, or the
+          -- version carries a task that is on this meeting — so a task shown as
+          -- released always has its version on the Releases slide
+          (r.status = 'released'
+             and (((r.released_at at time zone 'Asia/Kolkata')::date >= (win.from_at at time zone 'Asia/Kolkata')::date
+                   and (r.released_at at time zone 'Asia/Kolkata')::date <= (win.to_at at time zone 'Asia/Kolkata')::date)
+                  or exists (select 1 from task_targets tt where tt.release_id = r.id
+                               and (tt.task_id in (select (d.t).id from done d) or tt.task_id in (select (p.t).id from pending p)))))
+          -- (017) under test right now; planned and in-progress versions wait until they reach testing
+          or r.status = 'testing'
         )
     ), '[]'::jsonb),
     'people', coalesce((

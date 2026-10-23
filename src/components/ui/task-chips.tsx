@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import {
@@ -129,19 +129,25 @@ export function iconSrc(url: string): string {
   return url;
 }
 
+/** Set to true around the meeting deck: every slide is mounted at once, so icons must not wait to be scrolled into view. */
+export const EagerIconsContext = createContext(false);
+
 export function AppTile({ name, color, iconUrl, androidIconUrl, iosIconUrl, platform, className }: { name: string; color: string; iconUrl?: string | null; androidIconUrl?: string | null; iosIconUrl?: string | null; /** Show that platform's own store icon when the app has one. */ platform?: "android" | "ios" | null; className?: string }) {
   const [broken, setBroken] = useState<string | null>(null);
+  const eager = useContext(EagerIconsContext);
   // Where the tile stands for ONE platform, that store's icon wins over the main tile.
   const src = platform === "android" ? androidIconUrl ?? iconUrl : platform === "ios" ? iosIconUrl ?? iconUrl : iconUrl;
+  // The caller's own radius wins; rounded-xl is only the default.
+  const radius = /(^|\s)rounded(-|\s|$)/.test(className ?? "") ? "" : "rounded-xl";
   if (src && broken !== src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={iconSrc(src)} alt="" loading="lazy" decoding="async" onError={() => setBroken(src)} className={cn("shrink-0 rounded-xl bg-canvas object-cover ring-1 ring-inset ring-black/10", className)} />
+      <img src={iconSrc(src)} alt="" loading={eager ? "eager" : "lazy"} decoding="async" onError={() => setBroken(src)} className={cn("shrink-0 bg-canvas object-cover ring-1 ring-inset ring-black/10", radius, className)} />
     );
   }
   return (
     <span
-      className={cn("flex shrink-0 select-none items-center justify-center rounded-xl font-bold uppercase text-white ring-1 ring-inset ring-black/10", className)}
+      className={cn("flex shrink-0 select-none items-center justify-center font-bold uppercase text-white ring-1 ring-inset ring-black/10", radius, className)}
       style={{ backgroundColor: color }}
       aria-hidden
     >

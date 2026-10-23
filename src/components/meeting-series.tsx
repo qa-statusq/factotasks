@@ -307,7 +307,7 @@ function SeriesEditor({ series, apps, onChanged, onCancel, canDelete }: { series
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Series name" maxLength={60} className="min-w-0 flex-1" autoFocus={!series} />
       </div>
       <div className="mt-3">
-        <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-ink-subtle">Covers</p>
+        <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-ink-subtle">Covers <span className="font-normal normal-case tracking-normal">· an app outside this list reaches the meeting only through tasks attached to the series, and its releases stay out</span></p>
         <AppScopePicker apps={apps} value={scope} onChange={setScope} />
       </div>
       {ordered.length > 1 && (

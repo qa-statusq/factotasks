@@ -303,7 +303,7 @@ function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }
               {r.tasks.map((t) => (
                 <li key={t.id} className="px-2.5 py-1.5">
                   <div className="flex items-baseline gap-1.5 text-[12.5px]">
-                    <span className="shrink-0 tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
+                    <span className="shrink-0 tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
                     <Link href={`/tasks/${t.id}`} className="min-w-0 break-words font-medium text-ink hover:text-brand-700">
                       {t.title}
                     </Link>
@@ -339,7 +339,7 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, needsApproval, 
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <PriorityBadge priority={t.priority} compact className="shrink-0" />
             <Link href={`/tasks/${t.id}`} className="break-words text-[14px] font-medium text-ink hover:text-brand-700">
-              <span className="mr-1.5 text-[12px] text-ink-subtle">{taskRef(t.number)}</span>
+              <span className="mr-1.5 text-[12px] whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
               {t.title}
             </Link>
             {typeof t.carry === "number" && t.carry > 0 && (

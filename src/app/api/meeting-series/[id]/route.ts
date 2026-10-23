@@ -43,6 +43,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (error) return isUniqueViolation(error) ? fail("A series with that name already exists", 409) : serverError(error);
   if (!data) return fail("Series not found", 404);
+  // Open meetings of the series follow its scope (closed ones keep theirs).
+  if ("app_ids" in patch || "include_general" in patch) {
+    const sync: Record<string, unknown> = {};
+    if ("app_ids" in patch) sync.app_ids = patch.app_ids;
+    if ("include_general" in patch) sync.include_general = patch.include_general;
+    const { error: mErr } = await getSupabase().from("meetings").update(sync).eq("series_id", id).eq("status", "open");
+    if (mErr) console.error("[series] open meetings not synced:", mErr);
+  }
   after(() => logActivity({ action: "meeting.series.update", entityType: "meeting_series", entityId: id, summary: `Updated meeting series “${data.name}”` }));
   return ok();
 }

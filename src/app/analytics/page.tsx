@@ -12,6 +12,7 @@ import { AppTile, GeneralTile, StatusBadge, PriorityBadge } from "@/components/u
 import { useSession } from "@/components/providers/session-provider";
 import { addDays, istTodayYmd, prettyYmd } from "@/components/ui/date-input";
 import { useCachedFetch } from "@/lib/client-cache";
+import { useNameList } from "@/lib/use-name-labels";
 import { cn } from "@/lib/cn";
 import { STATUS_META, TYPE_META, PRIORITY_META, RELEASE_STATUS_META, formatDuration, taskRef, type TaskStatus, type TaskType, type Priority, type ReleaseStatus } from "@/lib/domain";
 import { IconAnalytics, IconRocket, IconPresentation, IconClock, IconCheckCircle, IconPlus, IconTasks, IconAlert, IconCalendar, IconPlay } from "@/components/ui/icons";
@@ -163,6 +164,7 @@ export default function AnalyticsPage() {
 }
 
 function AnalyticsView({ data }: { data: Pack }) {
+  const names = useNameList();
   const t = data.totals;
   const periods = data.periods;
   const bucket = data.range.bucket;
@@ -328,11 +330,11 @@ function AnalyticsView({ data }: { data: Pack }) {
                   {x.app ? <AppTile name={x.app.name} color={x.app.color} iconUrl={x.app.icon_url} className="h-7 w-7 rounded-lg text-[11px]" /> : <GeneralTile className="h-7 w-7 rounded-lg text-[11px]" />}
                   <div className="min-w-0 flex-1">
                     <Link href={`/tasks/${x.id}`} className="block break-words text-[13px] font-medium leading-snug text-ink hover:text-brand-700">
-                      <span className="mr-1.5 text-[11.5px] text-ink-subtle">{taskRef(x.number)}</span>
+                      <span className="mr-1.5 text-[11.5px] whitespace-nowrap text-ink-subtle">{taskRef(x.number)}</span>
                       {x.title}
                     </Link>
                     <p className="text-[11.5px] text-ink-subtle">
-                      {x.assignees.length ? x.assignees.map((u) => u.name.split(" ")[0]).join(", ") : "Unassigned"}
+                      {x.assignees.length ? names(x.assignees) : "Unassigned"}
                       {x.due_date && <span className={cn(x.due_date < istTodayYmd() && "text-red-600")}> · due {prettyYmd(x.due_date, { weekday: false, year: false })}</span>}
                     </p>
                   </div>
@@ -522,10 +524,10 @@ function Grid({ rows, periods, bucket, max, showReleases }: { rows: { key: strin
         <tbody className="divide-y divide-line/60">
           {rows.map((r) => (
             <tr key={r.key} className="hover:bg-canvas/40">
-              <td className="w-full max-w-0 py-2 pl-4 pr-3 sm:pl-5">
+              <td className="min-w-[200px] py-2 pl-4 pr-3 sm:pl-5">
                 <div className="flex items-center gap-2.5">
                   {r.tile}
-                  <span className="block truncate font-medium text-ink">{r.label}</span>
+                  <span className="block max-w-[240px] truncate whitespace-nowrap font-medium text-ink">{r.label}</span>
                 </div>
               </td>
               <td className={cn(td, "font-semibold text-emerald-700")}>{r.row.done || <Dash />}</td>

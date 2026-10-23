@@ -154,8 +154,9 @@ const packSame = await json("select meeting_pack($1)", [m2.id]);
 assert(packSame.done.length === 1 && packSame.carried.length === 1, "meeting_pack: other-series meeting does not change the weekly window");
 const packOther = await json("select meeting_pack($1)", [other.id]);
 assert(!packOther.pending.some((t) => t.number === 2), "meeting_pack: an attached general task stays in its own series");
-const scoped = await one("insert into meetings (title, held_at, series_id, app_ids, created_by) values ('Scoped', now(), $1, array[gen_random_uuid()], $2) returning id", [ser.id, admin.id]);
-await db.query("update meetings set include_general = false where id = $1", [scoped.id]);
+// (017) An open meeting follows its SERIES' scope, so the narrow scope lives on a series of its own.
+const serScoped = await one("insert into meeting_series (name, app_ids, include_general) values ('Scoped review', array[gen_random_uuid()], false) returning id, app_ids");
+const scoped = await one("insert into meetings (title, held_at, series_id, app_ids, include_general, created_by) values ('Scoped', now(), $1, $2, false, $3) returning id", [serScoped.id, serScoped.app_ids, admin.id]);
 const packScoped = await json("select meeting_pack($1)", [scoped.id]);
 assert(packScoped.pending.length === 0 && packScoped.done.length === 0 && packScoped.apps.length === 0, "meeting_pack: scope filters tasks, done and apps");
 await db.query("insert into meeting_tasks (meeting_id, task_id, added_by) values ($1, $2, $3)", [scoped.id, t2.id, admin.id]);
@@ -166,9 +167,9 @@ const packNoGen = await json("select meeting_pack($1)", [scoped.id]);
 assert(packNoGen.pending.length === 1, "meeting_pack: a general task is not swept into a meeting by scope");
 await db.query("update meetings set include_general = true where id = $1", [scoped.id]);
 assert((await json("select meeting_pack($1)", [scoped.id])).pending.length === 1, "meeting_pack: include_general no longer pulls general tasks in");
-await db.query("update tasks set series_id = $1 where id = $2", [ser.id, gen.id]);
+await db.query("update tasks set series_id = $1 where id = $2", [serScoped.id, gen.id]);
 const packGen = await json("select meeting_pack($1)", [scoped.id]);
-assert(packGen.pending.length === 2 && packGen.pending.some((t) => !t.app && t.series?.id === ser.id), "meeting_pack: a general task attached to the series joins its meetings");
+assert(packGen.pending.length === 2 && packGen.pending.some((t) => !t.app && t.series?.id === serScoped.id), "meeting_pack: a general task attached to the series joins its meetings");
 assert((await json("select meeting_pack($1)", [m2.id])).pending.every((t) => t.id !== gen.id), "meeting_pack: attachment is per series");
 await db.query("update tasks set series_id = null where id = $1", [gen.id]);
 

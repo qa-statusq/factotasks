@@ -14,6 +14,7 @@ import { DateRangeInput } from "@/components/ui/date-range";
 import { ReleaseStatusBadge, PlatformBadge, AppTile, StatusBadge } from "@/components/ui/task-chips";
 import { ReleaseViewSheet, prettyDate } from "@/components/release-ui";
 import { useCachedFetch } from "@/lib/client-cache";
+import { useNameLabels } from "@/lib/use-name-labels";
 import { usePref } from "@/lib/use-pref";
 import { istTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
@@ -177,6 +178,7 @@ function Cell({ label, children }: { label: string; children: React.ReactNode })
 /* ------------------------------- one release ------------------------------ */
 
 function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: ReleaseEvent[]; showApp: boolean; onOpen: () => void }) {
+  const label = useNameLabels();
   const plannedMoves = events.filter((e) => e.changes?.planned_date);
   const firstPlanned = plannedMoves.length ? (plannedMoves[0].changes!.planned_date.from as string | null) : null;
   const releasedDay = r.released_at ? new Date(Date.parse(r.released_at) + 5.5 * 3600_000).toISOString().slice(0, 10) : null;
@@ -222,7 +224,7 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
                 · {shippedTasks}/{tasks.length} task{tasks.length === 1 ? "" : "s"} shipped
               </span>
             )}
-            {r.created_by && <span>· added by {r.created_by.name.split(" ")[0]}</span>}
+            {r.created_by && <span>· added by {label(r.created_by)}</span>}
           </div>
         </div>
         <Button size="sm" variant="secondary" onClick={onOpen}>
@@ -238,7 +240,7 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
             <ul className="flex flex-col gap-1">
               {tasks.map((t) => (
                 <li key={t.id} className="flex items-start gap-1.5 text-[12.5px]">
-                  <span className="shrink-0 tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
+                  <span className="shrink-0 tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
                   <div className="min-w-0 flex-1">
                     <Link href={`/tasks/${t.id}`} className="break-words text-ink hover:underline">
                       {t.title}
