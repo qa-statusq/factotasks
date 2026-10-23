@@ -18,9 +18,9 @@ export async function GET(req: NextRequest) {
   try {
     target = new URL(raw);
   } catch {
-    return NextResponse.json({ error: "Bad icon url" }, { status: 400 });
+    return NextResponse.json({ error: "Bad icon url" }, { status: 400, headers: { "Cache-Control": "no-store" } });
   }
-  if (target.protocol !== "https:" || !HOSTS.some((h) => h.test(target.hostname))) return NextResponse.json({ error: "Icon host not allowed" }, { status: 400 });
+  if (target.protocol !== "https:" || !HOSTS.some((h) => h.test(target.hostname))) return NextResponse.json({ error: "Icon host not allowed" }, { status: 400, headers: { "Cache-Control": "no-store" } });
   try {
     const up = await fetch(target, { headers: { accept: "image/*", "user-agent": "Mozilla/5.0 (FactoTasks icon relay)" }, signal: AbortSignal.timeout(8000), cache: "no-store" });
     const type = up.headers.get("content-type") || "";

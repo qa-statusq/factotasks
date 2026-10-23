@@ -37,15 +37,12 @@ const nextConfig = {
       { source: "/:path*", headers: securityHeaders },
       // Authenticated team data must never be served stale from the browser/CDN
       // cache. Always revalidate.
+      // Every API path except the store-icon relay, which sets its own header
+      // per response (long-lived on success, no-store on failure — a config
+      // rule would stamp both the same).
       {
-        source: "/api/:path*",
+        source: "/api/:path((?!icon$).*)",
         headers: [{ key: "Cache-Control", value: "no-store, no-cache, must-revalidate, max-age=0" }],
-      },
-      // Store-icon relay: public artwork, long-lived — the CDN serves repeats
-      // (listed after /api/:path* so this value wins for that path).
-      {
-        source: "/api/icon",
-        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=2592000" }],
       },
       // Brand assets are public, unhashed and effectively immutable.
       {
