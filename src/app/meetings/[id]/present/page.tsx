@@ -16,7 +16,7 @@ import { dueInfo } from "@/components/task-list";
 import { AppTile, PlatformGlyph } from "@/components/ui/task-chips";
 import { nameInitials } from "@/lib/name";
 import { ClampedText } from "@/components/ui/clamped-text";
-import { IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconApps } from "@/components/ui/icons";
+import { IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconApps, IconUserCheck, IconMessage, IconArrowRight } from "@/components/ui/icons";
 import type { MeetingNote, MeetingPack, TaskCard, UserBrief } from "@/lib/types";
 
 /**
@@ -69,7 +69,7 @@ interface Slide {
   key: string;
   render: (n: number, total: number) => React.ReactNode;
   /** Listed in the "jump to" panel and the app strip. */
-  jump?: { label: string; icon?: { name: string; color: string; iconUrl: string | null }; sub?: string; short?: string };
+  jump?: { label: string; icon?: { name: string; color: string; iconUrl: string | null }; sub?: string; short?: string; kind?: "cover" | "general" | "shared" | "approvals" | "minutes" | "next" };
 }
 
 export default function PresentPage() {
@@ -295,25 +295,38 @@ function Deck() {
           </div>
         </div>
       )}
-      {/* Bottom bar: previous · section strip (every app, one tap away) · counter · next */}
-      <div className={cn("deck-chrome absolute bottom-2 left-1/2 z-10 flex max-w-[96vw] -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-[#1f1f1c]/90 px-2 py-1 text-[12px] text-white/70 backdrop-blur transition-opacity duration-300", !chrome && "pointer-events-none opacity-0")}>
-        <button type="button" onClick={prev} disabled={index === 0} className="rounded-full p-1 hover:bg-white/10 hover:text-white disabled:opacity-30" aria-label="Previous">
-          <IconChevronLeft size={16} />
-        </button>
-        <div className="flex max-w-[70vw] items-center gap-1 overflow-x-auto no-scrollbar">
-          {jumps.map(({ s, i }) => (
-            <button key={s.key} type="button" onClick={() => go(i)} title={s.jump!.label} aria-label={s.jump!.label} className={cn("flex h-7 shrink-0 items-center justify-center rounded-full ring-2 transition-[transform,box-shadow]", i === currentJump ? "scale-110 ring-white" : "ring-transparent opacity-80 hover:opacity-100 hover:ring-white/40")}>
-              {s.jump!.icon ? <AppTile name={s.jump!.icon.name} color={s.jump!.icon.color} iconUrl={s.jump!.icon.iconUrl} className="h-7 w-7 rounded-full text-[10px]" /> : <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-white/15 px-2 text-[10.5px] font-semibold text-white">{s.jump!.short ?? s.jump!.label}</span>}
-            </button>
-          ))}
+      {/* Dock: every section one tap away — app tiles with their names, the current one lit. */}
+      <nav className={cn("deck-chrome absolute bottom-1.5 left-1/2 z-10 max-w-[96vw] -translate-x-1/2 transition-opacity duration-300", !chrome && "pointer-events-none opacity-0")} aria-label="Sections">
+        <div className="flex items-stretch gap-1 rounded-2xl border border-white/10 bg-[#1f1f1c]/95 p-1 text-white/70 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur">
+          <button type="button" onClick={prev} disabled={index === 0} className="flex w-8 shrink-0 items-center justify-center rounded-xl hover:bg-white/10 hover:text-white disabled:opacity-30" aria-label="Previous slide">
+            <IconChevronLeft size={16} />
+          </button>
+          <div className="flex min-w-0 items-stretch gap-0.5 overflow-x-auto no-scrollbar">
+            {jumps.map(({ s, i }, k) => {
+              const on = i === currentJump;
+              const j = s.jump!;
+              return (
+                <button key={s.key} type="button" onClick={() => go(i)} title={`${j.label}${j.sub ? ` · ${j.sub}` : ""}${k < 9 ? ` (${k + 1})` : ""}`} aria-current={on ? "step" : undefined} className={cn("flex w-[66px] shrink-0 flex-col items-center gap-[3px] rounded-xl px-1 py-1 transition-colors", on ? "bg-white text-[#141412]" : "hover:bg-white/10 hover:text-white")}>
+                  {j.icon ? (
+                    <AppTile name={j.icon.name} color={j.icon.color} iconUrl={j.icon.iconUrl} className="h-5 w-5 rounded-md text-[8px]" />
+                  ) : (
+                    <span className={cn("flex h-5 w-5 items-center justify-center rounded-md text-[9px] font-bold", on ? "bg-[#141412]/10 text-[#141412]" : "bg-white/15 text-white", j.kind === "shared" && "bg-teal-700 text-white", j.kind === "general" && "bg-slate-500 text-white")}>
+                      {j.kind === "cover" ? <Mark className="h-4 w-4" /> : j.kind === "shared" ? "⇄" : j.kind === "general" ? "G" : j.kind === "approvals" ? <IconUserCheck size={12} /> : j.kind === "minutes" ? <IconMessage size={12} /> : <IconArrowRight size={12} />}
+                    </span>
+                  )}
+                  <span className="line-clamp-2 w-full text-center text-[9.5px] font-medium leading-[1.1]">{j.short ?? j.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <span className="flex shrink-0 items-center whitespace-nowrap px-1.5 text-[11px] tabular-nums text-white/60">
+            {index + 1} / {total}
+          </span>
+          <button type="button" onClick={next} disabled={index === last} className="flex w-8 shrink-0 items-center justify-center rounded-xl hover:bg-white/10 hover:text-white disabled:opacity-30" aria-label="Next slide">
+            <IconChevronRight size={16} />
+          </button>
         </div>
-        <span className="shrink-0 pl-1 tabular-nums">
-          {index + 1} / {total}
-        </span>
-        <button type="button" onClick={next} disabled={index === last} className="rounded-full p-1 hover:bg-white/10 hover:text-white disabled:opacity-30" aria-label="Next">
-          <IconChevronRight size={16} />
-        </button>
-      </div>
+      </nav>
     </div>
   );
 }
@@ -331,71 +344,89 @@ function buildSlides(p: Pack): Slide[] {
   const frame = (n: number, total: number) => ({ meeting: m, workspace: p.workspace_name, n, total });
   const statusesUsed = new Set<TaskStatus>([...p.pending, ...p.done].map((t) => t.status));
 
-  /* Cover */
+  /* Cover: title and the headline figures across the top; the agenda and the
+     meeting's facts beneath — the shape of a report's first page. */
+  const scopeTiles = m.app_ids?.length ? p.apps : [];
   slides.push({
     key: "cover",
-    jump: { label: "Cover", sub: m.title, short: "Cover" },
+    jump: { label: "Cover", sub: m.title, short: "Cover", kind: "cover" },
     render: (n, total) => (
       <Frame {...frame(n, total)} bare>
-        <div className="grid min-h-0 flex-1 grid-cols-[1.1fr_1fr] items-stretch gap-[4cqw]">
-          <div className="flex min-w-0 flex-col">
-            <p className="text-[1.15cqw] font-semibold uppercase tracking-[0.22em] text-ink-subtle">Minutes of meeting{p.series ? ` · ${p.series.name}` : ""}</p>
-            <h1 className="mt-[1.2cqw] break-words text-[4.2cqw] font-bold leading-[1.05] tracking-[-0.03em] text-ink">{m.title}</h1>
-            <dl className="mt-[2.2cqw] grid grid-cols-[auto_1fr] gap-x-[1.8cqw] gap-y-[0.7cqw] text-[1.3cqw]">
-              <dt className="text-ink-subtle">Held</dt>
-              <dd className="text-ink">{fmtWhen(m.held_at)} IST</dd>
-              <dt className="text-ink-subtle">Covering</dt>
-              <dd className="text-ink">{windowText}</dd>
-              <dt className="text-ink-subtle">Scope</dt>
-              <dd className="text-ink">
-                {m.app_ids?.length ? (
-                  <span className="inline-flex flex-wrap items-center gap-[0.5cqw]" title={p.apps.map((a) => a.name).join(", ")}>
-                    {p.apps.map((a) => (
-                      <AppTile key={a.id} name={a.name} color={a.color} iconUrl={a.icon_url} className="h-[2.2cqw] w-[2.2cqw] rounded-[0.5cqw] text-[0.9cqw]" />
-                    ))}
-                    <span className="ml-[0.4cqw] text-ink-muted">{p.apps.length} app{p.apps.length === 1 ? "" : "s"}</span>
-                  </span>
-                ) : (
-                  "All apps"
-                )}
-              </dd>
-              <dt className="text-ink-subtle">Status</dt>
-              <dd className="text-ink">{m.status === "finalized" ? "Closed · minutes locked" : "Open · live figures"}</dd>
-            </dl>
-            <div className="mt-auto pt-[1.6cqw]">
-              <p className="mb-[0.6cqw] text-[0.95cqw] font-semibold uppercase tracking-[0.18em] text-ink-subtle">Status colours</p>
-              <div className="flex flex-wrap gap-[0.5cqw]">
-                {TASK_STATUSES.filter((s) => statusesUsed.has(s) || s === "done" || s === "in_progress" || s === "todo").map((s) => (
-                  <span key={s} className={cn(BADGE, DECK_STATUS[s])}>{STATUS_META[s].label}</span>
-                ))}
-              </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <header className="flex items-end justify-between gap-[3cqw] border-b border-line pb-[1.5cqw]">
+            <div className="min-w-0">
+              <p className="text-[1.05cqw] font-semibold uppercase tracking-[0.22em] text-ink-subtle">Minutes of meeting{p.series ? ` · ${p.series.name}` : ""}</p>
+              <h1 className="mt-[0.7cqw] max-w-[60cqw] break-words text-[3.2cqw] font-bold leading-[1.08] tracking-[-0.03em] text-ink [text-wrap:balance]">{m.title}</h1>
+              <p className="mt-[0.7cqw] text-[1.25cqw] text-ink-muted">
+                Held {fmtWhen(m.held_at)} IST · covering {windowText}
+                {m.status === "finalized" ? " · closed, minutes locked" : " · open, live figures"}
+              </p>
             </div>
-          </div>
-          <div className="flex min-h-0 min-w-0 flex-col">
-            <div className="grid grid-cols-4 gap-[0.8cqw]">
+            <div className="flex shrink-0 gap-[0.7cqw]">
               <Tile n={p.done.length} label="Done" tone="emerald" />
               <Tile n={p.pending.length} label="Pending" />
               <Tile n={p.carried.length} label="Carried" tone={p.carried.length ? "amber" : undefined} />
               <Tile n={p.overdue.length} label="Overdue" tone={p.overdue.length ? "red" : undefined} />
             </div>
-            <div className={cn(PANEL_SCROLL, "mt-[1.4cqw]")} data-deck-scroll>
-              <p className={cn(PANEL_LABEL, "sticky top-0 z-[1]")}>Agenda</p>
+          </header>
+          <div className="mt-[1.5cqw] grid min-h-0 flex-1 grid-cols-[1.3fr_1fr] gap-[2cqw]">
+            <div className={PANEL_SCROLL} data-deck-scroll>
+              <p className={cn(PANEL_LABEL, "sticky top-0 z-[1]")}>Agenda · {agenda.length} section{agenda.length === 1 ? "" : "s"}</p>
               {agenda.length === 0 ? (
                 <p className="px-[1.3cqw] py-[1.2cqw] text-[1.25cqw] text-ink-muted">Nothing changed since the last meeting.</p>
               ) : (
-                <ul className="divide-y divide-line/70 px-[1.3cqw]">
-                  {agenda.map((g) => (
-                    <li key={g.key} className={cn("flex items-center gap-[0.8cqw] text-ink", agenda.length > 7 ? "py-[0.45cqw] text-[1.1cqw]" : "py-[0.75cqw] text-[1.25cqw]")}>
-                      <GroupTile g={g} className={agenda.length > 7 ? "h-[1.9cqw] w-[1.9cqw] rounded-[0.45cqw] text-[0.8cqw]" : "h-[2.2cqw] w-[2.2cqw] rounded-[0.5cqw] text-[0.9cqw]"} />
+                <ol className="divide-y divide-line/70 px-[1.3cqw]">
+                  {agenda.map((g, i) => (
+                    <li key={g.key} className={cn("flex items-center gap-[0.9cqw] text-ink", agenda.length > 8 ? "py-[0.5cqw] text-[1.1cqw]" : "py-[0.75cqw] text-[1.25cqw]")}>
+                      <span className="w-[1.6cqw] shrink-0 text-right text-[0.95cqw] tabular-nums text-ink-subtle">{i + 1}</span>
+                      <GroupTile g={g} className={agenda.length > 8 ? "h-[1.9cqw] w-[1.9cqw] rounded-[0.45cqw] text-[0.8cqw]" : "h-[2.2cqw] w-[2.2cqw] rounded-[0.5cqw] text-[0.9cqw]"} />
                       <span className="min-w-0 flex-1 break-words font-semibold leading-tight">{g.name}</span>
-                      <span className="shrink-0 tabular-nums text-ink-muted">
-                        {g.pending.length}<span className="text-ink-subtle"> open</span> · <span className="text-emerald-700">{g.done.length}</span><span className="text-ink-subtle"> done</span>
-                        {g.releases.length ? <span className="text-ink-subtle"> · {g.releases.length} rel</span> : ""}
+                      <span className="flex shrink-0 items-center gap-[0.5cqw] tabular-nums">
+                        {g.done.length > 0 && <span className={cn(BADGE_SM, "bg-emerald-600 text-white")}>{g.done.length} done</span>}
+                        {g.pending.length > 0 && <span className={cn(BADGE_SM, "bg-slate-200 text-slate-800")}>{g.pending.length} open</span>}
+                        {g.releases.length > 0 && <span className={cn(BADGE_SM, "bg-ink text-white")}>{g.releases.length} rel</span>}
+                        {!g.done.length && !g.pending.length && !g.releases.length && <span className="text-[1cqw] text-ink-subtle">—</span>}
                       </span>
                     </li>
                   ))}
-                </ul>
+                </ol>
               )}
+            </div>
+            <div className="flex min-h-0 flex-col gap-[1.2cqw]">
+              <div className={PANEL}>
+                <p className={PANEL_LABEL}>Scope</p>
+                <div className="px-[1.3cqw] py-[1cqw]">
+                  {scopeTiles.length ? (
+                    <div className="flex flex-wrap gap-[0.5cqw]" title={scopeTiles.map((a) => a.name).join(", ")}>
+                      {scopeTiles.map((a) => (
+                        <AppTile key={a.id} name={a.name} color={a.color} iconUrl={a.icon_url} className="h-[2.4cqw] w-[2.4cqw] rounded-[0.55cqw] text-[0.95cqw]" />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[1.2cqw] text-ink">Every app</p>
+                  )}
+                  <p className="mt-[0.6cqw] text-[1.05cqw] text-ink-muted">
+                    {scopeTiles.length ? `${scopeTiles.length} app${scopeTiles.length === 1 ? "" : "s"}` : `${p.apps.length} app${p.apps.length === 1 ? "" : "s"}`} · {p.people.length} {p.people.length === 1 ? "person" : "people"}
+                    {p.releases.length ? ` · ${p.releases.length} release${p.releases.length === 1 ? "" : "s"}` : ""}
+                  </p>
+                </div>
+              </div>
+              <div className={PANEL}>
+                <p className={PANEL_LABEL}>Status colours</p>
+                <div className="flex flex-wrap gap-[0.5cqw] px-[1.3cqw] py-[1cqw]">
+                  {TASK_STATUSES.filter((st) => statusesUsed.has(st) || st === "done" || st === "in_progress" || st === "todo").map((st) => (
+                    <span key={st} className={cn(BADGE, DECK_STATUS[st])}>{STATUS_META[st].label}</span>
+                  ))}
+                </div>
+              </div>
+              <div className={cn(PANEL, "flex-1")}>
+                <p className={PANEL_LABEL}>How to read</p>
+                <ul className="flex flex-col gap-[0.45cqw] px-[1.3cqw] py-[1cqw] text-[1.05cqw] leading-snug text-ink-muted">
+                  <li>One section per app: its releases, then every task — done first, then in progress, then waiting.</li>
+                  <li>Work on several apps sits under <b className="text-ink">Across apps</b> with where each one stands.</li>
+                  <li>Carried = still open from an earlier meeting of this series.</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -408,7 +439,7 @@ function buildSlides(p: Pack): Slide[] {
     const shared = g.key === SHARED_KEY;
     const meta = appMeta.get(g.key);
     const app = { group: g, platforms: meta ? { android: meta.has_android, ios: meta.has_ios } : undefined };
-    const jump = { label: g.name, icon: shared || g.key === "general" ? undefined : { name: g.name, color: g.color, iconUrl: g.iconUrl }, short: shared ? "Across" : g.key === "general" ? "General" : undefined, sub: `${g.pending.length} open · ${g.done.length} done${g.releases.length ? ` · ${g.releases.length} release${g.releases.length === 1 ? "" : "s"}` : ""}` };
+    const jump = { label: g.name, icon: shared || g.key === "general" ? undefined : { name: g.name, color: g.color, iconUrl: g.iconUrl }, short: shared ? "Across apps" : g.key === "general" ? "General" : undefined, kind: shared ? ("shared" as const) : g.key === "general" ? ("general" as const) : undefined, sub: `${g.pending.length} open · ${g.done.length} done${g.releases.length ? ` · ${g.releases.length} release${g.releases.length === 1 ? "" : "s"}` : ""}` };
     let jumped = false;
     if (g.releases.length) {
       slides.push({
@@ -449,7 +480,7 @@ function buildSlides(p: Pack): Slide[] {
   if (p.approvals.length) {
     slides.push({
       key: "approvals",
-      jump: { label: "Awaiting approval", short: "Approvals", sub: `${p.approvals.length} request${p.approvals.length === 1 ? "" : "s"}` },
+      jump: { label: "Awaiting approval", short: "Approvals", kind: "approvals", sub: `${p.approvals.length} request${p.approvals.length === 1 ? "" : "s"}` },
       render: (n, total) => (
         <Frame {...frame(n, total)} title="Awaiting approval" subtitle={`${p.approvals.length} status change${p.approvals.length === 1 ? "" : "s"} waiting for an admin`}>
           <TaskTable rows={p.approvals.map((t) => ({ t, done: false }))} notes={notes} labels={labels} showApp />
@@ -463,7 +494,7 @@ function buildSlides(p: Pack): Slide[] {
   if (minutes.length || m.notes) {
     slides.push({
       key: "minutes",
-      jump: { label: "Minutes", short: "Minutes", sub: `${minutes.length} note${minutes.length === 1 ? "" : "s"}` },
+      jump: { label: "Minutes", short: "Minutes", kind: "minutes", sub: `${minutes.length} note${minutes.length === 1 ? "" : "s"}` },
       render: (n, total) => (
         <Frame {...frame(n, total)} title="Minutes" subtitle="Decisions, action items, blockers and notes recorded in this meeting" part={minutes.length ? `${minutes.length} note${minutes.length === 1 ? "" : "s"}` : undefined}>
           {m.notes && (
@@ -478,42 +509,31 @@ function buildSlides(p: Pack): Slide[] {
     });
   }
 
-  /* Close */
+  /* Next steps: everything still open, in the same table as the app slides. */
   const carried = [...p.pending].sort((a, b) => (b.carry ?? 0) - (a.carry ?? 0) || a.number - b.number);
   slides.push({
     key: "end",
-    jump: { label: "Carried forward", short: "Next", sub: `${p.pending.length} open` },
+    jump: { label: "Next steps", short: "Next steps", kind: "next", sub: `${p.pending.length} open` },
     render: (n, total) => (
-      <Frame {...frame(n, total)} title="Next steps" subtitle="What carries into the next meeting">
-        <div className="grid min-h-0 flex-1 grid-cols-[1fr_1.3fr] items-stretch gap-[4cqw]">
-          <div>
-            <p className="text-[1.15cqw] font-semibold uppercase tracking-[0.22em] text-ink-subtle">Carried forward</p>
-            <p className="mt-[1cqw] text-[6cqw] font-bold leading-none tracking-[-0.03em] text-ink tabular-nums">{p.pending.length}</p>
-            <p className="mt-[0.6cqw] text-[1.6cqw] text-ink-muted">open task{p.pending.length === 1 ? "" : "s"}</p>
-            {p.overdue.length > 0 && <p className="mt-[1.6cqw] text-[1.3cqw] font-medium text-red-600">{p.overdue.length} already past due.</p>}
-            <p className="mt-[2.4cqw] text-[1.15cqw] text-ink-subtle">Minutes and notes stay on the meeting page.</p>
+      <Frame
+        {...frame(n, total)}
+        title="Next steps"
+        subtitle={carried.length ? `${carried.length} open task${carried.length === 1 ? "" : "s"} carr${carried.length === 1 ? "ies" : "y"} into the next meeting${p.overdue.length ? ` · ${p.overdue.length} already past due` : ""}${p.carried.length ? ` · ${p.carried.length} carried before` : ""}` : "Nothing carries forward — everything is closed."}
+        tiles={
+          <>
+            <Tile n={carried.length} label="Open" />
+            <Tile n={p.carried.length} label="Carried" tone={p.carried.length ? "amber" : undefined} />
+            <Tile n={p.overdue.length} label="Overdue" tone={p.overdue.length ? "red" : undefined} />
+          </>
+        }
+      >
+        {carried.length > 0 ? (
+          <TaskTable rows={carried.map((t) => ({ t, done: false }))} notes={notes} labels={labels} showApp />
+        ) : (
+          <div className={cn(PANEL, "flex flex-1 items-center justify-center px-[2cqw] py-[3cqw] text-center")}>
+            <p className="text-[2cqw] font-semibold text-emerald-700">Everything is closed. Nice work.</p>
           </div>
-          {carried.length > 0 ? (
-            <div className={PANEL_SCROLL} data-deck-scroll>
-              <p className={cn(PANEL_LABEL, "sticky top-0 z-[1]")}>Still open · {carried.length}</p>
-              <ul className="divide-y divide-line/70 px-[1.3cqw]">
-                {carried.map((t) => (
-                  <li key={t.id} className="flex items-center gap-[1cqw] py-[0.75cqw] text-[1.2cqw]">
-                    <span className="shrink-0 tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
-                    <span className="min-w-0 flex-1 break-words font-medium leading-tight text-ink">{t.title}</span>
-                    <Owners users={t.assignees} labels={labels} compact />
-                    <span className={cn(BADGE_SM, DECK_STATUS[t.status])}>{STATUS_META[t.status].label}</span>
-                    {typeof t.carry === "number" && t.carry > 0 && <CarryChip carry={t.carry} />}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div className={cn(PANEL, "flex items-center justify-center px-[2cqw] py-[3cqw] text-center")}>
-              <p className="text-[2cqw] font-semibold text-emerald-700">Everything is closed. Nice work.</p>
-            </div>
-          )}
-        </div>
+        )}
       </Frame>
     ),
   });
@@ -551,6 +571,7 @@ function Frame({
   subtitle,
   part,
   bare,
+  tiles,
   children,
 }: {
   meeting: Pack["meeting"];
@@ -564,6 +585,8 @@ function Frame({
   part?: string;
   /** Cover-style slide: no heading row, the body fills the page. */
   bare?: boolean;
+  /** Figures beside a plain title (the app heading has its own). */
+  tiles?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const g = app?.group;
@@ -625,13 +648,15 @@ function Frame({
                   </h2>
                   {subtitle && <p className="mt-[0.6cqw] text-[1.15cqw] text-ink-muted">{subtitle}</p>}
                 </div>
-                {g && (
+                {g ? (
                   <div className="flex shrink-0 gap-[0.6cqw]">
                     <Tile n={g.pending.length} label="Pending" />
                     <Tile n={g.overdue} label="Overdue" tone={g.overdue ? "red" : undefined} />
                     <Tile n={g.done.length} label="Done" tone="emerald" />
                   </div>
-                )}
+                ) : tiles ? (
+                  <div className="flex shrink-0 gap-[0.6cqw]">{tiles}</div>
+                ) : null}
               </>
             )}
           </header>
@@ -713,33 +738,39 @@ function Owners({ users, labels, compact }: { users: UserBrief[]; labels: Map<st
   );
 }
 
-/** Where a task ships, app by app: tile + name, then a chip per platform with its state. */
+/** Where a task ships, app by app: one row per app, a fixed column per platform so the chips line up. */
 function ShipMatrix({ t }: { t: TaskCard }) {
   const rows = targetMatrix(t);
   if (!rows.length) return <span className="text-ink-subtle">—</span>;
+  const cell = (x: TaskCard["targets"][number] | undefined, platform: "android" | "ios") => {
+    if (!x) return <span className="flex h-[2.3cqw] items-center justify-center rounded-[0.5cqw] border border-dashed border-line text-[0.9cqw] text-ink-subtle/60" aria-label={`Not on ${PLATFORM_META[platform].label}`}>—</span>;
+    const tone = x.released_at ? "bg-emerald-600 text-white ring-emerald-600" : x.release ? "bg-amber-50 text-amber-800 ring-amber-300" : "bg-canvas text-ink-muted ring-line";
+    const text = x.released_at ? "Released" : x.release ? `v${x.release.version_name}` : "Pending";
+    return (
+      <span className={cn("flex h-[2.3cqw] items-center justify-center gap-[0.4cqw] rounded-[0.5cqw] px-[0.5cqw] text-[0.95cqw] font-bold leading-none ring-1 ring-inset", tone)} title={`${PLATFORM_META[platform].label}: ${x.released_at ? `released in v${x.release?.version_name ?? ""}` : x.release ? `in v${x.release.version_name} (${RELEASE_STATUS_META[x.release.status].label})` : "no release yet"}`}>
+        <PlatformGlyph platform={platform} size={10} className={cn("[&>svg]:h-[1cqw] [&>svg]:w-[1cqw]", x.released_at && "[&_svg]:text-white")} />
+        <span className="truncate">{text}</span>
+      </span>
+    );
+  };
   return (
-    <ul className="flex flex-col gap-[0.45cqw]">
+    <div className="flex flex-col gap-[0.4cqw]">
+      <div className="grid grid-cols-[minmax(0,1fr)_7.2cqw_7.2cqw] gap-x-[0.5cqw] text-[0.8cqw] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
+        <span />
+        <span className="text-center">Android</span>
+        <span className="text-center">iOS</span>
+      </div>
       {rows.map(({ app, items }) => (
-        <li key={app.id} className="flex items-center gap-[0.6cqw]">
-          <AppTile name={app.name} color={app.color} iconUrl={app.icon_url} className="h-[1.9cqw] w-[1.9cqw] rounded-[0.45cqw] text-[0.8cqw]" />
-          <span className="min-w-0 flex-1 break-words text-[1.15cqw] font-medium leading-tight text-ink" title={app.name}>{app.name}</span>
-          <span className="flex shrink-0 items-center gap-[0.35cqw]">
-            {items.map((x) => (
-              <span
-                key={x.platform}
-                className={cn("inline-flex items-center gap-[0.35cqw] rounded-full py-[0.2cqw] pl-[0.35cqw] pr-[0.6cqw] text-[0.9cqw] font-bold leading-none ring-1 ring-inset", x.released_at ? "bg-emerald-600 text-white ring-emerald-600" : x.release ? "bg-amber-50 text-amber-800 ring-amber-300" : "bg-canvas text-ink-muted ring-line")}
-                title={`${PLATFORM_META[x.platform].label}: ${x.released_at ? `released in v${x.release?.version_name ?? ""}` : x.release ? `in v${x.release.version_name} (${RELEASE_STATUS_META[x.release.status].label})` : "no release yet"}`}
-              >
-                <span className={cn("flex h-[1.4cqw] w-[1.4cqw] items-center justify-center rounded-full", x.released_at ? "bg-white/20" : "bg-surface")}>
-                  <PlatformGlyph platform={x.platform} size={10} className={cn("[&>svg]:h-[1cqw] [&>svg]:w-[1cqw]", x.released_at && "[&_svg]:text-white")} />
-                </span>
-                {x.released_at ? "Released" : x.release ? `v${x.release.version_name}` : "Pending"}
-              </span>
-            ))}
+        <div key={app.id} className="grid grid-cols-[minmax(0,1fr)_7.2cqw_7.2cqw] items-center gap-x-[0.5cqw]">
+          <span className="flex min-w-0 items-center gap-[0.5cqw]">
+            <AppTile name={app.name} color={app.color} iconUrl={app.icon_url} className="h-[1.9cqw] w-[1.9cqw] rounded-[0.45cqw] text-[0.8cqw]" />
+            <span className="min-w-0 break-words text-[1.1cqw] font-medium leading-tight text-ink">{app.name}</span>
           </span>
-        </li>
+          {cell(items.find((x) => x.platform === "android"), "android")}
+          {cell(items.find((x) => x.platform === "ios"), "ios")}
+        </div>
       ))}
-    </ul>
+    </div>
   );
 }
 
@@ -860,47 +891,63 @@ function TaskTable({
   );
 }
 
-/** Releases as cards, not a task table: the version large, its state, date, what ships in it in full. */
+/**
+ * Releases as version cards, nothing like the task table: a tinted header
+ * says which version, on which platform, in which state and when; the body
+ * lists what it ships (title AND description, in full) and the release notes.
+ * Cards take the height they need and the column scrolls when there are several.
+ */
 function ReleaseCards({ releases }: { releases: Release[] }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-[1cqw] overflow-y-auto overscroll-contain pr-[0.3cqw]" data-deck-scroll>
+    <div className="flex min-h-0 flex-1 flex-col gap-[1.1cqw] overflow-y-auto overscroll-contain pr-[0.3cqw]" data-deck-scroll>
       {releases.map((r) => {
-        const when = r.status === "released" && r.released_at ? `Released ${fmtDay(r.released_at)}` : r.planned_date ? `Planned ${ymdPretty(r.planned_date)}` : "No date yet";
+        const released = r.status === "released";
+        const when = released && r.released_at ? `Released ${fmtDay(r.released_at)}` : r.planned_date ? `Release date ${ymdPretty(r.planned_date)}` : "No release date yet";
+        const count = r.tasks?.length ?? 0;
         return (
-          <article key={r.id} className="grid shrink-0 grid-cols-[22cqw_1fr] overflow-hidden rounded-[1cqw] border border-line bg-surface shadow-[0_1px_0_rgba(0,0,0,0.02)]">
-            <div className="flex flex-col gap-[0.8cqw] border-r border-line/70 bg-canvas/60 px-[1.6cqw] py-[1.4cqw]" style={{ boxShadow: `inset 0.5cqw 0 0 ${RELEASE_ACCENT[r.status]}` }}>
-              <span className={cn(BADGE, "self-start", DECK_RELEASE[r.status])}>{RELEASE_STATUS_META[r.status].label}</span>
-              <p className="text-[2.6cqw] font-bold leading-none tabular-nums tracking-[-0.02em] text-ink">
-                v{r.version_name}
-                {r.build_number && <span className="ml-[0.5cqw] text-[1.1cqw] font-medium text-ink-subtle">({r.build_number})</span>}
-              </p>
-              <p className="inline-flex items-center gap-[0.5cqw] text-[1.2cqw] font-medium text-ink">
-                <PlatformGlyph platform={r.platform} size={16} className="[&>svg]:h-[1.5cqw] [&>svg]:w-[1.5cqw]" /> {PLATFORM_META[r.platform].label}
-              </p>
-              <p className="text-[1.1cqw] text-ink-muted">{when}</p>
-              {r.tasks && r.tasks.length > 0 && <p className="text-[1.05cqw] text-ink-subtle">{r.tasks.length} task{r.tasks.length === 1 ? "" : "s"} in this version</p>}
-            </div>
-            <div className="min-w-0 px-[1.6cqw] py-[1.3cqw]">
-              {r.tasks && r.tasks.length > 0 ? (
-                <ul className="flex flex-col divide-y divide-line/60">
-                  {r.tasks.map((t) => (
-                    <li key={t.id} className="flex items-start gap-[1cqw] py-[0.7cqw] first:pt-0 last:pb-0">
-                      <span className="shrink-0 pt-[0.15cqw] text-[1.05cqw] tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="break-words text-[1.3cqw] font-semibold leading-snug text-ink">{t.title}</p>
-                        {t.description?.trim() && <p className="mt-[0.3cqw] whitespace-pre-wrap break-words text-[1.1cqw] leading-snug text-ink-muted">{t.description.trim()}</p>}
-                      </div>
-                      <span className={cn(BADGE_SM, DECK_STATUS[t.status])}>{STATUS_META[t.status].label}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+          <article key={r.id} className="shrink-0 overflow-hidden rounded-[1cqw] border border-line bg-surface shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+            <header className="flex items-center gap-[1.2cqw] border-b border-line/70 px-[1.6cqw] py-[1.1cqw]" style={{ background: `linear-gradient(90deg, ${RELEASE_ACCENT[r.status]}1a, transparent 60%)`, boxShadow: `inset 0.45cqw 0 0 ${RELEASE_ACCENT[r.status]}` }}>
+              <span className="flex h-[3.6cqw] w-[3.6cqw] shrink-0 items-center justify-center rounded-[0.8cqw] bg-surface ring-1 ring-inset ring-line">
+                <PlatformGlyph platform={r.platform} size={20} className="[&>svg]:h-[2cqw] [&>svg]:w-[2cqw]" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-baseline gap-x-[0.8cqw] text-[2.1cqw] font-bold leading-none tracking-[-0.02em] text-ink">
+                  <span className="tabular-nums">v{r.version_name}</span>
+                  {r.build_number && <span className="text-[1.1cqw] font-medium text-ink-subtle">build {r.build_number}</span>}
+                  <span className="text-[1.2cqw] font-medium text-ink-muted">{PLATFORM_META[r.platform].label}</span>
+                </p>
+                <p className="mt-[0.5cqw] text-[1.1cqw] text-ink-muted">
+                  {when}
+                  {count ? ` · ${count} task${count === 1 ? "" : "s"} ${released ? "shipped" : "planned"} in this version` : " · no tasks linked"}
+                </p>
+              </div>
+              <span className={cn(BADGE, "shrink-0", DECK_RELEASE[r.status])}>{RELEASE_STATUS_META[r.status].label}</span>
+            </header>
+            <div className="px-[1.6cqw] py-[1.2cqw]">
+              {count > 0 && (
+                <>
+                  <p className="text-[0.9cqw] font-semibold uppercase tracking-[0.16em] text-ink-subtle">{released ? "What shipped in this version" : "What this version will cover"}</p>
+                  <ol className="mt-[0.6cqw] flex flex-col divide-y divide-line/60">
+                    {r.tasks!.map((t) => (
+                      <li key={t.id} className="grid grid-cols-[4.2cqw_minmax(0,1fr)_auto] gap-x-[1cqw] py-[0.8cqw] first:pt-0 last:pb-0">
+                        <span className="pt-[0.15cqw] text-[1.05cqw] tabular-nums text-ink-subtle">{taskRef(t.number)}</span>
+                        <div className="min-w-0">
+                          <p className="break-words text-[1.3cqw] font-semibold leading-snug text-ink">{t.title}</p>
+                          {t.description?.trim() ? <p className="mt-[0.35cqw] whitespace-pre-wrap break-words text-[1.1cqw] leading-snug text-ink-muted">{t.description.trim()}</p> : <p className="mt-[0.3cqw] text-[1cqw] text-ink-subtle">No description.</p>}
+                          {t.assignees.length > 0 && <p className="mt-[0.35cqw] text-[1cqw] text-ink-subtle">{t.assignees.map((u) => u.name.split(" ")[0]).join(", ")}</p>}
+                        </div>
+                        <span className={cn(BADGE_SM, "self-start", DECK_STATUS[t.status])}>{STATUS_META[t.status].label}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
               {r.description?.trim() ? (
-                <div className={cn(!!r.tasks?.length && "mt-[1cqw] border-t border-line/60 pt-[0.9cqw]")}>
-                  <p className="mb-[0.3cqw] text-[0.9cqw] font-semibold uppercase tracking-[0.16em] text-ink-subtle">Release notes</p>
+                <div className={cn(count > 0 && "mt-[1cqw] border-t border-line/60 pt-[0.9cqw]")}>
+                  <p className="mb-[0.35cqw] text-[0.9cqw] font-semibold uppercase tracking-[0.16em] text-ink-subtle">Release notes</p>
                   <p className="whitespace-pre-wrap break-words text-[1.15cqw] leading-snug text-ink">{r.description.trim()}</p>
                 </div>
-              ) : !r.tasks?.length ? (
+              ) : count === 0 ? (
                 <p className="text-[1.15cqw] text-ink-subtle">No tasks linked and no release notes.</p>
               ) : null}
             </div>

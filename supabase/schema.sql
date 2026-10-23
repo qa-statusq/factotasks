@@ -1076,9 +1076,20 @@ as $$
       ) order by (r.status = 'released'), coalesce(r.planned_date, (r.released_at at time zone 'Asia/Kolkata')::date) nulls last)
       from releases r join apps a on a.id = r.app_id, win, scope s
       where (s.all_apps or r.app_id = any(s.app_ids))
-        and ((r.released_at > win.from_at and r.released_at <= win.to_at + interval '1 day')
+        and (
+          -- (015) shipped inside the window, compared by IST DAY: a version dated
+          -- the day the window opens belongs to it, whatever the minute.
+          (r.released_at is not null
+             and (r.released_at at time zone 'Asia/Kolkata')::date >= (win.from_at at time zone 'Asia/Kolkata')::date
+             and (r.released_at at time zone 'Asia/Kolkata')::date <= (win.to_at at time zone 'Asia/Kolkata')::date)
+          -- still in the pipeline and due soon
           or (r.status not in ('released','cancelled','rolled_back')
-              and (r.planned_date is null or r.planned_date <= (win.to_at at time zone 'Asia/Kolkata')::date + 21)))
+              and (r.planned_date is null or r.planned_date <= (win.to_at at time zone 'Asia/Kolkata')::date + 21))
+          -- (015) or it carries a task that is on this meeting, so "Released 1/1" on a
+          -- task always has its version on the Releases slide
+          or exists (select 1 from task_targets tt where tt.release_id = r.id
+                       and (tt.task_id in (select (d.t).id from done d) or tt.task_id in (select (p.t).id from pending p)))
+        )
     ), '[]'::jsonb),
     'people', coalesce((
       select jsonb_agg(user_brief(u) || jsonb_build_object(

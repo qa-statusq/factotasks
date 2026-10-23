@@ -20,6 +20,7 @@ import { useSubmitShortcut } from "@/lib/use-submit-shortcut";
 import { cn } from "@/lib/cn";
 import { IconCheck, IconTrash, IconPresentation } from "@/components/ui/icons";
 import { SortableList } from "@/components/ui/sortable";
+import { SHARED_ORDER_ID } from "@/lib/meeting-agenda";
 import type { AppOverview, Meeting, MeetingSeries } from "@/lib/types";
 
 const NEW = "__new__";
@@ -261,10 +262,16 @@ function SeriesEditor({ series, apps, onChanged, onCancel, canDelete }: { series
   const [busy, setBusy] = useState(false);
   // The apps this series presents, in their current order: listed ones first, then the rest by name.
   const inScope = apps.filter((a) => a.status !== "archived" && (scope.app_ids.length === 0 || scope.app_ids.includes(a.id)));
-  // Listed apps first in their order; the rest keep the Apps screen's arrangement.
-  const ordered = [...inScope].sort((a, b) => {
+  // Listed entries first in their order; the rest keep the Apps screen's
+  // arrangement. "Across apps" (tasks spanning several apps) is one more
+  // entry, last unless placed.
+  type Entry = { id: string; name: string; color: string; icon_url: string | null; shared?: boolean };
+  const entries: Entry[] = [...inScope.map((a) => ({ id: a.id, name: a.name, color: a.color, icon_url: a.icon_url })), { id: SHARED_ORDER_ID, name: "Across apps", color: "#0f766e", icon_url: null, shared: true }];
+  const ordered = [...entries].sort((a, b) => {
     const ia = order.indexOf(a.id), ib = order.indexOf(b.id);
-    return (ia === -1 ? order.length : ia) - (ib === -1 ? order.length : ib) || inScope.indexOf(a) - inScope.indexOf(b);
+    const fa = ia === -1 ? (a.shared ? order.length + entries.length : order.length) : ia;
+    const fb = ib === -1 ? (b.shared ? order.length + entries.length : order.length) : ib;
+    return fa - fb || entries.indexOf(a) - entries.indexOf(b);
   });
   const dirty = !series || name.trim() !== series.name || scope.app_ids.join() !== series.app_ids.join() || scope.include_general !== (series.include_general ?? true) || order.join() !== (series.app_order ?? []).join();
 
@@ -309,8 +316,9 @@ function SeriesEditor({ series, apps, onChanged, onCancel, canDelete }: { series
           <SortableList items={ordered} keyOf={(a) => a.id} onChange={(next) => setOrder(next.map((a) => a.id))}>
             {(a) => (
               <>
-                <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />
+                {a.shared ? <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-teal-700 text-[10px] font-bold text-white" aria-hidden>⇄</span> : <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />}
                 <span className="min-w-0 flex-1 truncate text-ink">{a.name}</span>
+                {a.shared && <span className="text-[11px] text-ink-subtle">tasks on several apps</span>}
               </>
             )}
           </SortableList>

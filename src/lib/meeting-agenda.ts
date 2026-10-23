@@ -20,6 +20,8 @@ type AppLike = { id: string; name: string; color: string; icon_url?: string | nu
 
 /** Key of the deck's group for tasks that span several apps. */
 export const SHARED_KEY = "shared";
+/** The id that stands for the "Across apps" section inside a series' app_order (a uuid-shaped sentinel, never a real app). */
+export const SHARED_ORDER_ID = "00000000-0000-4000-8000-000000000001";
 
 /**
  * Groups a meeting pack's tasks and releases per app, General first, then
@@ -53,12 +55,14 @@ export function buildAgenda(pack: MeetingPack, opts: { dedupe?: boolean } = {}):
   for (const a of pack.apps) groupFor(a);
   const order = pack.series?.app_order ?? [];
   const screenOrder = pack.apps.map((a) => a.id);
-  // General first; then the series' own order; then the Apps screen's order; "Across apps" last.
+  // General first; then the series' own order (which may place "Across apps");
+  // then the Apps screen's order; "Across apps" last unless the series placed it.
   const rank = (key: string): number => {
     if (key === "general") return -1;
-    if (key === SHARED_KEY) return Number.MAX_SAFE_INTEGER;
-    const i = order.indexOf(key);
+    const id = key === SHARED_KEY ? SHARED_ORDER_ID : key;
+    const i = order.indexOf(id);
     if (i !== -1) return i;
+    if (key === SHARED_KEY) return Number.MAX_SAFE_INTEGER;
     const j = screenOrder.indexOf(key);
     return order.length + (j === -1 ? screenOrder.length : j);
   };

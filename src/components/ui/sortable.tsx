@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { IconChevronUp, IconChevronDown, IconGrip } from "@/components/ui/icons";
 
@@ -9,6 +9,11 @@ import { IconChevronUp, IconChevronDown, IconGrip } from "@/components/ui/icons"
  * finger — pointer events, no library) or nudge it with the arrows, which
  * also makes the order reachable from the keyboard. The parent owns the
  * array; every move calls `onChange` with the new order.
+ *
+ * Feel: the dragged row rides under the pointer; the others slide into their
+ * new slot (FLIP — measured before paint, animated with a transform) instead
+ * of jumping. The slot is the row whose middle is nearest the pointer, so a
+ * row never flickers back and forth on a boundary.
  */
 export function SortableList<T>({
   items,
@@ -31,6 +36,12 @@ export function SortableList<T>({
 }) {
   const listRef = useRef<HTMLOListElement>(null);
   const [dragKey, setDragKey] = useState<string | null>(null);
+  // Grab geometry: where the pointer and the row were when the drag began.
+  const grab = useRef<{ pointerY: number; rowTop: number; lastY: number } | null>(null);
+  // Each row's layout top from the previous paint, for the slide animation.
+  const tops = useRef<Map<string, number>>(new Map());
+
+  const rows = () => [...(listRef.current?.querySelectorAll<HTMLElement>("[data-sort-key]") ?? [])];
 
   const move = (from: number, to: number) => {
     if (from === to || to < 0 || to >= items.length) return;
@@ -40,44 +51,90 @@ export function SortableList<T>({
     onChange(next);
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragKey || !listRef.current) return;
-    const rows = [...listRef.current.querySelectorAll<HTMLElement>("[data-sort-key]")];
-    const from = rows.findIndex((r) => r.dataset.sortKey === dragKey);
-    if (from === -1) return;
-    // The row under the pointer becomes the dragged row's new slot. Rows
-    // re-render in the new order, so the next move compares against that.
-    let over = from;
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i].getBoundingClientRect();
-      if (e.clientY >= r.top && e.clientY <= r.bottom) {
-        over = i;
-        break;
+  // Put the dragged row under the pointer, whatever slot it now occupies.
+  const placeDragged = () => {
+    const g = grab.current;
+    if (!g || !dragKey) return;
+    const el = rows().find((r) => r.dataset.sortKey === dragKey);
+    if (!el) return;
+    el.style.transition = "none";
+    el.style.transform = `translateY(${g.lastY - g.pointerY - (el.offsetTop - g.rowTop)}px)`;
+  };
+
+  useLayoutEffect(() => {
+    const next = new Map<string, number>();
+    for (const r of rows()) {
+      const key = r.dataset.sortKey!;
+      next.set(key, r.offsetTop);
+      const prev = tops.current.get(key);
+      if (key !== dragKey && prev !== undefined && prev !== r.offsetTop) {
+        // FLIP: start from where it was, then let it slide to where it is.
+        r.style.transition = "none";
+        r.style.transform = `translateY(${prev - r.offsetTop}px)`;
+        requestAnimationFrame(() => {
+          r.style.transition = "transform 170ms ease";
+          r.style.transform = "";
+        });
       }
-      if (i === 0 && e.clientY < r.top) over = 0;
-      if (i === rows.length - 1 && e.clientY > r.bottom) over = i;
     }
+    tops.current = next;
+    placeDragged();
+  });
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const g = grab.current;
+    if (!dragKey || !g) return;
+    g.lastY = e.clientY;
+    const list = rows();
+    const from = list.findIndex((r) => r.dataset.sortKey === dragKey);
+    if (from === -1) return;
+    // Slot = the row whose middle is nearest the pointer (layout positions, transforms ignored).
+    const base = listRef.current!.getBoundingClientRect().top;
+    let over = from;
+    let best = Infinity;
+    list.forEach((r, i) => {
+      const mid = base + r.offsetTop + r.offsetHeight / 2;
+      const d = Math.abs(e.clientY - mid);
+      if (d < best) {
+        best = d;
+        over = i;
+      }
+    });
     if (over !== from) move(from, over);
+    else placeDragged();
+  };
+
+  const endDrag = () => {
+    const el = dragKey ? rows().find((r) => r.dataset.sortKey === dragKey) : null;
+    if (el) {
+      el.style.transition = "transform 150ms ease";
+      el.style.transform = "";
+    }
+    grab.current = null;
+    setDragKey(null);
   };
 
   return (
-    <ol ref={listRef} className={cn("divide-y divide-line/70 overflow-hidden rounded-lg border border-line bg-surface", className)} onPointerMove={onPointerMove} onPointerUp={() => setDragKey(null)} onPointerCancel={() => setDragKey(null)}>
+    <ol ref={listRef} className={cn("relative divide-y divide-line/70 overflow-hidden rounded-lg border border-line bg-surface", dragKey && "select-none", className)} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}>
       {items.map((item, i) => {
         const key = keyOf(item);
         const dragging = dragKey === key;
         return (
-          <li key={key} data-sort-key={key} className={cn("flex items-center gap-2 px-2.5 py-1.5 text-[13px] transition-colors", dragging && "relative z-[1] bg-brand-50/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)]", itemClassName)}>
+          <li key={key} data-sort-key={key} className={cn("flex items-center gap-2 bg-surface px-2.5 py-1.5 text-[13px] will-change-transform", dragging && "relative z-[1] rounded-lg bg-brand-50 shadow-[0_6px_18px_rgba(0,0,0,0.14)] ring-1 ring-brand-200", itemClassName)}>
             {!disabled && (
               <button
                 type="button"
                 onPointerDown={(e) => {
+                  if (e.button !== 0 && e.pointerType === "mouse") return;
                   e.preventDefault();
+                  const row = (e.currentTarget as HTMLElement).closest<HTMLElement>("[data-sort-key]");
                   (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+                  grab.current = { pointerY: e.clientY, rowTop: row?.offsetTop ?? 0, lastY: e.clientY };
                   setDragKey(key);
                 }}
                 onPointerUp={(e) => {
                   (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-                  setDragKey(null);
+                  endDrag();
                 }}
                 className={cn("tap shrink-0 touch-none rounded-md p-1 text-ink-subtle hover:bg-canvas hover:text-ink", dragging ? "cursor-grabbing" : "cursor-grab")}
                 aria-label="Drag to reorder"

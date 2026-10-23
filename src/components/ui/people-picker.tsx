@@ -178,7 +178,7 @@ export function PeoplePicker({
             onClick={() => setOpen((o) => !o)}
             aria-haspopup="listbox"
             aria-expanded={open}
-            className="flex min-h-7 min-w-[6rem] flex-1 items-center justify-between gap-2 text-left focus-visible:outline-hidden"
+            className="flex min-h-7 min-w-[6rem] flex-1 items-center justify-between gap-2 text-left outline-none focus:outline-none focus-visible:outline-hidden"
           >
             <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
               {single && selected[0] ? (
