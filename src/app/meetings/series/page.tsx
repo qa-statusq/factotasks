@@ -208,23 +208,13 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
         <PeoplePicker users={people} value={members} onChange={setMembers} placeholder="Add team members…" max={50} />
         {admins.length > 0 && (
           <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-ink-subtle">
-            <span>Always in:</span>
+            <span>Admin{admins.length === 1 ? "" : "s"} always take{admins.length === 1 ? "s" : ""} part:</span>
             {admins.map((u) => (
               <span key={u.id} className="inline-flex items-center gap-1 text-ink-muted">
                 <Avatar user={u} size="xs" /> {u.name}
               </span>
             ))}
-            <span>(admin{admins.length === 1 ? "" : "s"})</span>
           </p>
-        )}
-        {picked.length > 0 && (
-          <ul className="mt-3 flex flex-wrap gap-1.5">
-            {picked.map((u) => (
-              <li key={u.id} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-canvas py-0.5 pl-0.5 pr-2 text-[12.5px] text-ink">
-                <Avatar user={u} size="xs" /> {u.name}
-              </li>
-            ))}
-          </ul>
         )}
       </Section>
 
