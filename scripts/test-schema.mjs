@@ -70,6 +70,14 @@ assert(rev0 > 0, `rev counter bumped by triggers (rev=${rev0})`);
 await db.query("update app_settings set value = '\"7\"'::jsonb where key = 'rev'");
 await db.query("update tasks set priority = 'low' where id = $1", [t2.id]);
 assert((await json("select value from app_settings where key = 'rev'")) === 8, "rev trigger tolerates a string-valued counter");
+// 022: what a screen paints moves the counter; sign-ins and preferences do not.
+await db.query("update users set last_login_at = now(), prefs = '{\"x\":1}'::jsonb where id = $1", [dev.id]);
+assert((await json("select value from app_settings where key = 'rev'")) === 8, "a sign-in / preference change leaves the counter alone (022)");
+await db.query("update users set title = 'Senior Developer' where id = $1", [dev.id]);
+assert((await json("select value from app_settings where key = 'rev'")) === 9, "a changed title moves the counter (022)");
+await db.query("update app_settings set value = '{\"mode\":\"always\"}'::jsonb where key = 'approval_policy'");
+assert((await json("select value from app_settings where key = 'rev'")) === 10, "a settings change moves the counter once, without re-triggering itself (022)");
+await db.query("update app_settings set value = '{\"mode\":\"done_only\"}'::jsonb where key = 'approval_policy'");
 
 console.log("\n— workflow —");
 // member starts work

@@ -33,7 +33,7 @@ import { cn } from "@/lib/cn";
 import { LIMITS, taskRef } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
 import { IconMaximize, IconPrint, IconCheck, IconTrash, IconEdit, IconPresentation, IconChevronDown, IconPlus, IconX } from "@/components/ui/icons";
-import type { AppOverview, MeetingNote, MeetingPack, MeetingSeries, TaskCard } from "@/lib/types";
+import type { AppOverview, Meeting, MeetingNote, MeetingPack, MeetingSeries, TaskCard } from "@/lib/types";
 
 type Pack = MeetingPack & { workspace_name: string };
 const fmt = (iso: string) => istTime(iso).replace(/:\d\d (am|pm)/, " $1");
@@ -66,7 +66,11 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
   const needsApproval = useNeedsApproval();
   const m = pack.meeting;
   const { data: sd } = useCachedFetch<{ series: MeetingSeries[] }>("/api/meeting-series");
-  const closesItself = m.auto_close ?? sd?.series.find((x) => x.id === m.series_id)?.auto_close ?? true;
+  // The pack carries the agenda; the meeting row (list endpoint) carries the closing rule.
+  const { data: ml } = useCachedFetch<{ meetings: Meeting[] }>("/api/meetings");
+  const row = ml?.meetings.find((x) => x.id === m.id);
+  const seriesClose = sd?.series.find((x) => x.id === m.series_id)?.auto_close ?? true;
+  const closesItself = row?.auto_close ?? seriesClose;
   const finalized = m.status === "finalized";
   // Closed = locked for everyone (an admin reopens to change anything), so the copy stays true.
   // Members of the series read the minutes, present, print, record and add tasks; everything else is the admins'.
@@ -134,19 +138,29 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
           {fmt(m.held_at)} · covering {pack.previous_meeting ? `since the previous ${pack.series ? pack.series.name : "meeting"} (${fmt(pack.previous_meeting)})` : "the previous 7 days"}{!finalized && " · live until closed"}
           {" · "}
           <ScopeLabel scope={m} apps={ad?.apps} className="align-middle" />
-          {!finalized && (
-            <>
-              {" · "}
-              {isAdmin ? (
-                <button type="button" onClick={() => patch({ auto_close: !closesItself }, "Closing updated", "auto")} className="rounded px-1 text-[12.5px] font-medium text-ink-muted underline decoration-dotted underline-offset-4 hover:text-ink" title="Click to change for this meeting">
-                  {closesItself ? "closes by itself tonight" : "stays open until closed by hand"}
-                </button>
-              ) : (
-                <span>{closesItself ? "closes by itself tonight" : "stays open until closed by hand"}</span>
-              )}
-            </>
-          )}
         </p>
+        {!finalized && (
+          <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-muted">
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => patch({ auto_close: !closesItself }, closesItself ? "This meeting stays open until you close it" : "This meeting closes by itself at the end of its day", "auto")}
+                disabled={busy === "auto"}
+                className={cn("inline-flex items-center gap-2 rounded-full border px-2.5 py-1 transition-colors", closesItself ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100" : "border-line bg-surface text-ink-muted hover:bg-canvas")}
+                title="Automatic closing for this meeting — click to change"
+                aria-pressed={closesItself}
+              >
+                <span className={cn("relative h-3.5 w-6 rounded-full transition-colors", closesItself ? "bg-emerald-600" : "bg-ink/20")} aria-hidden>
+                  <span className={cn("absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white transition-[left]", closesItself ? "left-3" : "left-0.5")} />
+                </span>
+                {closesItself ? "Closes by itself at the end of the day" : "Stays open until closed by hand"}
+                {row?.auto_close == null && <span className="text-ink-subtle">· series default</span>}
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1">{closesItself ? "Closes by itself at the end of the day" : "Stays open until closed by hand"}</span>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/meetings/${m.id}/present`} onClick={() => tabMemSet("ft_deck_from", m.id)} className={buttonClass("primary", "sm")}>
             <IconMaximize size={14} /> Present

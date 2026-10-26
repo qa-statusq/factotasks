@@ -446,6 +446,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
             return null;
           }
           recordingId.current = started.data.recording.id;
+          refreshLists(); // the meeting's card shows the recording as in progress right away
           void pump();
           return recordingId.current;
         });
@@ -458,7 +459,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         starting.current = false;
       }
     },
-    [patch, pump, releaseMedia, finish, keepCopy, fallbackBlob]
+    [patch, pump, releaseMedia, finish, keepCopy, fallbackBlob, refreshLists]
   );
 
   /** After a failure: upload the kept file from scratch as a new recording. */

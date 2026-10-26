@@ -86,7 +86,7 @@ function SeriesSettings() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-semibold text-ink">{s.name}</span>
                     <span className="block text-[11.5px] text-ink-subtle">
-                      {s.meeting_count ?? 0} meeting{(s.meeting_count ?? 0) === 1 ? "" : "s"} · {s.member_ids?.length ?? 0} {(s.member_ids?.length ?? 0) === 1 ? "person" : "people"}
+                      {s.meeting_count ?? 0} meeting{(s.meeting_count ?? 0) === 1 ? "" : "s"} · {s.member_ids?.length ?? 0} member{(s.member_ids?.length ?? 0) === 1 ? "" : "s"}
                     </span>
                   </span>
                 </Link>
@@ -144,7 +144,9 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
     const fb = ib === -1 ? (b.shared ? order.length + entries.length : order.length) : ib;
     return fa - fb || entries.indexOf(a) - entries.indexOf(b);
   });
-  const people = users.filter((u) => u.is_active !== false);
+  // Admins run every meeting already, so only members are offered here.
+  const people = users.filter((u) => u.is_active !== false && (u as UserBrief & { role?: string }).role !== "admin");
+  const admins = users.filter((u) => u.is_active !== false && (u as UserBrief & { role?: string }).role === "admin");
   const picked = members.map((id) => people.find((u) => u.id === id)).filter((u): u is UserBrief => !!u);
   const dirty =
     !series ||
@@ -158,7 +160,7 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
   async function save() {
     if (busy || !name.trim()) return;
     setBusy(true);
-    const body = { name: name.trim(), app_ids: scope.app_ids, include_general: scope.include_general, app_order: order, member_ids: members, auto_close: autoClose };
+    const body = { name: name.trim(), app_ids: scope.app_ids, include_general: scope.include_general, app_order: order, member_ids: picked.map((u) => u.id), auto_close: autoClose };
     const r = series ? await postJson<{ series?: { id: string }; error?: string }>(`/api/meeting-series/${series.id}`, body, "PATCH") : await postJson<{ series?: { id: string }; error?: string }>("/api/meeting-series", body);
     setBusy(false);
     if (r.ok) {
@@ -203,7 +205,18 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
       )}
 
       <Section icon={<IconUsers size={15} />} title="People" hint="Team members who take part. They see this series' meetings and recordings, can present, print, record and add tasks, and move their own tasks. Closing, deleting, minutes and sharing stay with admins.">
-        <PeoplePicker users={people} value={members} onChange={setMembers} placeholder="Add people from the team…" max={50} />
+        <PeoplePicker users={people} value={members} onChange={setMembers} placeholder="Add team members…" max={50} />
+        {admins.length > 0 && (
+          <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-ink-subtle">
+            <span>Always in:</span>
+            {admins.map((u) => (
+              <span key={u.id} className="inline-flex items-center gap-1 text-ink-muted">
+                <Avatar user={u} size="xs" /> {u.name}
+              </span>
+            ))}
+            <span>(admin{admins.length === 1 ? "" : "s"})</span>
+          </p>
+        )}
         {picked.length > 0 && (
           <ul className="mt-3 flex flex-wrap gap-1.5">
             {picked.map((u) => (

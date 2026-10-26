@@ -361,7 +361,6 @@ where t.app_ids is distinct from coalesce((select array_agg(distinct x.app_id or
 update tasks t set assignee_ids = coalesce((select array_agg(distinct x.user_id order by x.user_id) from task_assignees x where x.task_id = t.id), '{}'::uuid[])
 where t.assignee_ids is distinct from coalesce((select array_agg(distinct x.user_id order by x.user_id) from task_assignees x where x.task_id = t.id), '{}'::uuid[]);
 
-
 -- Every status event: direct changes, requests, approvals, rejections.
 create table if not exists task_status_log (
   id          uuid primary key default gen_random_uuid(),
@@ -418,8 +417,6 @@ create table if not exists meeting_series (
 );
 alter table meeting_series add column if not exists app_order uuid[] not null default '{}';
 alter table meeting_series add column if not exists auto_close boolean not null default true; -- (021) meetings close by themselves after their day
-alter table meeting_series add column if not exists auto_close boolean not null default true; -- (021) meetings close by themselves after their day
-alter table meeting_series add column if not exists auto_close boolean not null default true; -- (021) meetings close by themselves after their day
 create unique index if not exists meeting_series_name_idx on meeting_series (lower(name));
 drop trigger if exists meeting_series_touch on meeting_series;
 create trigger meeting_series_touch before update on meeting_series for each row execute function touch_updated_at();
@@ -448,8 +445,6 @@ create table if not exists meetings (
 create index if not exists meetings_held_idx on meetings (held_at desc);
 -- Upgrades from before 003: add the columns, and put old meetings in one series.
 alter table meetings add column if not exists series_id uuid references meeting_series(id) on delete set null;
-alter table meetings add column if not exists auto_close boolean; -- (021) per-meeting override; null = follow the series
-alter table meetings add column if not exists auto_close boolean; -- (021) per-meeting override; null = follow the series
 alter table meetings add column if not exists auto_close boolean; -- (021) per-meeting override; null = follow the series
 alter table meetings add column if not exists app_ids uuid[] not null default '{}';
 alter table meetings add column if not exists include_general boolean not null default true;
@@ -522,28 +517,8 @@ create table if not exists meeting_series_members (
   primary key (series_id, user_id)
 );
 create index if not exists meeting_series_members_user_idx on meeting_series_members (user_id);
-
--- (021) The team members who take part in a series: they see its meetings and recordings,
--- present / print / record / add tasks and move their own tasks; the rest stays with admins.
-create table if not exists meeting_series_members (
-  series_id  uuid not null references meeting_series(id) on delete cascade,
-  user_id    uuid not null references users(id) on delete cascade,
-  added_by   uuid references users(id) on delete set null,
-  created_at timestamptz not null default now(),
-  primary key (series_id, user_id)
-);
-create index if not exists meeting_series_members_user_idx on meeting_series_members (user_id);
-
--- (021) The team members who take part in a series: they see its meetings and recordings,
--- present / print / record / add tasks and move their own tasks; the rest stays with admins.
-create table if not exists meeting_series_members (
-  series_id  uuid not null references meeting_series(id) on delete cascade,
-  user_id    uuid not null references users(id) on delete cascade,
-  added_by   uuid references users(id) on delete set null,
-  created_at timestamptz not null default now(),
-  primary key (series_id, user_id)
-);
-create index if not exists meeting_series_members_user_idx on meeting_series_members (user_id);
+drop trigger if exists meeting_series_members_rev on meeting_series_members;
+create trigger meeting_series_members_rev after insert or update or delete on meeting_series_members for each statement execute function bump_rev();
 
 -- Tasks pinned to a meeting by hand, regardless of app or date. A task can
 -- sit in any number of meetings.
@@ -610,6 +585,21 @@ drop trigger if exists meeting_tasks_rev on meeting_tasks;
 create trigger meeting_tasks_rev after insert or update or delete on meeting_tasks for each statement execute function bump_rev();
 drop trigger if exists apps_rev on apps;
 create trigger apps_rev after insert or update or delete on apps for each statement execute function bump_rev();
+-- (022) The rest of what a screen can show. users: only the columns a screen paints
+-- (sign-ins and personal preferences would make every tab refetch for nothing);
+-- notifications / activity_log: inserts only; app_settings: every row but the counter itself.
+drop trigger if exists users_rev on users;
+create trigger users_rev after insert or delete or update of role, first_name, last_name, department, title, color, is_active on users for each statement execute function bump_rev();
+drop trigger if exists app_members_rev on app_members;
+create trigger app_members_rev after insert or update or delete on app_members for each statement execute function bump_rev();
+drop trigger if exists recording_shares_rev on recording_shares;
+create trigger recording_shares_rev after insert or update or delete on recording_shares for each statement execute function bump_rev();
+drop trigger if exists notifications_rev on notifications;
+create trigger notifications_rev after insert on notifications for each statement execute function bump_rev();
+drop trigger if exists activity_log_rev on activity_log;
+create trigger activity_log_rev after insert on activity_log for each statement execute function bump_rev();
+drop trigger if exists app_settings_rev on app_settings;
+create trigger app_settings_rev after insert or update on app_settings for each row when (new.key <> 'rev') execute function bump_rev();
 
 -- =====================================================================
 -- JSON SHAPES shared by every aggregate RPC below. The server returns these
@@ -1068,8 +1058,6 @@ begin
   return moved;
 end;
 $$;
-
-
 
 -- Team directory with workload per person.
 create or replace function team_overview()
@@ -1531,8 +1519,6 @@ alter table notifications    enable row level security;
 alter table push_subscriptions enable row level security;
 alter table meeting_recordings enable row level security;
 alter table recording_shares   enable row level security;
-alter table meeting_series_members enable row level security;
-alter table meeting_series_members enable row level security;
 alter table meeting_series_members enable row level security;
 
 revoke all on all tables    in schema public from anon, authenticated;

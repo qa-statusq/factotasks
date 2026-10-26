@@ -59,10 +59,13 @@ export async function POST(req: NextRequest) {
   const include_general = b.include_general === undefined ? true : b.include_general === true;
   const app_order = b.app_order === undefined ? [] : parseUuidList(b.app_order, 60);
   if (app_order === null) return fail("Invalid app order");
-  const member_ids = b.member_ids === undefined ? [] : parseUuidList(b.member_ids, 100);
-  if (member_ids === null) return fail("Invalid people list");
+  const wanted = b.member_ids === undefined ? [] : parseUuidList(b.member_ids, 100);
+  if (wanted === null) return fail("Invalid people list");
   const auto_close = b.auto_close === undefined ? true : b.auto_close === true;
   const sb = getSupabase();
+  // Only real teammates can take part; admins run every series already.
+  const { data: people } = wanted.length ? await sb.from("users").select("id").in("id", wanted).eq("role", "member") : { data: [] as { id: string }[] };
+  const member_ids = (people ?? []).map((x) => x.id as string);
   const { data: existing } = await sb.from("meeting_series").select("color");
   const color = pickDistinctColor((existing || []).map((r) => r.color as string), SERIES_COLORS);
   let { data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, app_order, auto_close, created_by: u.uid }).select(SERIES_SELECT).single();

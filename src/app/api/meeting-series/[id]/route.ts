@@ -41,9 +41,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (!Object.keys(patch).length && memberIds === null) return fail("Nothing to update");
   if (memberIds !== null) {
-    // Only real, active teammates can take part.
+    // Only real teammates can take part; admins run every series already.
     const sb = getSupabase();
-    const { data: users } = memberIds.length ? await sb.from("users").select("id").in("id", memberIds) : { data: [] as { id: string }[] };
+    const { data: users } = memberIds.length ? await sb.from("users").select("id").in("id", memberIds).eq("role", "member") : { data: [] as { id: string }[] };
     const valid = new Set((users ?? []).map((x) => x.id as string));
     const keep = memberIds.filter((x) => valid.has(x));
     const { data: cur } = await sb.from("meeting_series_members").select("user_id").eq("series_id", id);

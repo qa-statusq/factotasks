@@ -8,10 +8,10 @@ import { timeoutSignal } from "@/lib/compat";
  * Live-ish updates without WebSockets: while the tab is visible, poll the
  * server's change counter (/api/ping — one primary-key read) every
  * POLL_MS. When it moves, every screen currently on display re-fetches.
- * 50 people × one tiny request per 45 s is nothing; a hidden tab polls not
- * at all, and focus/online revalidation (client-cache) still covers returns.
+ * 50 people × one tiny request per 15 s is still nothing; a hidden tab polls
+ * not at all, and focus/online revalidation (client-cache) still covers returns.
  */
-const POLL_MS = 45_000;
+const POLL_MS = 15_000;
 
 // The last counter value this tab has reconciled with. Module-level so a
 // write made from this tab can move it without waiting for the next poll.
