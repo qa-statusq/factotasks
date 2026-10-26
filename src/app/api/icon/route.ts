@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimited } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/throttle";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +23,36 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Bad icon url" }, { status: 400, headers: { "Cache-Control": "no-store" } });
   }
   if (target.protocol !== "https:" || !HOSTS.some((h) => h.test(target.hostname))) return NextResponse.json({ error: "Icon host not allowed" }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  // Public path (tiles load before sign-in resolves): one address gets a sane number of misses a minute; hits are served by the CDN.
+  const limited = await rateLimited(clientIp(req), "icon", 120, 60);
+  if (limited) return limited;
   try {
-    const up = await fetch(target, { headers: { accept: "image/*", "user-agent": "Mozilla/5.0 (FactoTasks icon relay)" }, signal: AbortSignal.timeout(8000), cache: "no-store" });
+    // No redirects: an allow-listed host must answer itself, never hand the relay to another one.
+    const up = await fetch(target, { headers: { accept: "image/*", "user-agent": "Mozilla/5.0 (FactoTasks icon relay)" }, signal: AbortSignal.timeout(8000), cache: "no-store", redirect: "error" });
     const type = up.headers.get("content-type") || "";
-    if (!up.ok || !type.startsWith("image/")) return NextResponse.json({ error: "Icon unavailable" }, { status: 502, headers: { "Cache-Control": "no-store" } });
-    const buf = await up.arrayBuffer();
-    if (buf.byteLength > MAX_BYTES) return NextResponse.json({ error: "Icon too large" }, { status: 502, headers: { "Cache-Control": "no-store" } });
+    if (!up.ok || !type.startsWith("image/") || !up.body) return NextResponse.json({ error: "Icon unavailable" }, { status: 502, headers: { "Cache-Control": "no-store" } });
+    const declared = Number(up.headers.get("content-length") || 0);
+    if (declared > MAX_BYTES) return NextResponse.json({ error: "Icon too large" }, { status: 502, headers: { "Cache-Control": "no-store" } });
+    // Read up to the cap and not a byte more.
+    const parts: Uint8Array[] = [];
+    let got = 0;
+    const reader = up.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      got += value.byteLength;
+      if (got > MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return NextResponse.json({ error: "Icon too large" }, { status: 502, headers: { "Cache-Control": "no-store" } });
+      }
+      parts.push(value);
+    }
+    const buf = new Uint8Array(got);
+    let at = 0;
+    for (const p of parts) {
+      buf.set(p, at);
+      at += p.byteLength;
+    }
     return new NextResponse(buf, {
       status: 200,
       headers: {

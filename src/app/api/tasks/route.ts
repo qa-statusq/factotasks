@@ -7,7 +7,8 @@ import { decodeCursor, encodeCursor, tsIdKeysetDesc } from "@/lib/keyset";
 import { isUuid, oneOf } from "@/lib/validate";
 import { OPEN_STATUSES, PRIORITIES, TASK_STATUSES, TASK_TYPES, taskRef } from "@/lib/domain";
 import { visibleAppIds, visibleTaskIds, hasTaskArrays, hasTaskSeries, NONE_ID } from "@/lib/visibility";
-import { canAccessMeeting } from "@/lib/series-access";
+import { canAccessMeeting, canAccessSeries } from "@/lib/series-access";
+import { rateLimited } from "@/lib/rate-limit";
 import { taskPatch, validateTaskRefs, syncTargets, linkTargetToRelease, loadCard } from "@/lib/tasks";
 import { notifyUsers } from "@/lib/notify";
 import { displayName } from "@/lib/name";
@@ -198,9 +199,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
+  const limited = await rateLimited(u.uid, "task", 60, 60);
+  if (limited) return limited;
   const b = await readJsonObject(req);
   const v = taskPatch(b, false);
   if ("error" in v) return fail(v.error);
+  if (v.patch.series_id && !(await canAccessSeries(u, v.patch.series_id))) return fail("You can attach a task only to a meeting series you take part in");
   const refErr = await validateTaskRefs(v.patch, v.assignees, undefined, await visibleAppIds(u));
   if (refErr) return fail(refErr);
 

@@ -13,7 +13,8 @@ import { getSettings, needsApproval } from "@/lib/settings";
 import { notifyUsers } from "@/lib/notify";
 import { displayName } from "@/lib/name";
 import { USER_BRIEF_COLS, embedded, embeddedUser } from "@/lib/users";
-import { memberSeriesIds } from "@/lib/series-access";
+import { memberSeriesIds, canAccessSeries } from "@/lib/series-access";
+import { rateLimited } from "@/lib/rate-limit";
 import type { TaskCard, TaskDetail } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -124,6 +125,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
+  const limited = await rateLimited(u.uid, "task-edit", 120, 60);
+  if (limited) return limited;
   const { id: raw } = await params;
   const id = await resolveId(raw);
   if (!id) return fail("Task not found", 404);
@@ -136,6 +139,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ("error" in v) return fail(v.error);
   if (Object.keys(v.patch).length === 0 && !v.assignees) return fail("Nothing to update");
   if (!(await canSeeTask(u, id))) return fail("Task not found", 404);
+  if (v.patch.series_id && !(await canAccessSeries(u, v.patch.series_id))) return fail("You can attach a task only to a meeting series you take part in");
   const refErr = await validateTaskRefs(v.patch, v.assignees, { id }, await visibleAppIds(u));
   if (refErr) return fail(refErr);
 

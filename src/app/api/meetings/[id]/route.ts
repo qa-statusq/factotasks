@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { ok, fail, serverError, readJsonObject } from "@/lib/api";
+import { ok, fail, serverError, readJsonObject, memberJson } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, cleanText, isUuid, parseUuidList } from "@/lib/validate";
 import { LIMITS } from "@/lib/domain";
@@ -39,8 +39,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       : [];
     pack.approvals = [];
     pack.notes = Array.isArray(pack.notes) ? (pack.notes as { task_id: string | null }[]).filter((n) => !n.task_id || visible.has(n.task_id)) : [];
+    // Per-person workload is a lead's view; app counters only for the apps they are on.
+    pack.people = [];
+    pack.apps = Array.isArray(pack.apps) ? (pack.apps as { id: string }[]).filter((a) => apps.has(a.id)) : [];
   }
-  return NextResponse.json({ ...pack, workspace_name: settings.workspace_name });
+  return memberJson(u, { ...pack, workspace_name: settings.workspace_name });
 }
 
 /** Edit title / time / general minutes, close or reopen (admin). */

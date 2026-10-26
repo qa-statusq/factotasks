@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { serverError } from "@/lib/api";
+import { serverError, memberJson } from "@/lib/api";
 import { USER_BRIEF_COLS, embedded, embeddedUser } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     actor: embeddedUser(r.actor),
     task: embedded<{ id: string; number: number; title: string }>(r.task),
   }));
-  return NextResponse.json({
+  return memberJson(u, {
     unread: unreadRes.count ?? 0,
     approvals: (approvalsRes.count ?? 0) + (releaseReqRes.count ?? 0),
     notifications,

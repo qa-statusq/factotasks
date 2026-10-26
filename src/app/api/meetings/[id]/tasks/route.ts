@@ -7,6 +7,7 @@ import { isUuid } from "@/lib/validate";
 import { loadMeeting } from "@/lib/meetings";
 import { taskRef } from "@/lib/domain";
 import { canAccessMeeting } from "@/lib/series-access";
+import { canSeeTask } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ async function guard(params: Promise<{ id: string }>, req: NextRequest) {
   const b = await readJsonObject(req);
   if (!isUuid(b.task_id)) return { res: fail("Pick a task") };
   const { data: t } = await getSupabase().from("tasks").select("id, number, title").eq("id", b.task_id).maybeSingle();
-  if (!t) return { res: fail("Task not found", 404) };
+  if (!t || !(await canSeeTask(u, t.id as string))) return { res: fail("Task not found", 404) };
   return { u, m, t: t as { id: string; number: number; title: string } };
 }
 

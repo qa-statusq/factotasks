@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { serverError } from "@/lib/api";
+import { serverError, memberJson } from "@/lib/api";
 import { istToday } from "@/lib/ist";
 
 export const dynamic = "force-dynamic";
@@ -41,5 +41,5 @@ export async function GET(req: NextRequest) {
   }
   // Per-person throughput is a lead's view; members see apps, periods and mixes only.
   if (u.role !== "admin" && data && typeof data === "object") delete (data as Record<string, unknown>).by_person;
-  return NextResponse.json(data);
+  return memberJson(u, data);
 }

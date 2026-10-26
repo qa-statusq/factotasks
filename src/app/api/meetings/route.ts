@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { fail, serverError, readJsonObject } from "@/lib/api";
+import { fail, serverError, readJsonObject, memberJson } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid } from "@/lib/validate";
 import { LIMITS } from "@/lib/domain";
@@ -24,7 +24,7 @@ export async function GET() {
   const { data, error } = await q;
   if (error) return serverError(error);
   const meetings = ((data as unknown as Record<string, unknown>[]) || []).map(shapeMeeting);
-  return NextResponse.json({ meetings });
+  return memberJson(u, { meetings });
 }
 
 /** Create a meeting (admin). Body: { series_id?, held_at?, title?, force? }.

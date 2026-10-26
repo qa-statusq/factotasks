@@ -51,7 +51,7 @@ export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meeting
       window.clearTimeout(t);
       ctrl.abort();
     };
-  }, [q, scope]);
+  }, [q, scope, toast]);
 
   async function pin(t: TaskCard) {
     if (busy) return;

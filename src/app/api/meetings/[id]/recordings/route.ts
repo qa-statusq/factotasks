@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { fail, serverError, readJsonObject } from "@/lib/api";
+import { fail, serverError, readJsonObject, memberJson } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid, parseNumber } from "@/lib/validate";
 import { loadMeeting } from "@/lib/meetings";
@@ -30,7 +30,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { data, error } = await getSupabase().from("meeting_recordings").select(RECORDING_SELECT).eq("meeting_id", id).order("created_at", { ascending: false });
   if (missingTable(error)) return NextResponse.json({ recordings: [], enabled: false, chunk_bytes: DRIVE_CHUNK_BYTES, migration: "019" });
   if (error) return serverError(error);
-  return NextResponse.json({ recordings: ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => publicRecording(shapeRecording(r))), enabled: driveConfigured(), chunk_bytes: DRIVE_CHUNK_BYTES });
+  return memberJson(u, { recordings: ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => publicRecording(shapeRecording(r))), enabled: driveConfigured(), chunk_bytes: DRIVE_CHUNK_BYTES });
 }
 
 /**

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { ok, fail, serverError, readJsonObject } from "@/lib/api";
+import { ok, fail, serverError, readJsonObject, memberJson } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid } from "@/lib/validate";
-import { renameFile, trashFile, DriveError } from "@/lib/google-drive";
+import { renameFile, trashFile, unshareFile, DriveError } from "@/lib/google-drive";
 import { loadRecording, loadShares, canManage, canUpload, publicRecording, recordingFileName } from "@/lib/recordings";
 import { canAccessSeries } from "@/lib/series-access";
 
@@ -19,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const rec = await loadRecording(id);
   if (!rec || !(await canAccessSeries(u, rec.meeting?.series?.id))) return fail("Recording not found", 404);
   const shares = canManage(u, rec) ? await loadShares(id) : [];
-  return NextResponse.json({ recording: { ...publicRecording(rec), shares }, can_manage: canManage(u, rec) });
+  return memberJson(u, { recording: { ...publicRecording(rec), shares }, can_manage: canManage(u, rec) });
 }
 
 /** Rename: { name } (the Drive file follows). Admins or the recorder. */
@@ -60,6 +60,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!canManage(u, rec) && !(rec.status !== "ready" && canUpload(u, rec))) return fail("Only an admin can delete a recording", 403);
   if (rec.drive_file_id) {
     try {
+      // Shares first: a binned file stays readable to anyone still holding a permission on it.
+      const { data: shares } = await getSupabase().from("recording_shares").select("permission_id").eq("recording_id", id);
+      for (const s of shares ?? []) if (s.permission_id) await unshareFile(rec.drive_file_id, s.permission_id as string).catch(() => undefined);
       await trashFile(rec.drive_file_id);
     } catch (e) {
       return fail(e instanceof DriveError ? e.message : "Couldn't delete the recording", 502);
