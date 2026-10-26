@@ -6,21 +6,13 @@ export interface ApprovalPolicy {
    *  all: every member status change is reviewed. none: members apply directly. */
   mode: "done_only" | "all" | "none";
 }
-export interface MeetingSettings {
-  /** 0 = Sunday … 6 = Saturday (IST). */
-  weekday: number;
-  /** Hour of day (IST, 0-23) the weekly meeting usually starts. */
-  hour: number;
-}
 export interface Settings {
   approval_policy: ApprovalPolicy;
-  meeting: MeetingSettings;
   workspace_name: string;
 }
 
 const DEFAULTS: Settings = {
   approval_policy: { mode: "done_only" },
-  meeting: { weekday: 1, hour: 11 },
   workspace_name: "Mobile team",
 };
 
@@ -39,20 +31,15 @@ export function invalidateSettingsCache() {
  * on the very next action on every instance. */
 export async function getSettings(fresh = false): Promise<Settings> {
   if (!fresh && cached && Date.now() - cached.at < SETTINGS_CACHE_MS) return cached.value;
-  const { data, error } = await getSupabase().from("app_settings").select("key, value").in("key", ["approval_policy", "meeting", "workspace_name"]);
+  const { data, error } = await getSupabase().from("app_settings").select("key, value").in("key", ["approval_policy", "workspace_name"]);
   // A failed read falls back to defaults WITHOUT caching, so the next call retries.
   if (error) return DEFAULTS;
   const map = new Map((data || []).map((r) => [r.key as string, r.value as unknown]));
   const ap = map.get("approval_policy") as Partial<ApprovalPolicy> | undefined;
-  const mt = map.get("meeting") as Partial<MeetingSettings> | undefined;
   const wn = map.get("workspace_name");
   const value: Settings = {
     approval_policy: {
       mode: ap?.mode === "all" || ap?.mode === "none" ? ap.mode : "done_only",
-    },
-    meeting: {
-      weekday: Number.isInteger(mt?.weekday) && Number(mt!.weekday) >= 0 && Number(mt!.weekday) <= 6 ? Number(mt!.weekday) : 1,
-      hour: Number.isInteger(mt?.hour) && Number(mt!.hour) >= 0 && Number(mt!.hour) <= 23 ? Number(mt!.hour) : 11,
     },
     workspace_name: typeof wn === "string" && wn.trim() ? wn.trim().slice(0, 60) : DEFAULTS.workspace_name,
   };

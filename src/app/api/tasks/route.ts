@@ -95,11 +95,9 @@ export async function GET(req: NextRequest) {
     // Admins, and the members of the meeting's series (their list is already cut to what they may see).
     const { data: mt } = await sb.from("meetings").select("series_id").eq("id", meeting).maybeSingle();
     const allowed = !!mt && (await canAccessMeeting(u, mt as { series_id?: string | null }));
-    const { data: pack } = allowed ? await sb.rpc("meeting_pack", { p_meeting: meeting }) : { data: null };
-    const pk = (pack ?? {}) as Record<string, { id: string }[] | undefined>;
-    const ids = new Set<string>();
-    for (const k of ["pending", "done", "approvals"]) for (const t of pk[k] ?? []) ids.add(t.id);
-    q = q.in("id", ids.size ? [...ids] : [NONE_ID]);
+    const { data: rows } = allowed ? await sb.rpc("meeting_task_ids", { p_meeting: meeting }) : { data: null };
+    const ids = ((rows as (string | { meeting_task_ids: string })[] | null) ?? []).map((r) => (typeof r === "string" ? r : r.meeting_task_ids));
+    q = q.in("id", ids.length ? ids : [NONE_ID]);
   }
   const priority = oneOf(sp.get("priority"), PRIORITIES);
   if (priority) q = q.eq("priority", priority);

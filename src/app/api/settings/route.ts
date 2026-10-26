@@ -29,15 +29,6 @@ export async function PATCH(req: NextRequest) {
     rows.push({ key: "approval_policy", value: { mode } });
     changes.push(`approval policy → ${mode}`);
   }
-  if (b.meeting && typeof b.meeting === "object") {
-    const m = b.meeting as { weekday?: unknown; hour?: unknown };
-    const weekday = Number(m.weekday);
-    const hour = Number(m.hour);
-    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) return fail("Meeting weekday must be 0 (Sun) – 6 (Sat)");
-    if (!Number.isInteger(hour) || hour < 0 || hour > 23) return fail("Meeting hour must be 0–23");
-    rows.push({ key: "meeting", value: { weekday, hour } });
-    changes.push(`meeting → day ${weekday} ${hour}:00`);
-  }
   if ("workspace_name" in b) {
     const name = cleanLine(b.workspace_name, 60);
     if (!name) return fail("Workspace name can't be empty");

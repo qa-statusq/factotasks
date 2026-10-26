@@ -12,7 +12,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { RichText } from "@/components/ui/rich-text";
 import { NoteLink } from "@/components/ui/note-link";
 import { SeriesBadge, MeetingStatusBadge } from "@/components/meeting-series";
-import { PriorityBadge, TypeBadge, PlatformBadge, LabelChip, ReleaseStatusBadge, TargetChips, ReleaseProgress, AppTile, SeriesChip } from "@/components/ui/task-chips";
+import { PriorityBadge, TypeBadge, PlatformBadge, LabelChip, TargetChips, ReleaseProgress, AppTile, SeriesChip } from "@/components/ui/task-chips";
 import { DueChip } from "@/components/task-list";
 import { StatusMenu } from "@/components/status-menu";
 import { TaskFormSheet, type TaskFormValues } from "@/components/task-form";
@@ -410,14 +410,6 @@ function Details({ task }: { task: TaskDetail }) {
         {task.estimate_hours != null && (
           <Row label="Estimate">
             <span className="tabular-nums">{task.estimate_hours} h</span>
-          </Row>
-        )}
-        {task.release && (
-          <Row label="Release">
-            <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
-              v{task.release.version_name}
-              <ReleaseStatusBadge status={task.release.status} />
-            </span>
           </Row>
         )}
       </section>

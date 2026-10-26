@@ -56,7 +56,6 @@ create table if not exists users (
   last_login_at        timestamptz
 );
 alter table users add column if not exists prefs jsonb not null default '{}';
-create index if not exists users_active_idx on users (is_active, department);
 
 -- DB-backed login throttle + fixed-window rate limiter (serverless-safe).
 -- key = "email:<addr>" | "ip:<addr>" | "rl:<action>:<identity>:<bucket>"
@@ -97,7 +96,6 @@ create table if not exists app_settings (
 -- instead of re-fetching whole screens blindly.
 insert into app_settings (key, value) values ('rev', '0'::jsonb) on conflict (key) do nothing;
 insert into app_settings (key, value) values ('approval_policy', '{"mode":"done_only"}'::jsonb) on conflict (key) do nothing;
-insert into app_settings (key, value) values ('meeting', '{"weekday":1,"hour":11}'::jsonb) on conflict (key) do nothing;
 
 create or replace function bump_rev()
 returns trigger
@@ -148,7 +146,6 @@ create table if not exists apps (
   ios_bundle_id  text,
   appstore_url   text,                          -- App Store needs the numeric id; stored as a full URL
   color          text not null default '#4f46e5',
-  icon_path      text,                          -- storage path of an uploaded icon (optional)
   icon_url       text,                           -- store listing icon (Play / App Store), fetched automatically
   created_by     uuid references users(id) on delete set null,
   created_at     timestamptz not null default now(),
@@ -202,8 +199,6 @@ alter table releases add column if not exists requested_by uuid references users
 alter table releases add column if not exists requested_at timestamptz;
 alter table releases add column if not exists request_note text;
 create index if not exists releases_requested_idx on releases (requested_at) where requested_status is not null;
-create index if not exists releases_open_idx on releases (planned_date)
-  where status not in ('released','cancelled','rolled_back');
 create index if not exists releases_released_idx on releases (released_at desc) where released_at is not null;
 drop trigger if exists releases_touch on releases;
 create trigger releases_touch before update on releases for each row execute function touch_updated_at();
@@ -217,7 +212,6 @@ create table if not exists tasks (
   id               uuid primary key default gen_random_uuid(),
   number           int not null default nextval('task_number_seq') unique, -- human id: T-123
   app_id           uuid references apps(id) on delete set null,          -- NULL = general task
-  release_id       uuid references releases(id) on delete set null,
   platform         text check (platform in ('android','ios','both')),    -- only for app tasks
   title            text not null,
   description      text,
@@ -255,9 +249,9 @@ alter table tasks add column if not exists app_ids      uuid[] not null default 
 alter table tasks add column if not exists assignee_ids uuid[] not null default '{}';
 create index if not exists tasks_app_ids_gin      on tasks using gin (app_ids);
 create index if not exists tasks_assignee_ids_gin on tasks using gin (assignee_ids);
-create index if not exists tasks_open_idx      on tasks (status, updated_at desc, id desc);
+create index if not exists tasks_updated_id_idx on tasks (updated_at desc, id desc); -- (023) the default list order
+create index if not exists tasks_created_id_idx on tasks (created_at desc, id desc); -- (023) sort=created
 create index if not exists tasks_app_idx       on tasks (app_id, status);
-create index if not exists tasks_release_idx   on tasks (release_id) where release_id is not null;
 create index if not exists tasks_creator_idx   on tasks (created_by);
 create index if not exists tasks_due_idx       on tasks (due_date) where status not in ('done','cancelled');
 create index if not exists tasks_requested_idx on tasks (requested_at) where requested_status is not null;
@@ -284,31 +278,6 @@ create table if not exists task_targets (
 );
 create index if not exists task_targets_app_idx     on task_targets (app_id, platform);
 create index if not exists task_targets_release_idx on task_targets (release_id) where release_id is not null;
--- Backfill from the old single app/platform/release columns. Idempotent; the
--- 005 migration calls it once, and the API keeps targets in sync from then on.
-create or replace function task_targets_backfill()
-returns void
-language sql
-set search_path = public
-as $$
-insert into task_targets (task_id, app_id, platform, release_id, released_at)
-select t.id, t.app_id, p.platform,
-       case when r.id is not null and r.platform = p.platform then r.id end,
-       case when r.id is not null and r.platform = p.platform and r.status = 'released' then r.released_at end
-from tasks t
-join apps a on a.id = t.app_id
-cross join lateral (
-  select unnest(case
-    when t.platform = 'android' then array['android']
-    when t.platform = 'ios' then array['ios']
-    else array_remove(array[case when a.has_android then 'android' end, case when a.has_ios then 'ios' end], null)
-  end) as platform
-) p
-left join releases r on r.id = t.release_id
-where t.app_id is not null
-on conflict do nothing;
-$$;
-select task_targets_backfill();
 create index if not exists tasks_title_trgm    on tasks using gin (title gin_trgm_ops);
 drop trigger if exists tasks_touch on tasks;
 create trigger tasks_touch before update on tasks for each row execute function touch_updated_at();
@@ -322,38 +291,46 @@ create table if not exists task_assignees (
 );
 create index if not exists task_assignees_user_idx on task_assignees (user_id);
 
--- Keep tasks.app_ids / tasks.assignee_ids in step with their tables (009).
-create or replace function task_sync_app_ids()
+-- (023) Keep tasks.app_ids / tasks.assignee_ids in step with their tables — once per
+-- statement over the rows it touched, not once per row (one UPDATE of tasks per
+-- save instead of one per target or assignee, and one change-counter bump).
+create or replace function task_sync_app_ids_stmt()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
-declare
-  tid uuid := coalesce(new.task_id, old.task_id);
 begin
-  update tasks t set app_ids = coalesce((select array_agg(distinct x.app_id order by x.app_id) from task_targets x where x.task_id = tid), '{}'::uuid[])
-  where t.id = tid;
+  update tasks t set app_ids = coalesce((select array_agg(distinct x.app_id order by x.app_id) from task_targets x where x.task_id = t.id), '{}'::uuid[])
+  where t.id in (select task_id from changed_rows);
   return null;
 end;
 $$;
 drop trigger if exists task_targets_arrays on task_targets;
-create trigger task_targets_arrays after insert or update of app_id or delete on task_targets for each row execute function task_sync_app_ids();
+drop trigger if exists task_targets_arrays_ins on task_targets;
+drop trigger if exists task_targets_arrays_upd on task_targets;
+drop trigger if exists task_targets_arrays_del on task_targets;
+create trigger task_targets_arrays_ins after insert on task_targets referencing new table as changed_rows for each statement execute function task_sync_app_ids_stmt();
+create trigger task_targets_arrays_upd after update on task_targets referencing new table as changed_rows for each statement execute function task_sync_app_ids_stmt();
+create trigger task_targets_arrays_del after delete on task_targets referencing old table as changed_rows for each statement execute function task_sync_app_ids_stmt();
 
-create or replace function task_sync_assignee_ids()
+create or replace function task_sync_assignee_ids_stmt()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
-declare
-  tid uuid := coalesce(new.task_id, old.task_id);
 begin
-  update tasks t set assignee_ids = coalesce((select array_agg(distinct x.user_id order by x.user_id) from task_assignees x where x.task_id = tid), '{}'::uuid[])
-  where t.id = tid;
+  update tasks t set assignee_ids = coalesce((select array_agg(distinct x.user_id order by x.user_id) from task_assignees x where x.task_id = t.id), '{}'::uuid[])
+  where t.id in (select task_id from changed_rows);
   return null;
 end;
 $$;
 drop trigger if exists task_assignees_arrays on task_assignees;
-create trigger task_assignees_arrays after insert or update of user_id or delete on task_assignees for each row execute function task_sync_assignee_ids();
+drop trigger if exists task_assignees_arrays_ins on task_assignees;
+drop trigger if exists task_assignees_arrays_upd on task_assignees;
+drop trigger if exists task_assignees_arrays_del on task_assignees;
+create trigger task_assignees_arrays_ins after insert on task_assignees referencing new table as changed_rows for each statement execute function task_sync_assignee_ids_stmt();
+create trigger task_assignees_arrays_upd after update on task_assignees referencing new table as changed_rows for each statement execute function task_sync_assignee_ids_stmt();
+create trigger task_assignees_arrays_del after delete on task_assignees referencing old table as changed_rows for each statement execute function task_sync_assignee_ids_stmt();
 
 -- Backfill once (idempotent).
 update tasks t set app_ids = coalesce((select array_agg(distinct x.app_id order by x.app_id) from task_targets x where x.task_id = t.id), '{}'::uuid[])
@@ -449,6 +426,7 @@ alter table meetings add column if not exists auto_close boolean; -- (021) per-m
 alter table meetings add column if not exists app_ids uuid[] not null default '{}';
 alter table meetings add column if not exists include_general boolean not null default true;
 alter table meeting_series add column if not exists include_general boolean not null default true;
+create unique index if not exists meetings_one_open_per_series on meetings (series_id) where status = 'open'; -- (023)
 create index if not exists meetings_series_idx on meetings (series_id, held_at desc);
 insert into meeting_series (name) select 'Weekly sync' where not exists (select 1 from meeting_series);
 update meetings set series_id = (select id from meeting_series order by created_at limit 1) where series_id is null;
@@ -596,10 +574,15 @@ drop trigger if exists recording_shares_rev on recording_shares;
 create trigger recording_shares_rev after insert or update or delete on recording_shares for each statement execute function bump_rev();
 drop trigger if exists notifications_rev on notifications;
 create trigger notifications_rev after insert on notifications for each statement execute function bump_rev();
+-- (023) Entity-bound rows ride on their entity's own trigger; sign-ins, sign-outs
+-- and the daily job change nothing a screen paints. Only standalone entries
+-- (settings, arrange apps…) move the counter.
 drop trigger if exists activity_log_rev on activity_log;
-create trigger activity_log_rev after insert on activity_log for each statement execute function bump_rev();
+create trigger activity_log_rev after insert on activity_log for each row
+  when (new.entity_type is null and new.action not like 'auth.%' and new.action not like 'cron.%')
+  execute function bump_rev();
 drop trigger if exists app_settings_rev on app_settings;
-create trigger app_settings_rev after insert or update on app_settings for each row when (new.key <> 'rev') execute function bump_rev();
+create trigger app_settings_rev after insert or update on app_settings for each row when (new.key <> 'rev' and new.key not like 'lease:%') execute function bump_rev();
 
 -- =====================================================================
 -- JSON SHAPES shared by every aggregate RPC below. The server returns these
@@ -613,7 +596,7 @@ set search_path = public
 as $$
   select jsonb_build_object(
     'id', u.id,
-    'name', coalesce(nullif(trim(concat_ws(' ', u.first_name, u.last_name)), ''), u.email),
+    'name', coalesce(nullif(trim(concat_ws(' ', u.first_name, u.last_name)), ''), split_part(u.email, '@', 1)),
     'first_name', u.first_name,
     'last_name', u.last_name,
     'email', u.email,
@@ -623,24 +606,6 @@ as $$
   );
 $$;
 
--- Does the task have a target on this app? (tasks.app_id is only the primary.)
-create or replace function task_targets_app(p_task uuid, p_app uuid)
-returns boolean
-language sql
-stable
-set search_path = public
-as $$
-  select exists (select 1 from task_targets tt where tt.task_id = p_task and tt.app_id = p_app);
-$$;
-
-create or replace function task_targets_any(p_task uuid, p_apps uuid[])
-returns boolean
-language sql
-stable
-set search_path = public
-as $$
-  select exists (select 1 from task_targets tt where tt.task_id = p_task and tt.app_id = any(p_apps));
-$$;
 
 -- =====================================================================
 -- VISIBILITY — a member's world is the apps they belong to. Admins see all.
@@ -656,6 +621,19 @@ as $$
   select coalesce(array_agg(app_id), '{}'::uuid[]) from app_members where user_id = p_user;
 $$;
 
+-- (023) The visibility rule on a row, inlinable: p_user null = everything; otherwise
+-- an app task on one of p_apps, or a general task the person is on or created.
+create or replace function task_row_visible(t tasks, p_user uuid, p_apps uuid[])
+returns boolean
+language sql
+immutable
+set search_path = public
+as $$
+  select p_user is null
+      or (t.app_ids <> '{}'::uuid[] and t.app_ids && p_apps)
+      or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user));
+$$;
+
 -- A member sees an app task when it targets one of their apps, and a general
 -- (no-app) task only when they are assigned to it or created it (011). Being
 -- assigned to a task on an app you were taken off does not keep it visible
@@ -666,9 +644,7 @@ language sql
 stable
 set search_path = public
 as $$
-  select (t.app_ids <> '{}'::uuid[] and t.app_ids && visible_app_ids(p_user))
-      or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user))
-  from tasks t where t.id = p_task;
+  select task_row_visible(t, p_user, visible_app_ids(p_user)) from tasks t where t.id = p_task;
 $$;
 
 create or replace function visible_task_ids(p_user uuid)
@@ -677,7 +653,8 @@ language sql
 stable
 set search_path = public
 as $$
-  select t.id from tasks t where task_visible(t.id, p_user);
+  with va as (select visible_app_ids(p_user) as ids)
+  select t.id from tasks t, va where task_row_visible(t, p_user, va.ids);
 $$;
 
 create or replace function task_card(t tasks)
@@ -711,8 +688,6 @@ as $$
     'requested_by', (select user_brief(u) from users u where u.id = t.requested_by),
     'app', (select jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url, 'has_android', a.has_android, 'has_ios', a.has_ios)
               from apps a where a.id = t.app_id),
-    'release', (select jsonb_build_object('id', r.id, 'version_name', r.version_name, 'platform', r.platform, 'status', r.status)
-                  from releases r where r.id = t.release_id),
     'series', (select jsonb_build_object('id', ms.id, 'name', ms.name, 'color', ms.color) from meeting_series ms where ms.id = t.series_id),
     'targets', coalesce((
       select jsonb_agg(jsonb_build_object(
@@ -825,15 +800,20 @@ returns tasks
 language plpgsql
 set search_path = public
 as $$
-declare t tasks;
+declare t tasks; cur text;
 begin
+  select requested_status into cur from tasks where id = p_task for update;
+  if not found then
+    raise exception 'task not found' using errcode = 'P0002';
+  end if;
+  -- (023) The same request twice (a second tab, a retry) is one request.
+  if cur = p_to then
+    raise exception 'already requested' using errcode = 'P0005';
+  end if;
   update tasks set
     requested_status = p_to, requested_by = p_actor, requested_at = now(), request_note = p_note
   where id = p_task
   returning * into t;
-  if not found then
-    raise exception 'task not found' using errcode = 'P0002';
-  end if;
   insert into task_status_log (task_id, kind, from_status, to_status, actor_id, note)
   values (p_task, 'request', t.status, p_to, p_actor, p_note);
   return t;
@@ -852,14 +832,16 @@ begin
   if not found then
     raise exception 'task not found' using errcode = 'P0002';
   end if;
+  -- (023) Nothing pending any more: it was approved, withdrawn or rejected a moment ago.
+  if req is null then
+    raise exception 'no pending request' using errcode = 'P0003';
+  end if;
   update tasks set
     requested_status = null, requested_by = null, requested_at = null, request_note = null
   where id = p_task
   returning * into t;
-  if req is not null then
-    insert into task_status_log (task_id, kind, from_status, to_status, actor_id, note)
-    values (p_task, p_kind, t.status, req, p_actor, p_note);
-  end if;
+  insert into task_status_log (task_id, kind, from_status, to_status, actor_id, note)
+  values (p_task, p_kind, t.status, req, p_actor, p_note);
   return t;
 end;
 $$;
@@ -905,7 +887,8 @@ stable
 set search_path = public
 as $$
   -- What this caller may see: everything for admins, their apps for members.
-  with vis as (select t.* from tasks t where p_admin or (t.app_ids <> '{}'::uuid[] and t.app_ids && visible_app_ids(p_user)) or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user))),
+  with va as materialized (select case when p_admin then '{}'::uuid[] else visible_app_ids(p_user) end as ids),
+  vis as (select t.* from tasks t, va where p_admin or task_row_visible(t, p_user, va.ids)),
   mine as (
     select t.* from vis t
     where exists (select 1 from task_assignees ta where ta.task_id = t.id and ta.user_id = p_user)
@@ -971,15 +954,25 @@ language sql
 stable
 set search_path = public
 as $$
+  -- (023) Counters in one pass over tasks (GIN-indexable containment, not a scan per app).
+  with per_app as (
+    select x.app_id,
+           count(*) filter (where t.status not in ('done','cancelled')) as open_tasks,
+           count(*) filter (where t.status = 'in_progress') as in_progress,
+           count(*) filter (where t.status not in ('done','cancelled') and t.due_date < ist_today()) as overdue,
+           count(*) filter (where t.completed_at >= ist_week_start()) as done_week
+    from tasks t cross join lateral unnest(t.app_ids) as x(app_id)
+    group by x.app_id
+  )
   select coalesce(jsonb_agg(jsonb_build_object(
     'id', a.id, 'name', a.name, 'description', a.description, 'kind', a.kind, 'status', a.status,
     'has_android', a.has_android, 'has_ios', a.has_ios,
     'android_package', a.android_package, 'ios_bundle_id', a.ios_bundle_id, 'appstore_url', a.appstore_url,
-    'color', a.color, 'icon_path', a.icon_path, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url, 'created_at', a.created_at, 'updated_at', a.updated_at,
-    'open_tasks',  (select count(*) from tasks t where a.id = any(t.app_ids) and t.status not in ('done','cancelled')),
-    'in_progress', (select count(*) from tasks t where a.id = any(t.app_ids) and t.status = 'in_progress'),
-    'overdue',     (select count(*) from tasks t where a.id = any(t.app_ids) and t.status not in ('done','cancelled') and t.due_date < ist_today()),
-    'done_week',   (select count(*) from tasks t where a.id = any(t.app_ids) and t.completed_at >= ist_week_start()),
+    'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url, 'created_at', a.created_at, 'updated_at', a.updated_at,
+    'open_tasks',  coalesce(pa.open_tasks, 0),
+    'in_progress', coalesce(pa.in_progress, 0),
+    'overdue',     coalesce(pa.overdue, 0),
+    'done_week',   coalesce(pa.done_week, 0),
     'members', coalesce((
       select jsonb_agg(jsonb_build_object('user', user_brief(u), 'app_role', m.app_role) order by m.app_role, u.first_name)
       from app_members m join users u on u.id = m.user_id where m.app_id = a.id
@@ -995,7 +988,7 @@ as $$
                          from releases r where r.app_id = a.id and r.status not in ('released','cancelled','rolled_back')
                         order by r.planned_date nulls last, r.created_at limit 1)
   ) order by (a.status = 'archived'), a.sort_order, a.name), '[]'::jsonb)
-  from apps a;
+  from apps a left join per_app pa on pa.app_id = a.id;
 $$;
 
 -- (014) Hand-arranged order of apps: ids in the order shown; anything not
@@ -1010,14 +1003,32 @@ as $$
   where a.id = x.id;
 $$;
 
+-- (023) A short lease for jobs that must not overlap (two instances, a scheduler
+-- retry): the first caller within p_ttl_sec gets true, the others false.
+create or replace function cron_lease(p_name text, p_ttl_sec int)
+returns boolean
+language plpgsql
+set search_path = public
+as $$
+begin
+  insert into app_settings (key, value) values ('lease:' || p_name, to_jsonb(now()))
+  on conflict (key) do update set value = excluded.value, updated_at = now()
+    where (app_settings.value #>> '{}')::timestamptz < now() - make_interval(secs => p_ttl_sec);
+  return found;
+end;
+$$;
+
 -- (016) Task numbers stay a straight series: once test rows are removed, the
 -- next task continues from the highest number in use.
 create or replace function task_sequence_reset()
 returns bigint
-language sql
+language plpgsql
 set search_path = public
 as $$
-  select setval('task_number_seq', coalesce((select max(number) from tasks), 1), (select count(*) from tasks) > 0);
+begin
+  lock table tasks in exclusive mode;
+  return setval('task_number_seq', coalesce((select max(number) from tasks), 1), (select count(*) from tasks) > 0);
+end;
 $$;
 
 -- (016) Close the gaps: renumber every task 1..n in creation order and
@@ -1032,6 +1043,7 @@ declare
   r record;
   moved int := 0;
 begin
+  lock table tasks in exclusive mode;   -- (023) nothing is created or renumbered meanwhile
   create temp table _renum (id uuid primary key, old_n int, new_n int) on commit drop;
   insert into _renum select id, number, row_number() over (order by created_at, number) from tasks;
   -- Only the number changes: no touch/bump triggers, no "recently updated" shuffle.
@@ -1087,13 +1099,16 @@ $$;
 -- so a meeting created today shows everything up to this minute. For the very
 -- first meeting the window is the 7 days before it. "Carried" = how many
 -- EARLIER meetings this still-pending task has already been through.
-create or replace function meeting_pack(p_meeting uuid)
+create or replace function meeting_pack(p_meeting uuid, p_user uuid default null)
 returns jsonb
 language sql
 stable
 set search_path = public
 as $$
   with m as (select * from meetings where id = p_meeting),
+  -- (023) p_user null = an admin's full view; otherwise the member's: only the tasks,
+  -- releases and apps they may see, no per-person workload, no approvals queue.
+  va as (select case when p_user is null then '{}'::uuid[] else visible_app_ids(p_user) end as ids),
   -- The previous meeting of the SAME series (null series = its own series).
   -- Windows tile on CLOSE instants: a meeting's window runs from when the
   -- previous one was closed (its held_at if still open) to its own close
@@ -1110,7 +1125,7 @@ as $$
   ),
   -- For an OPEN meeting the "as of" instant is NOW (live view); for a finalized
   -- one it is the meeting time, so history never drifts after the fact.
-  asof as (select to_at as at from win),
+  asof as (select to_at as at, (to_at at time zone 'Asia/Kolkata')::date as today from win),
   -- In scope: app tasks the scope covers, plus any task attached to this
   -- series. General tasks join only by attachment or by being pinned.
   -- (017) An OPEN meeting follows its series' CURRENT scope — an app added to
@@ -1131,73 +1146,71 @@ as $$
     from tasks t
     where t.status not in ('done','cancelled')   -- only pending rows need a carry count
   ),
-  -- `t` is the WHOLE task row as a composite (so task_card(p.t) type-checks);
-  -- `carry` and `pinned` ride alongside it.
+  -- Each task is carded ONCE here; the derived sets below are id lists over these rows.
   pending as (
-    select t as t, c.carry, (t.id in (select task_id from pinned)) as pinned
-    from tasks t join carried c on c.id = t.id, win, asof, scope s
+    select t.id, t.number, t.status, t.due_date, t.created_at, t.app_ids, t.assignee_ids,
+           task_card(t) as card, c.carry, (t.id in (select task_id from pinned)) as pinned
+    from tasks t join carried c on c.id = t.id, win, asof, scope s, va
     where (((t.app_ids <> '{}'::uuid[] and (s.all_apps or t.app_ids && s.app_ids)) or (t.series_id is not null and t.series_id = s.series_id)) or t.id in (select task_id from pinned))
       and t.created_at <= asof.at
       and t.status not in ('done','cancelled')
       and (t.completed_at is null or t.completed_at > asof.at)
+      and task_row_visible(t, p_user, va.ids)
   ),
   done as (
-    select t as t, (t.id in (select task_id from pinned)) as pinned
-    from tasks t, win, scope s
+    select t.id, t.number, t.completed_at, t.app_ids, t.assignee_ids,
+           task_card(t) as card, (t.id in (select task_id from pinned)) as pinned
+    from tasks t, win, scope s, va
     where t.status = 'done'
       and ((t.completed_at > win.from_at and t.completed_at <= win.to_at and ((t.app_ids <> '{}'::uuid[] and (s.all_apps or t.app_ids && s.app_ids)) or (t.series_id is not null and t.series_id = s.series_id)))
            or t.id in (select task_id from pinned))
+      and task_row_visible(t, p_user, va.ids)
   ),
+  cards as (select id, number, card from pending union all select id, number, card from done),
   notes as (
     select n.*, user_brief(cu) as author, (select user_brief(uu) from users uu where uu.id = n.user_id) as about
-    from meeting_notes n left join users cu on cu.id = n.created_by
+    from meeting_notes n left join users cu on cu.id = n.created_by, va
     where n.meeting_id = p_meeting
+      and (n.task_id is null or exists (select 1 from tasks t where t.id = n.task_id and task_row_visible(t, p_user, va.ids)))
   )
   select jsonb_build_object(
     'meeting', (select jsonb_build_object('id', m.id, 'title', m.title, 'held_at', m.held_at, 'notes', m.notes,
                                           'status', m.status, 'finalized_at', m.finalized_at,
-                                          'series_id', m.series_id, 'app_ids', to_jsonb(m.app_ids), 'include_general', m.include_general) from m),
-    'series', (select jsonb_build_object('id', s.id, 'name', s.name, 'color', s.color, 'app_order', to_jsonb(s.app_order)) from meeting_series s, m where s.id = m.series_id),
+                                          'series_id', m.series_id, 'app_ids', to_jsonb(m.app_ids), 'include_general', m.include_general, 'auto_close', m.auto_close) from m),
+    'series', (select jsonb_build_object('id', s.id, 'name', s.name, 'color', s.color, 'app_order', to_jsonb(s.app_order), 'auto_close', s.auto_close) from meeting_series s, m where s.id = m.series_id),
     'window', (select jsonb_build_object('from', from_at, 'to', to_at) from win),
     'previous_meeting', (select held_at from prev),
     'pinned', coalesce((select jsonb_agg(task_id) from pinned), '[]'::jsonb),
     'done', coalesce((
-      select jsonb_agg(task_card(d.t) || jsonb_build_object('pinned', d.pinned) order by (d.t).completed_at desc)
+      select jsonb_agg(d.card || jsonb_build_object('pinned', d.pinned) order by d.completed_at desc)
       from done d
     ), '[]'::jsonb),
-    'carried', coalesce((
-      select jsonb_agg(task_card(p.t) || jsonb_build_object('carry', p.carry, 'pinned', p.pinned) order by p.carry desc, (p.t).due_date nulls last, (p.t).number)
-      from pending p where p.carry > 0
-    ), '[]'::jsonb),
-    'new', coalesce((
-      select jsonb_agg(task_card(p.t) || jsonb_build_object('carry', p.carry, 'pinned', p.pinned) order by (p.t).created_at desc)
-      from pending p, win where p.carry = 0 and (p.t).created_at > win.from_at
-    ), '[]'::jsonb),
     'pending', coalesce((
-      select jsonb_agg(task_card(p.t) || jsonb_build_object('carry', p.carry, 'pinned', p.pinned) order by p.pinned desc, p.carry desc, (p.t).due_date nulls last, (p.t).number)
+      select jsonb_agg(p.card || jsonb_build_object('carry', p.carry, 'pinned', p.pinned) order by p.pinned desc, p.carry desc, p.due_date nulls last, p.number)
       from pending p
     ), '[]'::jsonb),
-    'on_hold', coalesce((
-      select jsonb_agg(task_card(p.t) || jsonb_build_object('carry', p.carry, 'pinned', p.pinned) order by (p.t).number)
-      from pending p where (p.t).status = 'on_hold'
-    ), '[]'::jsonb),
-    'overdue', coalesce((
-      select jsonb_agg(task_card(p.t) || jsonb_build_object('carry', p.carry, 'pinned', p.pinned) order by (p.t).due_date, (p.t).number)
-      from pending p, asof where (p.t).due_date < (asof.at at time zone 'Asia/Kolkata')::date
-    ), '[]'::jsonb),
-    'approvals', coalesce((
+    -- Id lists: the screens count them and mark rows by id; the cards sit in `pending`.
+    'carried', coalesce((select jsonb_agg(p.id order by p.carry desc, p.due_date nulls last, p.number) from pending p where p.carry > 0), '[]'::jsonb),
+    'new', coalesce((select jsonb_agg(p.id order by p.created_at desc) from pending p, win where p.carry = 0 and p.created_at > win.from_at), '[]'::jsonb),
+    'overdue', coalesce((select jsonb_agg(p.id order by p.due_date, p.number) from pending p, asof where p.due_date < asof.today), '[]'::jsonb),
+    'approvals', case when p_user is null then coalesce((
       select jsonb_agg(task_card(t) order by t.requested_at)
       from tasks t, scope s where t.requested_status is not null and ((t.app_ids <> '{}'::uuid[] and (s.all_apps or t.app_ids && s.app_ids)) or (t.series_id is not null and t.series_id = s.series_id))
-    ), '[]'::jsonb),
+    ), '[]'::jsonb) else '[]'::jsonb end,
     'releases', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', r.id, 'app', jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url),
         'platform', r.platform, 'version_name', r.version_name, 'build_number', r.build_number,
         'status', r.status, 'planned_date', r.planned_date, 'released_at', r.released_at, 'description', r.description,
-        'tasks', coalesce((select jsonb_agg(task_card(t) order by t.number) from tasks t where exists (select 1 from task_targets tt where tt.task_id = t.id and tt.release_id = r.id)), '[]'::jsonb)
+        -- The version's tasks: the card already built when the task is on this meeting, built here otherwise.
+        'tasks', coalesce((select jsonb_agg(coalesce(c.card, task_card(t)) order by t.number)
+                             from tasks t left join cards c on c.id = t.id
+                            where exists (select 1 from task_targets tt where tt.task_id = t.id and tt.release_id = r.id)
+                              and task_row_visible(t, p_user, va.ids)), '[]'::jsonb)
       ) order by (r.status = 'released'), coalesce(r.planned_date, (r.released_at at time zone 'Asia/Kolkata')::date) nulls last)
-      from releases r join apps a on a.id = r.app_id, win, scope s
+      from releases r join apps a on a.id = r.app_id, win, scope s, va
       where (s.all_apps or r.app_id = any(s.app_ids))
+        and (p_user is null or r.app_id = any(va.ids))
         and (
           -- (017) shipped: the release day (IST) falls inside the window, or the
           -- version carries a task that is on this meeting — so a task shown as
@@ -1205,31 +1218,30 @@ as $$
           (r.status = 'released'
              and (((r.released_at at time zone 'Asia/Kolkata')::date >= (win.from_at at time zone 'Asia/Kolkata')::date
                    and (r.released_at at time zone 'Asia/Kolkata')::date <= (win.to_at at time zone 'Asia/Kolkata')::date)
-                  or exists (select 1 from task_targets tt where tt.release_id = r.id
-                               and (tt.task_id in (select (d.t).id from done d) or tt.task_id in (select (p.t).id from pending p)))))
+                  or exists (select 1 from task_targets tt where tt.release_id = r.id and tt.task_id in (select id from cards))))
           -- (017) under test right now; planned and in-progress versions wait until they reach testing
           or r.status = 'testing'
         )
     ), '[]'::jsonb),
-    'people', coalesce((
+    -- Per-person workload is a lead's view.
+    'people', case when p_user is null then coalesce((
       select jsonb_agg(user_brief(u) || jsonb_build_object(
-        'done', (select count(*) from task_assignees ta join done d on (d.t).id = ta.task_id where ta.user_id = u.id),
-        'pending', (select count(*) from task_assignees ta join pending p on (p.t).id = ta.task_id where ta.user_id = u.id),
-        'in_progress', (select count(*) from task_assignees ta join pending p on (p.t).id = ta.task_id where ta.user_id = u.id and (p.t).status = 'in_progress'),
-        'carried', (select count(*) from task_assignees ta join pending p on (p.t).id = ta.task_id where ta.user_id = u.id and p.carry > 0),
-        'overdue', (select count(*) from task_assignees ta join pending p on (p.t).id = ta.task_id, asof
-                     where ta.user_id = u.id and (p.t).due_date < (asof.at at time zone 'Asia/Kolkata')::date)
+        'done', (select count(*) from done d where u.id = any(d.assignee_ids)),
+        'pending', (select count(*) from pending p where u.id = any(p.assignee_ids)),
+        'in_progress', (select count(*) from pending p where u.id = any(p.assignee_ids) and p.status = 'in_progress'),
+        'carried', (select count(*) from pending p where u.id = any(p.assignee_ids) and p.carry > 0),
+        'overdue', (select count(*) from pending p, asof where u.id = any(p.assignee_ids) and p.due_date < asof.today)
       ) order by u.department, u.first_name, u.email)
       from users u where u.is_active
-    ), '[]'::jsonb),
+    ), '[]'::jsonb) else '[]'::jsonb end,
     'apps', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url, 'has_android', a.has_android, 'has_ios', a.has_ios,
-        'done', (select count(*) from done d where task_targets_app((d.t).id, a.id)),
-        'pending', (select count(*) from pending p where task_targets_app((p.t).id, a.id)),
-        'carried', (select count(*) from pending p where task_targets_app((p.t).id, a.id) and p.carry > 0)
+        'done', (select count(*) from done d where a.id = any(d.app_ids)),
+        'pending', (select count(*) from pending p where a.id = any(p.app_ids)),
+        'carried', (select count(*) from pending p where a.id = any(p.app_ids) and p.carry > 0)
       ) order by a.sort_order, a.name)
-      from apps a, scope s where a.status <> 'archived' and (s.all_apps or a.id = any(s.app_ids))
+      from apps a, scope s, va where a.status <> 'archived' and (s.all_apps or a.id = any(s.app_ids)) and (p_user is null or a.id = any(va.ids))
     ), '[]'::jsonb),
     'notes', coalesce((
       select jsonb_agg(jsonb_build_object(
@@ -1241,6 +1253,38 @@ as $$
       from notes n
     ), '[]'::jsonb)
   );
+$$;
+
+-- (023) The task ids on a meeting's agenda (pending + done in its window, pinned ones
+-- included) without building a single card — the Tasks screen's "Meeting" filter.
+create or replace function meeting_task_ids(p_meeting uuid)
+returns setof uuid
+language sql
+stable
+set search_path = public
+as $$
+  with m as (select * from meetings where id = p_meeting),
+  prev as (
+    select coalesce(mm.finalized_at, mm.held_at) as held_at from meetings mm, m
+    where mm.id <> m.id and mm.held_at < m.held_at and mm.series_id is not distinct from m.series_id
+    order by mm.held_at desc limit 1
+  ),
+  win as (
+    select coalesce((select held_at from prev), (select held_at from m) - interval '7 days') as from_at,
+           case when (select status from m) = 'finalized' then coalesce((select finalized_at from m), (select held_at from m)) else greatest((select held_at from m), now()) end as to_at
+  ),
+  scope as (
+    select sc.app_ids, cardinality(sc.app_ids) = 0 as all_apps, m.series_id
+    from m left join meeting_series ms on ms.id = m.series_id,
+    lateral (select case when m.status = 'finalized' or ms.id is null then m.app_ids else ms.app_ids end as app_ids) sc
+  ),
+  pinned as (select task_id from meeting_tasks where meeting_id = p_meeting)
+  select t.id from tasks t, win, scope s
+  where (((t.app_ids <> '{}'::uuid[] and (s.all_apps or t.app_ids && s.app_ids)) or (t.series_id is not null and t.series_id = s.series_id)) or t.id in (select task_id from pinned))
+    and ((t.status not in ('done','cancelled') and t.created_at <= win.to_at and (t.completed_at is null or t.completed_at > win.to_at))
+         or (t.status = 'done' and t.completed_at > win.from_at and t.completed_at <= win.to_at)
+         or t.id in (select task_id from pinned)
+         or t.requested_status is not null);
 $$;
 
 -- Reports: throughput + durations over a date range (IST calendar days).
@@ -1256,7 +1300,8 @@ as $$
            ((p_to + 1)::timestamp at time zone 'Asia/Kolkata') as to_at
   ),
   -- p_user null = the whole team (admins); otherwise only what that member may see.
-  vis as (select t.* from tasks t where p_user is null or (t.app_ids <> '{}'::uuid[] and t.app_ids && visible_app_ids(p_user)) or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user))),
+  va as materialized (select case when p_user is null then '{}'::uuid[] else visible_app_ids(p_user) end as ids),
+  vis as (select t.* from tasks t, va where task_row_visible(t, p_user, va.ids)),
   done as (
     select t.* from vis t, bounds b where t.status = 'done' and t.completed_at >= b.from_at and t.completed_at < b.to_at
   ),
@@ -1342,7 +1387,8 @@ as $$
     ) g
   ),
   -- p_user null = the whole team (admins); otherwise only what that member may see.
-  vis as (select t.* from tasks t where p_user is null or (t.app_ids <> '{}'::uuid[] and t.app_ids && visible_app_ids(p_user)) or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user))),
+  va as materialized (select case when p_user is null then '{}'::uuid[] else visible_app_ids(p_user) end as ids),
+  vis as (select t.* from tasks t, va where task_row_visible(t, p_user, va.ids)),
   done as (
     select t.*, (t.completed_at at time zone 'Asia/Kolkata')::date as day,
            extract(epoch from (t.completed_at - t.created_at)) / 3600 as lead_h,

@@ -72,7 +72,7 @@ export function buildAgenda(pack: MeetingPack, opts: { dedupe?: boolean } = {}):
     if (!opts.dedupe) return apps.map((a) => groupFor(a));
     return apps.length > 1 ? [groupFor(null, SHARED_KEY)] : [groupFor(apps[0])];
   };
-  const overdueIds = new Set(pack.overdue.map((t) => t.id));
+  const overdueIds = new Set(pack.overdue);
   const seen = new Set<string>();
   for (const t of pack.pending) {
     if (seen.has(t.id)) continue;

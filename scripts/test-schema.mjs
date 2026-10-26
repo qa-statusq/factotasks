@@ -55,9 +55,10 @@ const rel = await one(
   [app.id, admin.id]
 );
 const t1 = await one(
-  "insert into tasks (app_id, release_id, platform, title, description, type, priority, due_date, created_by, labels) values ($1,$2,'android','Fix crash on share sheet','Repro: tap share twice','bug','high', current_date + 2, $3, array['crash','p1']) returning id, number",
-  [app.id, rel.id, dev.id]
+  "insert into tasks (app_id, platform, title, description, type, priority, due_date, created_by, labels) values ($1,'android','Fix crash on share sheet','Repro: tap share twice','bug','high', current_date + 2, $2, array['crash','p1']) returning id, number",
+  [app.id, dev.id]
 );
+await db.query("insert into task_targets (task_id, app_id, platform, release_id) values ($1,$2,'android',$3)", [t1.id, app.id, rel.id]);
 const t2 = await one(
   "insert into tasks (title, type, priority, created_by) values ('Prepare Q4 marketing deck','marketing','medium',$1) returning id, number",
   [admin.id]
@@ -111,11 +112,26 @@ try {
   assert(/task not found/.test(String(e.message)), "unknown task raises 'task not found'");
 }
 
+try {
+  await one("select * from task_clear_request($1,$2,'reject',null)", [t1.id, admin.id]);
+  fail("reject without a pending request should raise");
+} catch (e) {
+  assert(/no pending request/.test(String(e.message)), "task_clear_request refuses when nothing is pending (023)");
+}
+await one("select * from task_request_status($1,'done',$2,null)", [t1.id, dev.id]);
+try {
+  await one("select * from task_request_status($1,'done',$2,null)", [t1.id, dev.id]);
+  fail("the same request twice should raise");
+} catch (e) {
+  assert(/already requested/.test(String(e.message)), "task_request_status refuses a duplicate request (023)");
+}
+await one("select * from task_clear_request($1,$2,'withdraw',null)", [t1.id, dev.id]);
+
 console.log("\n— RPCs —");
-await db.query("select task_targets_backfill()");
 const card = await json("select task_card(t) from tasks t where t.id = $1", [t1.id]);
-assert(card.number === 1 && card.assignees.length === 1 && card.app.name === "SwapMyFace" && card.release.version_name === "2.4.0", "task_card embeds app/release/assignees");
-assert(card.targets.length === 1 && card.targets[0].platform === "android" && card.targets[0].release.version_name === "2.4.0" && card.release_progress.total === 1 && card.release_progress.released === 0, "task_card: targets backfilled from app/platform/release with progress");
+assert(card.number === 1 && card.assignees.length === 1 && card.app.name === "SwapMyFace" && card.release === undefined, "task_card embeds app/assignees (no dead release key, 023)");
+assert(card.targets.length === 1 && card.targets[0].platform === "android" && card.targets[0].release.version_name === "2.4.0" && card.release_progress.total === 1 && card.release_progress.released === 0, "task_card: targets carry the release with progress");
+assert(JSON.stringify(await json("select app_ids from tasks where id = $1", [t1.id])) === JSON.stringify([app.id]), "tasks.app_ids kept by the statement-level trigger (023)");
 assert(Array.isArray(card.labels) && card.labels[0] === "crash", "task_card labels as JSON array");
 
 const dash = await json("select dashboard_pack($1, true)", [admin.id]);
@@ -148,7 +164,8 @@ try {
 }
 const pack = await json("select meeting_pack($1)", [m2.id]);
 assert(pack.done.length === 1 && pack.done[0].number === 1, "meeting_pack: done this week");
-assert(pack.carried.length === 1 && pack.carried[0].number === 2 && pack.carried[0].carry === 1, "meeting_pack: T-2 carried forward once");
+assert(pack.carried.length === 1 && pack.pending.find((t) => t.id === pack.carried[0])?.number === 2 && pack.pending.find((t) => t.id === pack.carried[0])?.carry === 1, "meeting_pack: T-2 carried forward once (ids, 023)");
+assert(pack.on_hold === undefined && Array.isArray(pack.overdue) && pack.overdue.every((x) => typeof x === "string"), "meeting_pack: overdue/new/carried are id lists, on_hold gone (023)");
 assert(pack.new.length === 0 && pack.pending.length === 1, "meeting_pack: pending/new split");
 assert(pack.notes.length === 1 && pack.notes[0].task.number === 2, "meeting_pack: notes joined to tasks");
 assert(pack.notes[0].link_url === "https://example.com/finding" && pack.notes[0].link_label === "Crash report", "meeting_pack: notes carry their link (018)");
@@ -186,6 +203,11 @@ await db.query("delete from meetings where id = $1", [m3.id]);
 assert((await db.query("select count(*)::int as n from meeting_recordings where meeting_id = $1", [m3.id])).rows[0].n === 0, "meeting_recordings: cascade with the meeting (019)");
 await db.query("delete from meeting_recordings where id = $1", [recRow.id]);
 assert(pack.people.find((p) => p.id === dev.id).done === 1, "meeting_pack: per-person done");
+const packDev = await json("select meeting_pack($1, $2)", [m2.id, dev.id]);
+assert(packDev.people.length === 0 && packDev.approvals.length === 0 && packDev.done.length === 1 && packDev.pending.every((t) => t.number !== 2), "meeting_pack(p_user): a member's view — no workload, no approvals, only their tasks (023)");
+const ids = (await db.query("select meeting_task_ids($1) as id", [m2.id])).rows.map((r) => r.id);
+assert(ids.includes(t1.id) && ids.includes(t2.id), "meeting_task_ids: the agenda's ids without cards (023)");
+assert((await json("select cron_lease('t', 60)")) === true && (await json("select cron_lease('t', 60)")) === false, "cron_lease: one run at a time (023)");
 assert(pack.releases.length === 1 && pack.releases[0].tasks.length === 1 && pack.releases[0].tasks[0].number === 1, "meeting_pack: upcoming release listed with its tasks");
 // As of last week's (finalized) meeting only T-2 existed, it was pending and
 // had been through no earlier meeting; T-1 was created this week.

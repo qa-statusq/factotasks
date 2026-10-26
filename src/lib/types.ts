@@ -68,7 +68,6 @@ export interface TaskCard {
   request_note: string | null;
   requested_by: UserBrief | null;
   app: AppLite | null;
-  release: ReleaseLite | null;
   /** Attached to a meeting series: shows on that series' meetings until done. */
   series: { id: string; name: string; color: string } | null;
   /** Every app × platform the task must land on; empty = general task. */
@@ -158,7 +157,6 @@ export interface AppOverview {
   ios_bundle_id: string | null;
   appstore_url: string | null;
   color: string;
-  icon_path: string | null;
   icon_url: string | null;
   icon_android_url?: string | null;
   icon_ios_url?: string | null;
@@ -345,11 +343,11 @@ export interface MeetingPack {
   window: { from: string; to: string };
   previous_meeting: string | null;
   done: TaskCard[];
-  carried: TaskCard[];
-  new: TaskCard[];
   pending: TaskCard[];
-  on_hold: TaskCard[];
-  overdue: TaskCard[];
+  /** Ids of pending tasks carried from an earlier meeting / created this window / past due. */
+  carried: string[];
+  new: string[];
+  overdue: string[];
   approvals: TaskCard[];
   releases: (DashboardPack["releases"][number] & { build_number: string | null; description: string | null; tasks?: TaskCard[] })[];
   people: (UserBrief & { done: number; pending: number; in_progress: number; carried: number; overdue: number })[];

@@ -69,7 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Member → approval request.
   const { error } = await sb.rpc("task_request_status", { p_task: id, p_to: to, p_actor: u.uid, p_note: note });
-  if (error) return isNoData(error) ? fail("Task not found", 404) : serverError(error);
+  if (error) return isNoData(error) ? fail("Task not found", 404) : (error as { code?: string }).code === "P0005" ? fail("That request is already waiting for an admin") : serverError(error);
   const card = await loadCard(id);
   after(async () => {
     await logActivity({

@@ -24,9 +24,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const sb = getSupabase();
+  // One run at a time: a scheduler retry or a second instance must not send every reminder twice.
+  const { data: lease } = await sb.rpc("cron_lease", { p_name: "daily", p_ttl_sec: 3600 });
+  if (lease === false) return NextResponse.json({ ok: true, skipped: "another run is in progress" });
   const today = istToday();
-  const closedMeetings = await closeOverdueMeetings(true);
-  void closedMeetings;
+  await closeOverdueMeetings(true);
   const tomorrow = new Date(Date.parse(today) + 86_400_000).toISOString().slice(0, 10);
 
   // Open tasks due tomorrow or already overdue, with their assignees.
