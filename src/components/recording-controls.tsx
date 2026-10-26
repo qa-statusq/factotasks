@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button, buttonClass } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { PlayerSheet } from "@/components/recordings";
 import { useRecorder, screenRecordingSupported, audioRecordingSupported, type RecordMode } from "@/lib/use-recorder";
 import { fmtBytes, fmtClock, fmtDuration, recordingLabel } from "@/lib/recordings";
@@ -120,8 +121,17 @@ export function RecorderOverlay() {
   const pathname = usePathname();
   const presenting = /^\/meetings\/[^/]+\/present$/.test(pathname ?? "");
   const { phase } = state;
+  const { toast } = useToast();
   const [player, setPlayer] = useState(false);
   const [hold, setHold] = useState(false);
+
+  // A recording that never started (no microphone, no screen, permission refused) is a passing message, not a card.
+  const startFailure = phase === "error" && !state.blob;
+  useEffect(() => {
+    if (!startFailure) return;
+    toast(state.error || "Couldn't start recording", "error");
+    dismiss();
+  }, [startFailure, state.error, toast, dismiss]);
 
   // The saved dialog leaves on its own unless the pointer is on it (or the player is open).
   useEffect(() => {
@@ -130,7 +140,7 @@ export function RecorderOverlay() {
     return () => window.clearTimeout(t);
   }, [phase, hold, player, dismiss]);
 
-  if (phase === "idle" || phase === "starting") return null;
+  if (phase === "idle" || phase === "starting" || startFailure) return null;
   const pct = Math.round(Math.min(1, state.progress) * 100);
   const label = state.saved ? recordingLabel(state.saved) : state.title;
 
