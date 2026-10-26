@@ -8,7 +8,7 @@ import { LIMITS } from "@/lib/domain";
 import { getSettings } from "@/lib/settings";
 import { loadMeeting } from "@/lib/meetings";
 import { canAccessMeeting, closeOverdueMeetings } from "@/lib/series-access";
-import { visibleTaskIds } from "@/lib/visibility";
+import { visibleTaskIds, visibleAppIds } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +27,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const pack = data as (Record<string, unknown> & { meeting?: { id?: string } }) | null;
   if (!pack?.meeting?.id) return fail("Meeting not found", 404);
   if (u.role !== "admin") {
-    // A member sees the agenda through their own visibility: only tasks they may see, and no approvals queue.
-    const visible = new Set((await visibleTaskIds(u)) ?? []);
+    // A member sees the agenda through their own visibility: only tasks they may see, releases of their
+    // own apps only (as everywhere else in the panel), and no approvals queue.
+    const [visibleIds, appIds] = await Promise.all([visibleTaskIds(u), visibleAppIds(u)]);
+    const visible = new Set(visibleIds ?? []);
+    const apps = new Set(appIds ?? []);
     const keep = (list: unknown) => (Array.isArray(list) ? list.filter((t) => visible.has((t as { id: string }).id)) : []);
     for (const k of ["pending", "done", "carried", "new", "overdue"]) pack[k] = keep(pack[k]);
+    pack.releases = Array.isArray(pack.releases)
+      ? (pack.releases as { app?: { id?: string } | null; tasks?: { id: string }[] }[]).filter((r) => apps.has(r.app?.id ?? "")).map((r) => (Array.isArray(r.tasks) ? { ...r, tasks: r.tasks.filter((t) => visible.has(t.id)) } : r))
+      : [];
     pack.approvals = [];
     pack.notes = Array.isArray(pack.notes) ? (pack.notes as { task_id: string | null }[]).filter((n) => !n.task_id || visible.has(n.task_id)) : [];
   }
