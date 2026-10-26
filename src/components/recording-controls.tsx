@@ -141,7 +141,7 @@ export function RecorderOverlay() {
   }, [phase, hold, player, dismiss]);
 
   if (phase === "idle" || phase === "starting" || startFailure) return null;
-  const pct = Math.round(Math.min(1, state.progress) * 100);
+  const pct = Math.round(Math.min(0.95, state.finishProgress) * 100);
   const label = state.saved ? recordingLabel(state.saved) : state.title;
 
   if (phase === "recording") {
@@ -155,7 +155,7 @@ export function RecorderOverlay() {
           <span className="hidden min-w-0 max-w-[34rem] truncate text-ink-muted sm:block" title={state.title}>
             Recording {state.mode === "audio" ? "audio" : "the screen"} · {state.title}
           </span>
-          <span className="hidden shrink-0 text-ink-subtle md:inline">{fmtBytes(state.recordedBytes)}</span>
+          <span className="hidden w-[4.5rem] shrink-0 text-right tabular-nums text-ink-subtle md:inline">{fmtBytes(state.recordedBytes)}</span>
           <button type="button" onClick={stop} className="ml-1 inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 text-[12px] font-medium text-ink hover:bg-rose-50 hover:text-rose-700">
             <span className="block h-2 w-2 rounded-[2px] bg-rose-500" aria-hidden /> Stop
           </button>
@@ -185,7 +185,7 @@ export function RecorderOverlay() {
                     {fmtDuration(state.seconds)} · {fmtBytes(state.recordedBytes)} · keep this tab open
                   </p>
                 </div>
-                <span className="text-[11.5px] tabular-nums text-ink-subtle">{pct}%</span>
+                <span className="w-9 text-right text-[11.5px] tabular-nums text-ink-subtle">{pct}%</span>
               </div>
               <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-line/70">
                 <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-300 ease-out" style={{ width: `${Math.max(4, pct)}%` }} />

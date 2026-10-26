@@ -33,8 +33,10 @@ export interface RecorderState {
   /** Bytes produced by the recorder, and bytes Google has (plus the part of the current chunk in flight). */
   recordedBytes: number;
   sentBytes: number;
-  /** 0..1 — how much of what was recorded has reached Google. */
+  /** 0..1 — how much of what was recorded has reached the storage. */
   progress: number;
+  /** 0..1 — after Stop: how much of the part still to send has gone (never reaches 1 before the file is confirmed). */
+  finishProgress: number;
   error: string | null;
   saved: Recording | null;
   /** The whole recording as a file when saving failed, so it can still be downloaded. */
@@ -43,7 +45,7 @@ export interface RecorderState {
   note: string | null;
 }
 
-const IDLE: RecorderState = { meetingId: null, title: "", mode: "screen", phase: "idle", seconds: 0, recordedBytes: 0, sentBytes: 0, progress: 0, error: null, saved: null, blob: null, note: null };
+const IDLE: RecorderState = { meetingId: null, title: "", mode: "screen", phase: "idle", seconds: 0, recordedBytes: 0, sentBytes: 0, progress: 0, finishProgress: 0, error: null, saved: null, blob: null, note: null };
 const PENDING_KEY = "ft_rec_pending";
 const VIDEO_MIMES = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
 const AUDIO_MIMES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
@@ -133,6 +135,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
   const stopped = useRef(false);
   const pumping = useRef(false);
   const lastSend = useRef(0);
+  /** Bytes confirmed when Stop was pressed: the saving bar measures only what came after. */
+  const finishBase = useRef(0);
   const failed = useRef(false);
 
   const refreshLists = useCallback(() => {
@@ -219,7 +223,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
           (loaded) => {
             const sent = at + Math.min(loaded, body.size);
             const recorded = Math.max(sent, offset.current + queued.current + Math.max(0, at + body.size - offset.current));
-            patch({ sentBytes: sent, progress: recorded ? sent / recorded : 0 });
+            const left = recorded - finishBase.current;
+            patch({ sentBytes: sent, progress: recorded ? sent / recorded : 0, finishProgress: left > 0 ? Math.min(0.95, (sent - finishBase.current) / left) : 0.95 });
           }
         );
         if (r.ok) {
@@ -292,7 +297,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         }
         offset.current = at + take;
         const recorded = offset.current + queued.current;
-        patch({ sentBytes: offset.current, recordedBytes: recorded, progress: recorded ? offset.current / recorded : 0 });
+        const left = recorded - finishBase.current;
+        patch({ sentBytes: offset.current, recordedBytes: recorded, progress: recorded ? offset.current / recorded : 0, finishProgress: left > 0 ? Math.min(0.95, (offset.current - finishBase.current) / left) : 0.95 });
         if (r.done) {
           patch({ phase: "done", progress: 1, sentBytes: recorded, saved: r.recording ?? null, blob: null });
           all.current = [];
@@ -326,7 +332,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
   const finish = useCallback(() => {
     stopped.current = true;
     releaseMedia();
-    patch({ phase: "finishing" });
+    if (!finishBase.current) finishBase.current = offset.current;
+    patch({ phase: "finishing", finishProgress: 0 });
     void pump();
   }, [patch, pump, releaseMedia]);
 
@@ -334,7 +341,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     const r = rec.current;
     if (!r) return;
     stopped.current = true;
-    patch({ phase: "finishing" });
+    finishBase.current = offset.current;
+    patch({ phase: "finishing", finishProgress: 0 });
     if (r.state !== "inactive") r.stop(); // onstop → finish()
     else finish();
   }, [patch, finish]);
@@ -359,6 +367,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
       failed.current = false;
       recordingId.current = null;
       creating.current = null;
+      finishBase.current = 0;
       try {
         const tracks: MediaStreamTrack[] = [];
         let display: MediaStream | null = null;
@@ -448,7 +457,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     const m = meeting.current;
     if (!blob || !m) return;
     failed.current = false;
-    patch({ phase: "finishing", error: null, progress: 0, sentBytes: 0, recordedBytes: blob.size });
+    finishBase.current = 0;
+    patch({ phase: "finishing", error: null, progress: 0, finishProgress: 0, sentBytes: 0, recordedBytes: blob.size });
     const started = await postJson<{ recording?: Recording; error?: string }>(`/api/meetings/${m.id}/recordings`, { mime: blob.type || mime.current, size_bytes: blob.size, duration_sec: state.seconds });
     if (!started.ok || !started.data?.recording) {
       patch({ phase: "error", error: started.data?.error || "Couldn't start saving the recording" });
@@ -464,7 +474,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       at = end;
-      patch({ sentBytes: at, progress: at / blob.size });
+      patch({ sentBytes: at, progress: at / blob.size, finishProgress: Math.min(0.95, at / blob.size) });
       if (r.done) {
         patch({ phase: "done", progress: 1, saved: r.recording ?? null, blob: null });
         refreshLists();
