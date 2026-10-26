@@ -7,6 +7,7 @@ import { decodeCursor, encodeCursor, tsIdKeysetDesc } from "@/lib/keyset";
 import { isUuid, oneOf } from "@/lib/validate";
 import { OPEN_STATUSES, PRIORITIES, TASK_STATUSES, TASK_TYPES, taskRef } from "@/lib/domain";
 import { visibleAppIds, visibleTaskIds, hasTaskArrays, hasTaskSeries, NONE_ID } from "@/lib/visibility";
+import { canAccessMeeting } from "@/lib/series-access";
 import { taskPatch, validateTaskRefs, syncTargets, linkTargetToRelease, loadCard } from "@/lib/tasks";
 import { notifyUsers } from "@/lib/notify";
 import { displayName } from "@/lib/name";
@@ -103,8 +104,11 @@ export async function GET(req: NextRequest) {
   // window, awaiting approval, pinned), resolved through the same pack the
   // meeting page uses so the two never disagree.
   const meeting = sp.get("meeting");
-  if (isUuid(meeting) && u.role === "admin") {
-    const { data: pack } = await sb.rpc("meeting_pack", { p_meeting: meeting });
+  if (isUuid(meeting)) {
+    // Admins, and the members of the meeting's series (their list is already cut to what they may see).
+    const { data: mt } = await sb.from("meetings").select("series_id").eq("id", meeting).maybeSingle();
+    const allowed = !!mt && (await canAccessMeeting(u, mt as { series_id?: string | null }));
+    const { data: pack } = allowed ? await sb.rpc("meeting_pack", { p_meeting: meeting }) : { data: null };
     const pk = (pack ?? {}) as Record<string, { id: string }[] | undefined>;
     const ids = new Set<string>();
     for (const k of ["pending", "done", "approvals"]) for (const t of pk[k] ?? []) ids.add(t.id);

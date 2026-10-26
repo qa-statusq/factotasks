@@ -14,6 +14,7 @@ import { PageHeader, LoadError, Spinner, EmptyState } from "@/components/ui/misc
 import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { AppScopePicker } from "@/components/meeting-series";
+import { AdminGate } from "@/components/admin-gate";
 import { useCachedFetch, mutate } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
 import { useDocumentTitle } from "@/lib/use-document-title";
@@ -31,9 +32,11 @@ type Scope = { app_ids: string[]; include_general: boolean };
  */
 export default function SeriesSettingsPage() {
   return (
-    <Suspense fallback={null}>
-      <SeriesSettings />
-    </Suspense>
+    <AdminGate to="/meetings">
+      <Suspense fallback={null}>
+        <SeriesSettings />
+      </Suspense>
+    </AdminGate>
   );
 }
 

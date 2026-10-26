@@ -88,6 +88,8 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
   const { toast } = useToast();
   const { confirm } = useDialog();
   const { me, isAdmin } = useSession();
+  // Meetings: admins, and the members who take part in a series.
+  const canMeet = isAdmin || (me?.series_ids?.length ?? 0) > 0;
   // The edit sheet's starting point, captured when it opens: the diff base for
   // the save and the form's initial values (a background refresh must not
   // move it under an open form).
@@ -182,7 +184,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
 
           <TaskAttachments task={task} cacheKey={cacheKey} />
 
-          {isAdmin && (task.meetings.length > 0 || task.meeting_notes.length > 0 || task.status !== "cancelled") && (
+          {canMeet && (task.meetings.length > 0 || task.meeting_notes.length > 0 || task.status !== "cancelled") && (
             <section className="overflow-hidden rounded-xl border border-line bg-surface">
               <header className="flex items-center gap-2 border-b border-line/80 px-4 py-2 text-[13px] font-semibold text-ink">
                 <IconPresentation size={15} className="text-ink-subtle" /> Meetings

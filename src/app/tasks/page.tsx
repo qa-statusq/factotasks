@@ -169,7 +169,8 @@ function TasksScreen() {
     { value: "week", label: "Due this week" },
     { value: "none", label: "No due date" },
   ];
-  const { data: meetingsData } = useCachedFetch<{ meetings: Meeting[] }>(isAdmin ? "/api/meetings" : null);
+  const canMeet = isAdmin || (me?.series_ids?.length ?? 0) > 0; // admins, and the members of a meeting series
+  const { data: meetingsData } = useCachedFetch<{ meetings: Meeting[] }>(canMeet ? "/api/meetings" : null);
   const meetingOptions = useMemo(
     () => [{ value: "", label: "Any meeting" }, ...(meetingsData?.meetings ?? []).slice(0, 40).map((m) => ({ value: m.id, label: `${m.title}${m.status === "open" ? " · open" : ""}` }))],
     [meetingsData]
@@ -248,7 +249,7 @@ function TasksScreen() {
             <FilterCell label="Due"><Dropdown value={filters.due || ""} onChange={(v) => set({ due: v || undefined })} options={dueOptions} /></FilterCell>
             <FilterCell label="Kind"><Dropdown value={filters.kind || ""} onChange={(v) => set({ kind: v || undefined, ...(v === "app" ? { series: undefined } : {}) })} options={[{ value: "", label: "App & general" }, { value: "app", label: "App tasks" }, { value: "general", label: "General tasks" }]} /></FilterCell>
             <FilterCell label="Meeting series" hint={filters.kind === "general" ? "General tasks reach a meeting only when attached" : undefined}><Dropdown value={filters.series || ""} onChange={(v) => set({ series: v || undefined })} options={seriesOptions} /></FilterCell>
-            {isAdmin && <FilterCell label="Meeting" hint="Everything on that meeting's agenda"><Dropdown value={filters.meeting || ""} onChange={(v) => set({ meeting: v || undefined, ...(v ? { scope: "all" } : {}) })} options={meetingOptions} /></FilterCell>}
+            {canMeet && <FilterCell label="Meeting" hint="Everything on that meeting's agenda"><Dropdown value={filters.meeting || ""} onChange={(v) => set({ meeting: v || undefined, ...(v ? { scope: "all" } : {}) })} options={meetingOptions} /></FilterCell>}
           </div>
           {(activeCount > 0 || filters.label) && (
             <button
