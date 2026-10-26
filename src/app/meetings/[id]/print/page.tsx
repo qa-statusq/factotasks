@@ -77,12 +77,18 @@ function PrintDoc() {
   const m = p.meeting;
   const windowText = p.previous_meeting ? `${fmtDay(p.previous_meeting)} – ${fmtDay(m.held_at)}` : `7 days to ${fmtDay(m.held_at)}`;
   const minutes = [...p.notes].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // Printed page footer (CSS page box): no quotes or backslashes may reach the CSS string.
+  const footerText = `${p.workspace_name} · ${m.title}`.split('"').join("").split("\\").join("");
 
   return (
     <div className="print-root min-h-svh bg-[#e9e8e4] py-8 print:bg-white print:py-0">
-      {/* Zero page margins keep the browser's own header and footer (URL, "5/5") off the paper; the table's
-          repeating spacer rows give every page its top and bottom margin instead. */}
-      <style>{`@media print { @page { size: A4 portrait; margin: 0; } }`}</style>
+      {/* The page's own margin boxes carry the footer (title left, "Page x of y" right) and leave the
+          browser's URL/date header nothing to draw — Chrome 131+ honours them. */}
+      <style>{`@media print { @page { size: A4 portrait; margin: 14mm 14mm 16mm;
+        @top-left { content: ""; } @top-center { content: ""; } @top-right { content: ""; } @bottom-center { content: ""; }
+        @bottom-left { content: "${footerText}"; font: 7.5pt "Plus Jakarta Sans", system-ui, sans-serif; color: #8a8a86; vertical-align: top; padding-top: 4mm; }
+        @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 7.5pt "Plus Jakarta Sans", system-ui, sans-serif; color: #8a8a86; vertical-align: top; padding-top: 4mm; }
+      } }`}</style>
       {/* Screen-only toolbar */}
       <div className="print-chrome mx-auto mb-4 flex w-[210mm] max-w-[96vw] items-center gap-2">
         <button type="button" onClick={() => router.push(`/meetings/${m.id}`)} className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-3 py-1.5 text-[13px] font-medium text-ink ring-1 ring-inset ring-line hover:bg-canvas">
@@ -95,11 +101,7 @@ function PrintDoc() {
       </div>
 
       <EagerIconsContext.Provider value={true}>
-      <table className="print-sheet mx-auto w-[210mm] max-w-[96vw] border-collapse print:w-full print:max-w-none">
-        <thead className="hidden print:table-header-group"><tr><td className="h-[14mm] p-0" aria-hidden /></tr></thead>
-        <tfoot className="hidden print:table-footer-group"><tr><td className="h-[14mm] p-0" aria-hidden /></tr></tfoot>
-        <tbody><tr><td className="p-0 align-top print:px-[14mm]">
-      <article className="print-doc w-full bg-white px-[16mm] py-[14mm] text-[10.5pt] leading-[1.4] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08),0_12px_40px_rgba(0,0,0,0.12)] print:max-w-none print:px-0 print:py-0 print:shadow-none">
+      <article className="print-doc mx-auto w-[210mm] max-w-[96vw] bg-white px-[16mm] py-[14mm] text-[10.5pt] leading-[1.4] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08),0_12px_40px_rgba(0,0,0,0.12)] print:max-w-none print:px-0 print:py-0 print:shadow-none">
         {/* Masthead */}
         <header className="border-b-2 border-ink pb-3">
           <div className="flex items-center justify-between gap-4 text-[8.5pt] font-semibold uppercase tracking-[0.18em] text-ink-muted">
@@ -318,13 +320,11 @@ function PrintDoc() {
           )}
         </section>
 
-        <footer className="mt-8 flex items-center justify-between border-t border-line pt-2 text-[8pt] text-ink-subtle">
+        <footer className="mt-8 flex items-center justify-between border-t border-line pt-2 text-[8pt] text-ink-subtle print:hidden">
           <span>{p.workspace_name} · Minutes of meeting</span>
           <span>Generated {fmtWhen(new Date().toISOString())} IST · FactoTasks</span>
         </footer>
       </article>
-        </td></tr></tbody>
-      </table>
       </EagerIconsContext.Provider>
     </div>
   );

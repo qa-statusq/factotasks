@@ -332,6 +332,9 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
   const finish = useCallback(() => {
     stopped.current = true;
     releaseMedia();
+    // The recorder also stops when the start itself failed (the upload could not be opened): that
+    // failure is already on screen and must not turn into an endless "Saving…".
+    if (failed.current) return;
     if (!finishBase.current) finishBase.current = offset.current;
     patch({ phase: "finishing", finishProgress: 0 });
     void pump();
@@ -430,7 +433,12 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         creating.current = postJson<{ recording?: Recording; error?: string }>(`/api/meetings/${meetingId}/recordings`, { mime: mime.current }).then((started) => {
           if (!started.ok || !started.data?.recording) {
             failed.current = true;
-            if (rec.current && rec.current.state !== "inactive") rec.current.stop();
+            const r0 = rec.current;
+            if (r0) {
+              r0.onstop = null;
+              r0.onerror = null;
+              if (r0.state !== "inactive") r0.stop();
+            }
             releaseMedia();
             setState({ ...IDLE, meetingId, title, mode, phase: "error", error: started.data?.error || "Couldn't start saving the recording", blob: fallbackBlob() });
             return null;

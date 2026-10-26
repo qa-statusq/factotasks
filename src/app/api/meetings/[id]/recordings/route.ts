@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   if (!isUuid(id)) return fail("Meeting not found", 404);
   if (!driveConfigured()) return notConfigured();
-  const limited = await rateLimited(u.uid, "record", 20, 3600);
+  const limited = await rateLimited(u.uid, "record", 120, 3600);
   if (limited) return limited;
   const m = await loadMeeting(id);
   if (!m) return fail("Meeting not found", 404);
