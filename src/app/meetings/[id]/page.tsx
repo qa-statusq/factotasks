@@ -13,6 +13,8 @@ import { ReleaseStatusBadge, PlatformBadge, PriorityBadge, AppTile, TargetChips,
 import { StatusMenu } from "@/components/status-menu";
 import { DueChip, PILL_WIDTH } from "@/components/task-list";
 import { NoteComposer, NoteList } from "@/components/meeting-notes";
+import { MeetingRecordingsCard } from "@/components/recordings";
+import { RecordButton, canRecordMeeting } from "@/components/recording-controls";
 import { AddTaskSheet } from "@/components/add-task-sheet";
 import { SeriesBadge, ScopeLabel, MeetingStatusBadge } from "@/components/meeting-series";
 import { useToast } from "@/components/ui/toast";
@@ -136,6 +138,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
           <Link href={`/meetings/${m.id}/print`} target="_blank" rel="noopener" className={buttonClass("secondary", "sm")} title="Minutes as an A4 document — print or save as PDF">
             <IconPrint size={14} /> Print
           </Link>
+          {isAdmin && canRecordMeeting(m) && <RecordButton meetingId={m.id} title={m.title} />}
           {!readOnly && (
             <Button variant="secondary" size="sm" onClick={() => setAdding(true)} title="Pin any task to this meeting">
               <IconPlus size={14} /> Add task
@@ -193,6 +196,8 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
           </section>
 
           <GeneralMinutes pack={pack} cacheKey={cacheKey} canEdit={isAdmin} />
+
+          <MeetingRecordingsCard meetingId={m.id} />
 
           <section className="overflow-hidden rounded-xl border border-line bg-surface">
             <header className="border-b border-line/80 px-4 py-2 text-[13px] font-semibold text-ink">People</header>

@@ -392,7 +392,8 @@ create table if not exists task_attachments (
   file_name    text not null,
   mime         text not null,
   size_bytes   int not null,
-  storage_path text not null unique,          -- object key in the private `attachments` bucket
+  storage_path text unique,                   -- object key in the private `attachments` bucket (uploads before 020)
+  drive_file_id text,                         -- (020) the file on the Google Shared Drive (uploads since 020)
   width        int,
   height       int,
   created_at   timestamptz not null default now()
@@ -471,6 +472,39 @@ create index if not exists meeting_notes_meeting_idx on meeting_notes (meeting_i
 create index if not exists meeting_notes_task_idx on meeting_notes (task_id, created_at desc) where task_id is not null;
 drop trigger if exists meeting_notes_touch on meeting_notes;
 create trigger meeting_notes_touch before update on meeting_notes for each row execute function touch_updated_at();
+
+-- (019) Recordings of presented meetings (files on the Google Shared Drive) and who they were shared with.
+create table if not exists meeting_recordings (
+  id            uuid primary key default gen_random_uuid(),
+  meeting_id    uuid not null references meetings(id) on delete cascade,
+  name          text not null,
+  mime          text not null default 'video/webm',
+  size_bytes    bigint not null default 0,
+  duration_sec  int,
+  status        text not null default 'uploading' check (status in ('uploading','ready','failed')),
+  drive_file_id text,                       -- set once Google has the whole file
+  upload_uri    text,                       -- resumable session while uploading (server-side only)
+  recorded_by   uuid references users(id) on delete set null,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index if not exists meeting_recordings_meeting_idx on meeting_recordings (meeting_id, created_at desc);
+drop trigger if exists meeting_recordings_touch on meeting_recordings;
+create trigger meeting_recordings_touch before update on meeting_recordings for each row execute function touch_updated_at();
+drop trigger if exists meeting_recordings_rev on meeting_recordings;
+create trigger meeting_recordings_rev after insert or update or delete on meeting_recordings for each statement execute function bump_rev();
+
+create table if not exists recording_shares (
+  id            uuid primary key default gen_random_uuid(),
+  recording_id  uuid not null references meeting_recordings(id) on delete cascade,
+  email         text not null,
+  permission_id text,                       -- Drive permission, removed on revoke
+  message       text,
+  shared_by     uuid references users(id) on delete set null,
+  created_at    timestamptz not null default now(),
+  unique (recording_id, email)
+);
+create index if not exists recording_shares_recording_idx on recording_shares (recording_id, created_at);
 
 -- Tasks pinned to a meeting by hand, regardless of app or date. A task can
 -- sit in any number of meetings.
@@ -1456,6 +1490,8 @@ alter table meeting_series   enable row level security;
 alter table meeting_tasks    enable row level security;
 alter table notifications    enable row level security;
 alter table push_subscriptions enable row level security;
+alter table meeting_recordings enable row level security;
+alter table recording_shares   enable row level security;
 
 revoke all on all tables    in schema public from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;

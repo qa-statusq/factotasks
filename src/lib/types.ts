@@ -305,6 +305,32 @@ export interface MeetingNote {
   task: { id: string; number: number; title: string; status: TaskStatus } | null;
 }
 
+/** A screen + mic recording of a presented meeting, stored on the team's Google Shared Drive. */
+export interface Recording {
+  id: string;
+  meeting_id: string;
+  name: string;
+  mime: string;
+  size_bytes: number;
+  duration_sec: number | null;
+  status: "uploading" | "ready" | "failed";
+  drive_file_id: string | null;
+  created_at: string;
+  updated_at: string;
+  recorder: UserBrief | null;
+  meeting: { id: string; title: string; held_at: string; status: "open" | "finalized"; series: { id: string; name: string; color: string } | null } | null;
+  /** E-mail addresses given access (only sent to people who may manage it). */
+  shares: RecordingShare[];
+}
+
+export interface RecordingShare {
+  id: string;
+  email: string;
+  message: string | null;
+  created_at: string;
+  sharer: UserBrief | null;
+}
+
 export interface MeetingPack {
   meeting: Meeting;
   series: { id: string; name: string; color: string; app_order?: string[] } | null;

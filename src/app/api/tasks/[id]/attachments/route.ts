@@ -12,6 +12,18 @@ import { displayName } from "@/lib/name";
 import { rateLimited } from "@/lib/rate-limit";
 import { MAX_ATTACHMENT_BYTES, cleanFileName, extFor, imageSize, isImageMime, resolveMime } from "@/lib/attachments";
 import { USER_BRIEF_COLS, embeddedUser } from "@/lib/users";
+import { driveConfigured, ensureFolder, uploadBytes, trashFile, DriveError } from "@/lib/google-drive";
+
+const ATTACHMENTS_FOLDER = "Task attachments";
+
+let driveCol: { at: number; ok: boolean } | null = null;
+/** True once migration 020 (task_attachments.drive_file_id) has been applied. Cached for a minute. */
+async function hasDriveColumn(): Promise<boolean> {
+  if (driveCol && Date.now() - driveCol.at < 60_000) return driveCol.ok;
+  const { error } = await getSupabase().from("task_attachments").select("drive_file_id").limit(1);
+  driveCol = { at: Date.now(), ok: !error };
+  return driveCol.ok;
+}
 
 export const dynamic = "force-dynamic";
 // A 15 MB upload over a slow mobile connection needs more than the default budget.
@@ -59,20 +71,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!mime) return fail("That file type isn't allowed (images, PDF, text, office documents, zip, video, APK/AAB)");
   const dims = isImageMime(mime) ? imageSize(bytes, mime) : null;
 
-  const key = `tasks/${id}/${crypto.randomUUID()}.${extFor(mime, originalName)}`;
-  const { error: upErr } = await sb.storage.from("attachments").upload(key, bytes, { contentType: mime, upsert: false, cacheControl: "3600" });
-  if (upErr) {
-    console.error("[attachments] upload failed:", upErr);
-    return fail("Couldn't store the file — is the “attachments” bucket created? (supabase/storage.sql)", 502);
+  // Where it goes: the team's Google Shared Drive ("Task attachments" folder) once the panel is set up for it;
+  // the Supabase bucket until then (and for every file uploaded before).
+  const toDrive = driveConfigured() && (await hasDriveColumn());
+  let key: string | null = null;
+  let driveFileId: string | null = null;
+  if (toDrive) {
+    try {
+      const folder = await ensureFolder(ATTACHMENTS_FOLDER);
+      driveFileId = await uploadBytes(`${taskRef(own.number)} — ${originalName}`, mime, bytes, folder);
+    } catch (e) {
+      return fail(e instanceof DriveError ? e.message : "Couldn't store the file", 502);
+    }
+  } else {
+    key = `tasks/${id}/${crypto.randomUUID()}.${extFor(mime, originalName)}`;
+    const { error: upErr } = await sb.storage.from("attachments").upload(key, bytes, { contentType: mime, upsert: false, cacheControl: "3600" });
+    if (upErr) {
+      console.error("[attachments] upload failed:", upErr);
+      return fail("Couldn't store the file — is the “attachments” bucket created? (supabase/storage.sql)", 502);
+    }
   }
 
   const { data, error } = await sb
     .from("task_attachments")
-    .insert({ task_id: id, uploaded_by: u.uid, file_name: originalName, mime, size_bytes: bytes.length, storage_path: key, width: dims?.width ?? null, height: dims?.height ?? null })
+    .insert({ task_id: id, uploaded_by: u.uid, file_name: originalName, mime, size_bytes: bytes.length, storage_path: key, ...(toDrive ? { drive_file_id: driveFileId } : {}), width: dims?.width ?? null, height: dims?.height ?? null })
     .select(`id, file_name, mime, size_bytes, width, height, created_at, uploader:users(${USER_BRIEF_COLS})`)
     .single();
   if (error) {
-    await sb.storage.from("attachments").remove([key]);
+    if (key) await sb.storage.from("attachments").remove([key]);
+    if (driveFileId) await trashFile(driveFileId).catch(() => undefined);
     return serverError(error);
   }
 

@@ -311,12 +311,17 @@ r = await member.call("POST", `/api/tasks/${task.id}/attachments`, fd);
 check(r.status === 200 && r.data?.attachment?.mime === "text/plain", "upload a text file", r);
 const txtId = r.data?.attachment?.id;
 r = await admin.call("GET", `/api/tasks/${task.id}/attachments/${attId}`);
-check(r.status === 302 && /supabase\.co\/storage\/v1\/object\/sign/.test(r.headers.get("location") || ""), "download → 302 to a signed URL", r.headers.get("location"));
+// On the shared storage (020) the bytes stream straight through the panel (200); before it, a 302 to a signed URL.
+check((r.status === 200 && /image\/png/.test(r.headers.get("content-type") || "")) || (r.status === 302 && /supabase\.co\/storage\/v1\/object\/sign/.test(r.headers.get("location") || "")), "download → the file (200) or a signed URL (302)", r.status);
 r = await admin.call("GET", `/api/tasks/${task.id}/attachments/${attId}?json=1`);
 check(r.status === 200 && r.data?.url, "download ?json=1 → { url }", r);
 if (r.data?.url) {
-  const f = await fetch(r.data.url);
-  check(f.status === 200 && (await f.arrayBuffer()).byteLength === png.length, "signed URL actually serves the bytes", f.status);
+  if (/^https?:/.test(r.data.url)) {
+    const f = await fetch(r.data.url);
+    check(f.status === 200 && (await f.arrayBuffer()).byteLength === png.length, "the signed url actually serves the bytes", f.status);
+  } else {
+    check(r.data.url === `/api/tasks/${task.id}/attachments/${attId}`, "the url is the panel's own stream (shared storage)", r.data.url);
+  }
 }
 r = await admin.call("DELETE", `/api/tasks/${task.id}/attachments/${txtId}`);
 check(r.status === 200, "admin removes an attachment", r);
@@ -407,6 +412,18 @@ r = await member.call("DELETE", `/api/meeting-notes/${noteId}`);
 check(r.status === 403, "member cannot delete a note → 403", r);
 r = await admin.call("GET", `/api/meetings/${meetingId}`);
 check(r.status === 200 && r.data?.meeting?.status === "finalized" && r.data.notes.length === (linksLive ? 4 : 3), "finalised pack still renders with every note", r);
+
+// ---------- recordings (019) ----------
+r = await member.call("GET", "/api/recordings");
+check(r.status === 200 && Array.isArray(r.data?.recordings), "members can list recordings", r);
+r = await admin.call("GET", `/api/meetings/${meetingId}/recordings`);
+check(r.status === 200 && Array.isArray(r.data?.recordings) && typeof r.data.enabled === "boolean", "a meeting lists its recordings", r);
+r = await member.call("POST", `/api/meetings/${meetingId}/recordings`, { size_bytes: 1000, mime: "video/webm" });
+check(r.status === 403, "members cannot record → 403", r);
+r = await admin.call("POST", `/api/meetings/${meetingId}/recordings`, { size_bytes: 0 });
+check(r.status === 400 || r.status === 503, "a zero-byte recording is refused", r);
+r = await admin.call("GET", "/api/recordings/00000000-0000-4000-8000-000000000000/stream");
+check(r.status === 404, "unknown recording stream → 404", r);
 
 // ---------- reports ----------
 console.log("\nReports");

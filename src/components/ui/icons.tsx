@@ -478,3 +478,15 @@ export const IconSparkle = (p: IconProps) => (
     <path d="M12 8.5 13.3 10.7 15.5 12l-2.2 1.3L12 15.5l-1.3-2.2L8.5 12l2.2-1.3Z" />
   </Svg>
 );
+export const IconMic = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8" />
+  </Svg>
+);
+export const IconVideo = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="6" width="13" height="12" rx="2" />
+    <path d="m16 10 5-3v10l-5-3z" />
+  </Svg>
+);

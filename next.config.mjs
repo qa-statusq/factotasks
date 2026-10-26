@@ -8,7 +8,7 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(self), display-capture=(self), geolocation=(), payment=(), usb=(), browsing-topics=()" },
   { key: "X-DNS-Prefetch-Control", value: "off" },
   // A private team panel: never indexed, even if a crawler ignores robots.txt.
   { key: "X-Robots-Tag", value: "noindex, nofollow" },

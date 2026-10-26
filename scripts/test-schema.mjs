@@ -144,6 +144,27 @@ assert(pack.carried.length === 1 && pack.carried[0].number === 2 && pack.carried
 assert(pack.new.length === 0 && pack.pending.length === 1, "meeting_pack: pending/new split");
 assert(pack.notes.length === 1 && pack.notes[0].task.number === 2, "meeting_pack: notes joined to tasks");
 assert(pack.notes[0].link_url === "https://example.com/finding" && pack.notes[0].link_label === "Crash report", "meeting_pack: notes carry their link (018)");
+// 019: recordings live on the meeting; shares are one row per e-mail.
+const recRow = await one("insert into meeting_recordings (meeting_id, name, size_bytes, duration_sec, status, drive_file_id, recorded_by) values ($1,'Weekly sync.webm',4200000,95,'ready','drive-file-1',$2) returning id, status", [m2.id, admin.id]);
+assert(recRow.status === "ready", "meeting_recordings: row stored (019)");
+await db.query("insert into recording_shares (recording_id, email, permission_id, shared_by) values ($1,'guest@example.com','perm-1',$2)", [recRow.id, admin.id]);
+try {
+  await db.query("insert into recording_shares (recording_id, email, shared_by) values ($1,'guest@example.com',$2)", [recRow.id, admin.id]);
+  fail("the same e-mail twice on one recording should be rejected");
+} catch (e) {
+  assert(/unique|duplicate/i.test(String(e.message)), "recording_shares: one row per e-mail (019)");
+}
+try {
+  await db.query("insert into meeting_recordings (meeting_id, name, status) values ($1,'x','done')", [m2.id]);
+  fail("an unknown recording status should be rejected");
+} catch (e) {
+  assert(/check|status/i.test(String(e.message)), "meeting_recordings: status is uploading/ready/failed (019)");
+}
+const m3 = await one("insert into meetings (title, held_at, created_by) values ('Throwaway', now(), $1) returning id", [admin.id]);
+await db.query("insert into meeting_recordings (meeting_id, name, status) values ($1,'gone.webm','failed')", [m3.id]);
+await db.query("delete from meetings where id = $1", [m3.id]);
+assert((await db.query("select count(*)::int as n from meeting_recordings where meeting_id = $1", [m3.id])).rows[0].n === 0, "meeting_recordings: cascade with the meeting (019)");
+await db.query("delete from meeting_recordings where id = $1", [recRow.id]);
 assert(pack.people.find((p) => p.id === dev.id).done === 1, "meeting_pack: per-person done");
 assert(pack.releases.length === 1 && pack.releases[0].tasks.length === 1 && pack.releases[0].tasks[0].number === 1, "meeting_pack: upcoming release listed with its tasks");
 // As of last week's (finalized) meeting only T-2 existed, it was pending and

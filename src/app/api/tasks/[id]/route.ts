@@ -7,6 +7,7 @@ import { isUuid } from "@/lib/validate";
 import { taskRef } from "@/lib/domain";
 import { taskPatch, validateTaskRefs, syncTargets, loadOwnership, loadCard, involved } from "@/lib/tasks";
 import { canSeeTask, visibleAppIds, hasTaskSeries, hasNoteLinks } from "@/lib/visibility";
+import { trashFile } from "@/lib/google-drive";
 import { canApprove, canChangeStatus, canDeleteTask, canEditTask } from "@/lib/task-access";
 import { getSettings, needsApproval } from "@/lib/settings";
 import { notifyUsers } from "@/lib/notify";
@@ -177,7 +178,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!canDeleteTask(u, own)) return fail("Only an admin can delete a task once work has started", 403);
   // Attachments in storage go first (the DB rows cascade with the task).
   const sb = getSupabase();
-  const { data: files } = await sb.from("task_attachments").select("storage_path").eq("task_id", id);
+  const filesRes = await sb.from("task_attachments").select("storage_path, drive_file_id").eq("task_id", id);
+  const { data: files } = filesRes.error ? await sb.from("task_attachments").select("storage_path").eq("task_id", id) : filesRes;
+  for (const f of (files ?? []) as { drive_file_id?: string | null }[]) if (f.drive_file_id) await trashFile(f.drive_file_id).catch(() => undefined);
   if (files?.length) {
     const { error: sErr } = await sb.storage.from("attachments").remove(files.map((f) => f.storage_path as string));
     if (sErr) console.error("[tasks] attachment cleanup failed:", sErr);

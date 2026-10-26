@@ -10,6 +10,8 @@ import { useModalChrome } from "@/components/ui/use-modal-chrome";
 import { ToastProvider, useToast } from "@/components/ui/toast";
 import { DialogProvider } from "@/components/ui/dialog";
 import { SessionProvider, useSession } from "@/components/providers/session-provider";
+import { RecorderProvider } from "@/lib/use-recorder";
+import { RecorderOverlay } from "@/components/recording-controls";
 import { ClockProvider } from "@/components/providers/clock-provider";
 import { TaskComposerProvider, useTaskComposer } from "@/components/task-composer";
 import { useCachedFetch, prefetch } from "@/lib/client-cache";
@@ -45,6 +47,7 @@ import {
   IconPlus,
   IconBell,
   IconChevronDown,
+  IconPlay,
 } from "@/components/ui/icons";
 
 /** Which-screen-am-I context for the fixed bar that appears on scroll. Detail
@@ -54,6 +57,7 @@ function screenContext(pathname: string): { label: string; icon: React.ReactNode
   if (pathname === "/apps") return { label: "Apps", icon: <IconApps size={15} /> };
   if (pathname === "/releases") return { label: "Releases", icon: <IconRocket size={15} /> };
   if (pathname === "/meetings") return { label: "Meetings", icon: <IconPresentation size={15} /> };
+  if (pathname === "/recordings") return { label: "Recordings", icon: <IconPlay size={15} /> };
   if (pathname === "/approvals") return { label: "Approvals", icon: <IconUserCheck size={15} /> };
   if (pathname === "/analytics") return { label: "Analytics", icon: <IconAnalytics size={15} /> };
   if (pathname === "/team") return { label: "People", icon: <IconUsers size={15} /> };
@@ -505,7 +509,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <DialogProvider>
         <SessionProvider>
           <ClockProvider>
-            <TaskComposerProvider>{presenting ? children : <Shell>{children}</Shell>}</TaskComposerProvider>
+            <RecorderProvider>
+              <TaskComposerProvider>{presenting ? children : <Shell>{children}</Shell>}</TaskComposerProvider>
+              <RecorderOverlay />
+            </RecorderProvider>
           </ClockProvider>
         </SessionProvider>
       </DialogProvider>
@@ -658,6 +665,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {item("/apps", "Apps", <IconApps size={18} />, pathname === "/apps" || pathname.startsWith("/apps/"), undefined, ["/api/apps"])}
           {item("/releases", "Releases", <IconRocket size={18} />, pathname === "/releases", undefined, ["/api/releases", "/api/apps"])}
           {isAdmin && item("/meetings", "Meetings", <IconPresentation size={18} />, pathname === "/meetings" || pathname.startsWith("/meetings/"), undefined, ["/api/meetings"])}
+          {item("/recordings", "Recordings", <IconPlay size={18} />, pathname === "/recordings", undefined, ["/api/recordings"])}
           {isAdmin && item("/approvals", "Approvals", <IconUserCheck size={18} />, pathname === "/approvals", countBadge(approvals), ["/api/tasks?scope=approvals"])}
           {item("/analytics", "Analytics", <IconAnalytics size={18} />, pathname === "/analytics", undefined, [])}
         </div>

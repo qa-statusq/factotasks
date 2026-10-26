@@ -17,6 +17,9 @@ import { AppTile, PlatformGlyph, EagerIconsContext } from "@/components/ui/task-
 import { nameInitials } from "@/lib/name";
 import { ClampedText } from "@/components/ui/clamped-text";
 import { NoteLink } from "@/components/ui/note-link";
+import { useRecorder, recorderSupported } from "@/lib/use-recorder";
+import { fmtClock } from "@/lib/recordings";
+import { IconCircleDot } from "@/components/ui/icons";
 import { IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconApps, IconUserCheck, IconMessage, IconArrowRight, IconAndroid, IconApple, IconCheck } from "@/components/ui/icons";
 import type { MeetingNote, MeetingPack, TaskCard, UserBrief } from "@/lib/types";
 
@@ -124,6 +127,10 @@ function Deck() {
 
   const slides = useMemo<Slide[]>(() => (data ? buildSlides(data) : []), [data]);
   const total = slides.length;
+  // Screen + mic recording, shared with the meeting page (it may have started there).
+  const recorder = useRecorder();
+  const recPhase = recorder.state.phase;
+  const recording = recPhase === "recording";
   const last = Math.max(0, total - 1);
   const index = Math.min(Math.max(0, rawIndex), last);
   const go = useCallback((n: number) => setIndex(Math.max(0, Math.min(last, n))), [last]);
@@ -309,6 +316,17 @@ function Deck() {
               {index + 1} / {total}
             </span>
             <span className="mx-[0.5cqw] h-[48%] w-px shrink-0 bg-white/15" aria-hidden />
+            {recorderSupported() &&
+              (recording ? (
+                <button type="button" onClick={recorder.stop} className="flex h-[52%] shrink-0 items-center gap-[0.6cqw] rounded-full bg-rose-500/20 pl-[1cqw] pr-[0.5cqw] text-[1.25cqw] font-semibold tabular-nums text-rose-100 ring-1 ring-inset ring-rose-300/40 hover:bg-rose-500/30" aria-label="Stop recording" title="Stop recording">
+                  <span className="h-[0.8cqw] w-[0.8cqw] animate-pulse rounded-full bg-rose-400" aria-hidden /> {fmtClock(recorder.state.seconds)}
+                  <span className="ml-[0.3cqw] flex h-[2cqw] w-[2cqw] items-center justify-center rounded-full bg-white/10"><span className="block h-[0.9cqw] w-[0.9cqw] rounded-[0.15cqw] bg-rose-300" aria-hidden /></span>
+                </button>
+              ) : (
+                <button type="button" onClick={() => recorder.start(id, data.meeting.title, "screen")} disabled={recPhase === "starting" || recPhase === "finishing"} className="flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-rose-300 disabled:opacity-40" aria-label="Record" title="Record this meeting — screen and microphone, saved to the team's Shared Drive">
+                  <IconCircleDot className="h-[58%] w-[58%]" />
+                </button>
+              ))}
             <button type="button" onClick={() => setJumpOpen((o) => !o)} className={cn("flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-white", jumpOpen && "bg-white/15 text-white")} aria-label="Jump to a section" title="Jump to a section (a)">
               <IconApps className="h-[58%] w-[58%]" />
             </button>

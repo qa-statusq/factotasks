@@ -15,6 +15,8 @@ import { istTime } from "@/lib/time";
 import { RelTime } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { NewMeetingSheet, ManageSeriesSheet, ScopeLabel, SeriesBadge, MeetingStatusBadge } from "@/components/meeting-series";
+import { RecordingBadge } from "@/components/recording-controls";
+import { useRecorder } from "@/lib/use-recorder";
 import { IconPresentation, IconPlus, IconMaximize, IconSettings, IconSearch, IconX, IconCalendar, IconMessage } from "@/components/ui/icons";
 import type { AppOverview, Meeting, MeetingSeries } from "@/lib/types";
 
@@ -123,6 +125,7 @@ export default function MeetingsPage() {
 
 /** One meeting as a card: series colour on top, title and state, when it was held, what it covers, and the two ways in. */
 function MeetingCard({ m, apps }: { m: Meeting; apps?: AppOverview[] }) {
+  const recorder = useRecorder();
   const color = m.series?.color || "#64748b";
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-xl border border-line bg-surface transition-shadow hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
@@ -146,6 +149,7 @@ function MeetingCard({ m, apps }: { m: Meeting; apps?: AppOverview[] }) {
           </div>
         </div>
         <MeetingStatusBadge status={m.status} className="shrink-0" />
+        {recorder.state.phase === "recording" && recorder.state.meetingId === m.id && <RecordingBadge seconds={recorder.state.seconds} className="shrink-0" />}
       </div>
       <dl className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 px-4 pb-3.5 pt-3 text-[12px]">
         {m.series && (

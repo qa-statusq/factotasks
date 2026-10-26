@@ -56,11 +56,14 @@ firebase apphosting:secrets:set FACTOTASKS_AUTH_SECRET --project pf-balance-vspl
 # default 0 = the last entry is the client).
 firebase apphosting:secrets:set FACTOTASKS_CRON_SECRET --project pf-balance-vspl
 firebase apphosting:secrets:set FACTOTASKS_VAPID_PRIVATE_KEY --project pf-balance-vspl
+# Meeting recordings: the Google service-account key as ONE line of JSON (the value of
+# GOOGLE_SERVICE_ACCOUNT_JSON in .env.local, without the surrounding quotes).
+firebase apphosting:secrets:set FACTOTASKS_GOOGLE_SERVICE_ACCOUNT_JSON --project pf-balance-vspl
 ```
 Then grant BOTH App Hosting service accounts access in one shot (the account running this
 needs `roles/secretmanager.admin`):
 ```powershell
-firebase apphosting:secrets:grantaccess FACTOTASKS_SUPABASE_SERVICE_ROLE_KEY,FACTOTASKS_AUTH_SECRET,FACTOTASKS_CRON_SECRET,FACTOTASKS_VAPID_PRIVATE_KEY --backend factotasks --project pf-balance-vspl
+firebase apphosting:secrets:grantaccess FACTOTASKS_SUPABASE_SERVICE_ROLE_KEY,FACTOTASKS_AUTH_SECRET,FACTOTASKS_CRON_SECRET,FACTOTASKS_VAPID_PRIVATE_KEY,FACTOTASKS_GOOGLE_SERVICE_ACCOUNT_JSON --backend factotasks --project pf-balance-vspl
 ```
 Look for `Successfully set IAM bindings on secret …` for all four. Missing this step makes
 every build fail with *"Error resolving secret version … versions/latest"*.
