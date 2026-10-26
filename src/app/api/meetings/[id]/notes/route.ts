@@ -3,7 +3,7 @@ import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { fail, serverError, readJsonObject } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
-import { cleanText, isUuid, oneOf } from "@/lib/validate";
+import { cleanLine, cleanText, cleanUrl, isUuid, oneOf } from "@/lib/validate";
 import { LIMITS, NOTE_KINDS, taskRef } from "@/lib/domain";
 import { loadMeeting } from "@/lib/meetings";
 import { loadOwnership, involved } from "@/lib/tasks";
@@ -11,8 +11,22 @@ import { notifyUsers } from "@/lib/notify";
 import { displayName } from "@/lib/name";
 import { rateLimited } from "@/lib/rate-limit";
 import { USER_BRIEF_COLS, embedded, embeddedUser } from "@/lib/users";
+import { hasNoteLinks } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
+
+const NOTE_COLS = `id, task_id, kind, body, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), about:users!meeting_notes_user_id_fkey(${USER_BRIEF_COLS}), task:tasks(id, number, title, status)` as const;
+const NOTE_COLS_WITH_LINKS = `id, task_id, kind, body, link_url, link_label, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), about:users!meeting_notes_user_id_fkey(${USER_BRIEF_COLS}), task:tasks(id, number, title, status)` as const;
+
+/** { link_url?, link_label? } → stored pair. An empty url clears both; a label needs a url. */
+export function parseLink(b: Record<string, unknown>): { url: string | null; label: string | null } | { error: string } {
+  const raw = cleanLine(b.link_url, LIMITS.noteLink);
+  if (!raw) return { url: null, label: null };
+  const url = cleanUrl(raw, LIMITS.noteLink);
+  if (!url) return { error: "The link must start with http:// or https://" };
+  const label = cleanLine(b.link_label, LIMITS.noteLinkLabel) || null;
+  return { url, label };
+}
 
 /** Add a minute line: { body, kind?, task_id?, user_id? }. Anyone signed in;
  * closed meetings are read-only. */
@@ -39,12 +53,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (b.user_id && !aboutId) return fail("Invalid person");
   const own = taskId ? await loadOwnership(taskId) : null;
   if (taskId && !own) return fail("Task not found", 404);
+  const link = parseLink(b);
+  if ("error" in link) return fail(link.error);
+  const links = await hasNoteLinks();
+  if (link.url && !links) return fail("Links on notes need database migration 018 — ask an admin to run it");
 
   const { data, error } = await getSupabase()
     .from("meeting_notes")
-    .insert({ meeting_id: id, task_id: taskId, user_id: aboutId, kind, body, created_by: u.uid })
-    .select(`id, task_id, kind, body, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), about:users!meeting_notes_user_id_fkey(${USER_BRIEF_COLS}), task:tasks(id, number, title, status)`)
+    .insert({ meeting_id: id, task_id: taskId, user_id: aboutId, kind, body, ...(links ? { link_url: link.url, link_label: link.label } : {}), created_by: u.uid })
+    .select((links ? NOTE_COLS_WITH_LINKS : NOTE_COLS) as typeof NOTE_COLS_WITH_LINKS)
     .single();
+
   if (error) return serverError(error);
 
   const actor = displayName(u.firstName, u.lastName) || u.email;
@@ -62,6 +81,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       task_id: data.task_id ?? null,
       kind: data.kind,
       body: data.body,
+      link_url: data.link_url ?? null,
+      link_label: data.link_label ?? null,
       created_at: data.created_at,
       author: embeddedUser(data.author),
       about: embeddedUser(data.about),

@@ -12,18 +12,21 @@ import { ListSkeleton } from "@/components/ui/skeleton";
 import { ReleaseFormSheet, ReleaseRow, ReleaseViewSheet, prettyDate, UnreleasedWorkBanner } from "@/components/release-ui";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch } from "@/lib/client-cache";
+import { usePref } from "@/lib/use-pref";
 import { PLATFORM_META } from "@/lib/domain";
 import { IconPlus, IconRocket, IconClock } from "@/components/ui/icons";
 import type { AppOverview, Release } from "@/lib/types";
 
 export default function ReleasesPage() {
   const { me, isAdmin } = useSession();
-  const [app, setApp] = useState("");
-  const [platform, setPlatform] = useState("");
-  const url = `/api/releases?${new URLSearchParams({ ...(app ? { app } : {}), ...(platform ? { platform } : {}) }).toString()}`.replace(/\?$/, "");
-  const { data, loading, error, refresh } = useCachedFetch<{ releases: Release[] }>(url);
+  const [appPref, setApp] = usePref<string>("releases.app", "");
+  const [platform, setPlatform] = usePref<string>("releases.platform", "");
   const { data: appsData } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
   const apps = useMemo(() => (appsData?.apps ?? []).filter((a) => a.status !== "archived"), [appsData]);
+  // A remembered app that was archived or removed falls back to every app.
+  const app = appPref && appsData && !apps.some((a) => a.id === appPref) ? "" : appPref;
+  const url = `/api/releases?${new URLSearchParams({ ...(app ? { app } : {}), ...(platform ? { platform } : {}) }).toString()}`.replace(/\?$/, "");
+  const { data, loading, error, refresh } = useCachedFetch<{ releases: Release[] }>(url);
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<Release | null>(null);
   const canAdd = isAdmin || apps.some((a) => a.members.some((m) => m.user.id === me?.id));

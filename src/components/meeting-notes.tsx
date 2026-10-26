@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/field";
+import { Input, Textarea } from "@/components/ui/field";
+import { NoteLink, NOTE_LINK_DEFAULT_LABEL } from "@/components/ui/note-link";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Spinner } from "@/components/ui/misc";
 import { Avatar } from "@/components/ui/avatar";
@@ -18,7 +19,7 @@ import { istTime } from "@/lib/time";
 import { RelTime } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { LIMITS, NOTE_KINDS, NOTE_KIND_META, taskRef, type NoteKind } from "@/lib/domain";
-import { IconSend, IconX, IconEdit, IconTrash } from "@/components/ui/icons";
+import { IconSend, IconX, IconEdit, IconTrash, IconLink } from "@/components/ui/icons";
 import type { MeetingNote, TaskCard } from "@/lib/types";
 
 const KIND_OPTIONS = NOTE_KINDS.map((k) => ({ value: k, label: NOTE_KIND_META[k].label }));
@@ -51,16 +52,18 @@ export function NoteComposer({
   const { toast } = useToast();
   const [kind, setKind] = useState<NoteKind>(defaultKind);
   const [body, setBody] = useState("");
+  const [link, setLink] = useState<{ url: string; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function send() {
     const text = body.trim();
     if (!text || busy) return;
     setBusy(true);
-    const { ok, data } = await postJson(`/api/meetings/${meetingId}/notes`, { body: text, kind, task_id: task?.id ?? null });
+    const { ok, data } = await postJson(`/api/meetings/${meetingId}/notes`, { body: text, kind, task_id: task?.id ?? null, link_url: link?.url.trim() || null, link_label: link?.label.trim() || null });
     setBusy(false);
     if (ok) {
       setBody("");
+      setLink(null);
       mutate(cacheKey);
       if (task) mutate(`/api/tasks/${task.id}`);
       toast("Noted");
@@ -97,13 +100,34 @@ export function NoteComposer({
         maxLength={LIMITS.note}
         className="text-[13px]"
       />
+      {link && <LinkFields link={link} onChange={setLink} onRemove={() => setLink(null)} />}
       <div className="flex items-center gap-2">
         <div className="w-36">
           <Dropdown value={kind} onChange={(v) => setKind(v as NoteKind)} options={KIND_OPTIONS} className="[&>button]:h-9 [&>button]:text-[13px]" />
         </div>
-        <Button size="sm" onClick={send} disabled={busy || !body.trim()} className="ml-auto">
+        {!link && (
+          <button type="button" onClick={() => setLink({ url: "", label: "" })} className="inline-flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 text-[12.5px] font-medium text-ink-muted hover:bg-canvas hover:text-ink" title="Attach a link to this note — a finding, a document, a ticket">
+            <IconLink size={13} /> Add link
+          </button>
+        )}
+        <Button size="sm" onClick={send} disabled={busy || !body.trim() || (!!link && !link.url.trim())} className="ml-auto">
           {busy ? <Spinner /> : <IconSend size={14} />} Add
         </Button>
+      </div>
+    </div>
+  );
+}
+
+/** URL + optional button text for the link behind a note. */
+function LinkFields({ link, onChange, onRemove }: { link: { url: string; label: string }; onChange: (l: { url: string; label: string }) => void; onRemove: () => void }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg bg-canvas p-2 ring-1 ring-inset ring-line">
+      <Input value={link.url} onChange={(e) => onChange({ ...link, url: e.target.value })} placeholder="https://… (finding, document, ticket)" inputMode="url" maxLength={LIMITS.noteLink} autoFocus className="h-8 w-full text-[12.5px]" aria-label="Link URL" />
+      <div className="flex items-center gap-1.5">
+        <Input value={link.label} onChange={(e) => onChange({ ...link, label: e.target.value })} placeholder={`Button text · ${NOTE_LINK_DEFAULT_LABEL}`} maxLength={LIMITS.noteLinkLabel} className="h-8 min-w-0 flex-1 text-[12.5px]" aria-label="Link button text" />
+        <button type="button" onClick={onRemove} className="shrink-0 rounded-md p-1 text-ink-subtle hover:bg-surface hover:text-ink" aria-label="Remove link" title="Remove link">
+          <IconX size={14} />
+        </button>
       </div>
     </div>
   );
@@ -128,6 +152,7 @@ function NoteRow({ note: n, cacheKey, compact, canEdit }: { note: MeetingNote; c
   const [editing, setEditing] = useState(false);
   const [kind, setKind] = useState<NoteKind>(n.kind);
   const [body, setBody] = useState(n.body);
+  const [link, setLink] = useState<{ url: string; label: string } | null>(n.link_url ? { url: n.link_url, label: n.link_label ?? "" } : null);
   const [busy, setBusy] = useState(false);
 
   function refresh() {
@@ -137,14 +162,17 @@ function NoteRow({ note: n, cacheKey, compact, canEdit }: { note: MeetingNote; c
   function startEdit() {
     setKind(n.kind);
     setBody(n.body);
+    setLink(n.link_url ? { url: n.link_url, label: n.link_label ?? "" } : null);
     setEditing(true);
   }
   async function save() {
     const text = body.trim();
     if (!text || busy) return;
-    if (text === n.body && kind === n.kind) return setEditing(false);
+    const url = link?.url.trim() || null;
+    const label = (url && link?.label.trim()) || null;
+    if (text === n.body && kind === n.kind && url === n.link_url && label === (n.link_label || null)) return setEditing(false);
     setBusy(true);
-    const { ok, data } = await postJson(`/api/meeting-notes/${n.id}`, { body: text, kind }, "PATCH");
+    const { ok, data } = await postJson(`/api/meeting-notes/${n.id}`, { body: text, kind, link_url: url, link_label: label }, "PATCH");
     setBusy(false);
     if (ok) {
       setEditing(false);
@@ -177,10 +205,16 @@ function NoteRow({ note: n, cacheKey, compact, canEdit }: { note: MeetingNote; c
           maxLength={LIMITS.note}
           className="text-[13px]"
         />
+        {link && <LinkFields link={link} onChange={setLink} onRemove={() => setLink(null)} />}
         <div className="flex items-center gap-2">
           <div className="w-36">
             <Dropdown value={kind} onChange={(v) => setKind(v as NoteKind)} options={KIND_OPTIONS} className="[&>button]:h-8 [&>button]:text-[12.5px]" />
           </div>
+          {!link && (
+            <button type="button" onClick={() => setLink({ url: "", label: "" })} className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2 text-[12px] font-medium text-ink-muted hover:bg-canvas hover:text-ink">
+              <IconLink size={13} /> Add link
+            </button>
+          )}
           <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy} className="ml-auto">
             Cancel
           </Button>
@@ -204,6 +238,7 @@ function NoteRow({ note: n, cacheKey, compact, canEdit }: { note: MeetingNote; c
           </Link>
         )}
         <RichText text={n.body} className={compact ? "text-[13px]" : undefined} />
+        <NoteLink url={n.link_url} label={n.link_label} />
         {!compact && (
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-subtle">
             {n.author && (

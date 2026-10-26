@@ -89,7 +89,7 @@ function TasksScreen() {
   // "approvals" is the admin queue; anyone else lands on the open list.
   const scope = ((filters.scope === "approvals" && !isAdmin ? "open" : filters.scope) || "open") as "open" | "mine" | "done" | "all";
   // Layout and default sort are personal, remembered on the account.
-  const [layout, setLayout] = usePref<"app" | "flat">("tasks.layout", "app");
+  const [layout, setLayout] = usePref<"app" | "flat">("tasks.layout", "flat");
   const [sortPref, setSortPref] = usePref<string>("tasks.sort", "updated");
   const sort = filters.sort || sortPref;
   const grouped = layout === "app";
@@ -177,7 +177,9 @@ function TasksScreen() {
   const { data: seriesData } = useCachedFetch<{ series: { id: string; name: string }[] }>("/api/meeting-series");
   const seriesOptions = useMemo(() => [{ value: "", label: "Any" }, { value: "any", label: "Attached to a meeting" }, { value: "none", label: "Not on a meeting" }, ...(seriesData?.series ?? []).map((s) => ({ value: s.id, label: s.name }))], [seriesData]);
   const activeCount = (["status", "app", "assignee", "priority", "type", "platform", "due", "meeting", "kind", "series", "label"] as const).filter((k) => filters[k]).length;
-  const [showFilters, setShowFilters] = useState(activeCount > 0);
+  const [filtersPref, setFiltersPref] = usePref<string>("tasks.filters", "auto");
+  const showFilters = filtersPref === "auto" ? activeCount > 0 : filtersPref === "open";
+  const setShowFilters = (next: boolean | ((v: boolean) => boolean)) => setFiltersPref((typeof next === "function" ? next(showFilters) : next) ? "open" : "closed");
 
   return (
     <div className="flex flex-col gap-4 animate-fade-in">
@@ -215,8 +217,8 @@ function TasksScreen() {
           value={grouped ? "app" : "flat"}
           onChange={(v) => setLayout(v === "app" ? "app" : "flat")}
           options={[
-            { value: "app", label: <IconBoard size={14} />, title: "Group by app" },
             { value: "flat", label: <IconList size={14} />, title: "Flat list" },
+            { value: "app", label: <IconBoard size={14} />, title: "Group by app" },
           ]}
           aria-label="Layout"
         />

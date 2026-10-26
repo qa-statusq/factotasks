@@ -10,6 +10,7 @@ import { Breadcrumb, LoadError, Spinner } from "@/components/ui/misc";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { RichText } from "@/components/ui/rich-text";
+import { NoteLink } from "@/components/ui/note-link";
 import { SeriesBadge, MeetingStatusBadge } from "@/components/meeting-series";
 import { PriorityBadge, TypeBadge, PlatformBadge, LabelChip, ReleaseStatusBadge, TargetChips, ReleaseProgress, AppTile, SeriesChip } from "@/components/ui/task-chips";
 import { DueChip } from "@/components/task-list";
@@ -154,7 +155,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
         </div>
         <h1 className={cn("break-words text-[20px] font-bold leading-tight tracking-[-0.02em] text-ink sm:text-[24px]", task.status === "cancelled" && "text-ink-muted line-through")}>{task.title}</h1>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px] text-ink-muted">
-          <TargetChips targets={task.targets} app={task.app} platform={task.platform} max={8} />
+          <TargetChips targets={task.targets} app={task.app} platform={task.platform} />
           <SeriesChip series={task.series} />
           <ReleaseProgress progress={task.release_progress} />
           <TypeBadge type={task.type} />
@@ -214,6 +215,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
                       {n.author && <span>· {n.author.name}</span>}
                     </div>
                     <RichText text={n.body} className="mt-1" />
+                    <NoteLink url={n.link_url} label={n.link_label} />
                   </li>
                 ))}
               </ul>

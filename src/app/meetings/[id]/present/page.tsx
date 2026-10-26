@@ -16,6 +16,7 @@ import { dueInfo } from "@/components/task-list";
 import { AppTile, PlatformGlyph, EagerIconsContext } from "@/components/ui/task-chips";
 import { nameInitials } from "@/lib/name";
 import { ClampedText } from "@/components/ui/clamped-text";
+import { NoteLink } from "@/components/ui/note-link";
 import { IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconApps, IconUserCheck, IconMessage, IconArrowRight, IconAndroid, IconApple, IconCheck } from "@/components/ui/icons";
 import type { MeetingNote, MeetingPack, TaskCard, UserBrief } from "@/lib/types";
 
@@ -855,7 +856,7 @@ function TaskTable({
                     {typeof t.carry === "number" && t.carry > 0 && <CarryChip carry={t.carry} />}
                     {t.pinned && <span className="shrink-0 rounded-full bg-canvas px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold text-ink-muted ring-1 ring-inset ring-line">Pinned</span>}
                   </div>
-                  <ClampedText text={desc} lines={2} className="mt-[0.4cqw] text-[1.15cqw] leading-snug text-ink-muted" buttonClassName="text-[1.05cqw]" moreLabel="Show more" lessLabel="Show less" />
+                  <ClampedText text={desc} lines={2} className="mt-[0.4cqw] text-[1.15cqw] leading-snug text-ink-muted" buttonClassName="mt-[0.2cqw] text-[1.05cqw]" moreLabel="Show more" lessLabel="Show less" />
                   {matrix && <DeckTargets t={t} />}
                   {t.requested_status && <p className="mt-[0.4cqw] text-[1.1cqw] font-medium text-amber-700">Asked to move to {STATUS_META[t.requested_status].label} — awaiting approval</p>}
                   {taskNotes.length > 0 && (
@@ -863,7 +864,10 @@ function TaskTable({
                       {taskNotes.slice(0, NOTES_SHOWN_PER_TASK).map((x) => (
                         <li key={x.id} className="flex items-start gap-[0.7cqw] text-[1.15cqw] leading-snug text-ink">
                           <NoteKind kind={x.kind} />
-                          <span className="min-w-0 whitespace-pre-wrap break-words">{x.body}</span>
+                          <span className="min-w-0">
+                            <span className="whitespace-pre-wrap break-words">{x.body}</span>
+                            {x.link_url && <span className="block"><NoteLink url={x.link_url} label={x.link_label} size="deck" /></span>}
+                          </span>
                         </li>
                       ))}
                       {taskNotes.length > NOTES_SHOWN_PER_TASK && <li className="text-[1.05cqw] text-ink-subtle">+ {taskNotes.length - NOTES_SHOWN_PER_TASK} more in the minutes</li>}
@@ -989,7 +993,10 @@ function MinutesTable({ notes, labels }: { notes: MeetingNote[]; labels: Map<str
                   <span className="text-ink-subtle">General</span>
                 )}
               </td>
-              <td className={cn(TD, "whitespace-pre-wrap break-words text-ink")}>{x.body}</td>
+              <td className={cn(TD, "text-ink")}>
+                <span className="whitespace-pre-wrap break-words">{x.body}</span>
+                {x.link_url && <span className="block"><NoteLink url={x.link_url} label={x.link_label} size="deck" /></span>}
+              </td>
               <td className={cn(TD, "text-ink-muted")}>{x.author ? ownerText([x.author], labels) : "—"}</td>
             </tr>
           ))}

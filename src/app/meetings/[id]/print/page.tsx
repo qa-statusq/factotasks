@@ -11,6 +11,7 @@ import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRe
 import { dueInfo } from "@/components/task-list";
 import { Logo } from "@/components/ui/logo";
 import { AppTile, EagerIconsContext } from "@/components/ui/task-chips";
+import { NoteLink } from "@/components/ui/note-link";
 import { IconPrint, IconBack } from "@/components/ui/icons";
 import type { MeetingNote, MeetingPack, TaskCard } from "@/lib/types";
 
@@ -280,7 +281,10 @@ function PrintDoc() {
                   <tr key={x.id} className="break-inside-avoid border-b border-line align-top">
                     <Td className="font-semibold uppercase tracking-wide text-[8pt]">{NOTE_KIND_META[x.kind].label}</Td>
                     <Td>{x.task ? <><span className="tabular-nums text-ink-subtle">{taskRef(x.task.number)}</span> {x.task.title}</> : x.about ? x.about.name : <span className="text-ink-subtle">General</span>}</Td>
-                    <Td className="whitespace-pre-wrap break-words">{x.body}</Td>
+                    <Td>
+                      <span className="whitespace-pre-wrap break-words">{x.body}</span>
+                      {x.link_url && <span className="block"><NoteLink url={x.link_url} label={x.link_label} size="print" /></span>}
+                    </Td>
                     <Td className="text-ink-muted">{x.author ? ownerText([x.author], labels) : "—"}</Td>
                   </tr>
                 ))}
@@ -393,6 +397,7 @@ function TaskRow({ t, notes, labels, done, showApp }: { t: TaskCard; notes: Meet
               <li key={x.id} className="py-0.5 text-[9pt]">
                 <span className="mr-1.5 text-[7.5pt] font-bold uppercase tracking-wide text-ink-muted">{NOTE_KIND_META[x.kind].label}</span>
                 <span className="whitespace-pre-wrap break-words">{x.body}</span>
+                {x.link_url && <span className="block"><NoteLink url={x.link_url} label={x.link_label} size="print" /></span>}
               </li>
             ))}
           </ul>

@@ -361,7 +361,7 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, needsApproval, 
           <ClampedText text={desc} lines={2} className="mt-1 text-[12.5px] leading-relaxed text-ink-muted" />
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-ink-subtle">
             <span>{ownerText(t.assignees, labels) || "unassigned"}</span>
-            {(t.targets?.length ?? 0) > 1 ? <TargetChips targets={t.targets} max={4} compact /> : <PlatformBadge platform={t.platform} label={false} />}
+            {(t.targets?.length ?? 0) > 1 ? <TargetChips targets={t.targets} compact /> : <PlatformBadge platform={t.platform} label={false} />}
             <ReleaseProgress progress={t.release_progress} />
             <DueChip task={t} />
             {t.requested_status && <span className="text-amber-700">awaiting approval</span>}

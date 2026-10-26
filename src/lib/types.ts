@@ -125,6 +125,8 @@ export interface TaskMeetingNote {
   id: string;
   kind: NoteKind;
   body: string;
+  link_url: string | null;
+  link_label: string | null;
   created_at: string;
   author: UserBrief | null;
   meeting: { id: string; title: string; held_at: string };
@@ -293,6 +295,10 @@ export interface MeetingNote {
   task_id: string | null;
   kind: NoteKind;
   body: string;
+  /** A finding, document or ticket behind the note; opens in a new tab. */
+  link_url: string | null;
+  /** Button text for the link; "Click here" when empty. */
+  link_label: string | null;
   created_at: string;
   author: UserBrief | null;
   about: UserBrief | null;

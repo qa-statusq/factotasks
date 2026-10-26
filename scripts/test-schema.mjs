@@ -131,12 +131,19 @@ const weekly = await one("insert into meeting_series (name) values ('Weekly test
 await db.query("update tasks set series_id = $1 where id = $2", [weekly.id, t2.id]);
 const m1 = await one("insert into meetings (title, held_at, status, series_id, created_by) values ('Weekly sync', now() - interval '7 days', 'finalized', $1, $2) returning id", [weekly.id, admin.id]);
 const m2 = await one("insert into meetings (title, held_at, series_id, created_by) values ('Weekly sync', now(), $1, $2) returning id", [weekly.id, admin.id]);
-await db.query("insert into meeting_notes (meeting_id, task_id, kind, body, created_by) values ($1,$2,'blocker','Waiting on content from marketing',$3)", [m2.id, t2.id, admin.id]);
+await db.query("insert into meeting_notes (meeting_id, task_id, kind, body, link_url, link_label, created_by) values ($1,$2,'blocker','Waiting on content from marketing','https://example.com/finding','Crash report',$3)", [m2.id, t2.id, admin.id]);
+try {
+  await db.query("insert into meeting_notes (meeting_id, kind, body, link_url) values ($1,'note','x','ftp://nope')", [m2.id]);
+  fail("a non-http note link should be rejected");
+} catch (e) {
+  assert(/link_url|check/i.test(String(e.message)), "meeting_notes.link_url must be http(s) (018)");
+}
 const pack = await json("select meeting_pack($1)", [m2.id]);
 assert(pack.done.length === 1 && pack.done[0].number === 1, "meeting_pack: done this week");
 assert(pack.carried.length === 1 && pack.carried[0].number === 2 && pack.carried[0].carry === 1, "meeting_pack: T-2 carried forward once");
 assert(pack.new.length === 0 && pack.pending.length === 1, "meeting_pack: pending/new split");
 assert(pack.notes.length === 1 && pack.notes[0].task.number === 2, "meeting_pack: notes joined to tasks");
+assert(pack.notes[0].link_url === "https://example.com/finding" && pack.notes[0].link_label === "Crash report", "meeting_pack: notes carry their link (018)");
 assert(pack.people.find((p) => p.id === dev.id).done === 1, "meeting_pack: per-person done");
 assert(pack.releases.length === 1 && pack.releases[0].tasks.length === 1 && pack.releases[0].tasks[0].number === 1, "meeting_pack: upcoming release listed with its tasks");
 // As of last week's (finalized) meeting only T-2 existed, it was pending and

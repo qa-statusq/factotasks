@@ -11,6 +11,7 @@ import { AppTile, ReleaseStatusBadge, PlatformGlyph } from "@/components/ui/task
 import { SortableList } from "@/components/ui/sortable";
 import { AppFormSheet } from "@/components/app-form";
 import { useSession } from "@/components/providers/session-provider";
+import { usePref } from "@/lib/use-pref";
 import { useToast } from "@/components/ui/toast";
 import { useCachedFetch, prefetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
@@ -23,7 +24,7 @@ export default function AppsPage() {
   const { toast } = useToast();
   const { data, loading, error, refresh } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
   const [adding, setAdding] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = usePref<boolean>("apps.archived", false);
   // Arrange mode: a draft order of the live apps, saved in one go.
   const [draft, setDraft] = useState<AppOverview[] | null>(null);
   const [saving, setSaving] = useState(false);
@@ -145,7 +146,7 @@ export default function AppsPage() {
         </ul>
       )}
       {!draft && archivedCount > 0 && (
-        <button type="button" onClick={() => setShowArchived((v) => !v)} className="self-start text-xs font-medium text-ink-subtle hover:text-ink">
+        <button type="button" onClick={() => setShowArchived(!showArchived)} className="self-start text-xs font-medium text-ink-subtle hover:text-ink">
           {showArchived ? "Hide" : "Show"} {archivedCount} archived app{archivedCount === 1 ? "" : "s"}
         </button>
       )}

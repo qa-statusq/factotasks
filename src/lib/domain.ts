@@ -167,6 +167,8 @@ export const LIMITS = {
   description: 8000,
   comment: 4000,
   note: 2000,
+  noteLink: 2000,
+  noteLinkLabel: 60,
   label: 24,
   labelsPerTask: 10,
   assigneesPerTask: 10,

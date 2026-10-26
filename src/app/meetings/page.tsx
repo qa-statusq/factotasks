@@ -10,6 +10,7 @@ import { EmptyState, LoadError, PageHeader } from "@/components/ui/misc";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch } from "@/lib/client-cache";
+import { usePref } from "@/lib/use-pref";
 import { istTime } from "@/lib/time";
 import { RelTime } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
@@ -26,12 +27,14 @@ export default function MeetingsPage() {
   const { data: ad } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState(false);
-  const [filter, setFilter] = useState<string>("all");
+  const [filterPref, setFilter] = usePref<string>("meetings.filter", "all");
   const [q, setQ] = useState("");
   const [range, setRange] = useState<DateRange | null>(null);
   const from = range?.from ?? "";
   const to = range?.to ?? "";
   const meetings = useMemo(() => data?.meetings ?? [], [data]);
+  // A remembered series that no longer exists falls back to "all".
+  const filter = filterPref === "all" || (sd?.series ?? []).some((s) => s.id === filterPref) ? filterPref : "all";
   const series = sd?.series ?? [];
   // Newest first; narrowed by series, title search and the held-on date range (IST days).
   const shown = useMemo(() => {

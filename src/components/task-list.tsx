@@ -73,7 +73,7 @@ export function TaskRow({ task, showApp = true, showDescription = false, trailin
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-[22px] text-[11.5px] text-ink-subtle">
             <span className="whitespace-nowrap tabular-nums">{taskRef(task.number)}</span>
             {showApp || (task.targets?.length ?? 0) > 1 ? (
-              <TargetChips targets={task.targets} app={task.app} platform={task.platform} max={showApp ? 3 : 4} compact />
+              <TargetChips targets={task.targets} app={task.app} platform={task.platform} compact />
             ) : (
               <PlatformBadge platform={task.platform} label={false} className="px-1 py-0 ring-0 bg-transparent" />
             )}

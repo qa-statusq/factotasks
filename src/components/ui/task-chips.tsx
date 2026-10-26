@@ -186,7 +186,7 @@ export function LabelChip({ label, className, onRemove }: { label: string; class
  * tooltip still carries them). Falls back to the legacy single app/platform
  * for cards without targets.
  */
-export function TargetChips({ targets, app, platform, max = 3, compact, className }: { targets?: TaskTarget[]; app?: AppLite | null; platform?: Platform | null; max?: number; compact?: boolean; className?: string }) {
+export function TargetChips({ targets, app, platform, max = Infinity, compact, className }: { targets?: TaskTarget[]; app?: AppLite | null; platform?: Platform | null; max?: number; compact?: boolean; className?: string }) {
   if (!targets?.length) {
     if (!app) return <AppChip app={null} size="xs" className={className} />;
     return (
@@ -206,18 +206,18 @@ export function TargetChips({ targets, app, platform, max = 3, compact, classNam
   for (const g of list) g.items.sort((a, b) => (a.platform === b.platform ? 0 : a.platform === "android" ? -1 : 1));
   const shown = list.slice(0, max);
   const more = list.length - shown.length;
-  const names = !compact || list.length <= 2;
+  // One pill per app: icon, name, then its platforms — every app shows, nothing hides behind a "+1".
   return (
-    <span className={cn("inline-flex flex-wrap items-center gap-x-2 gap-y-0.5", className)}>
+    <span className={cn("inline-flex flex-wrap items-center gap-1", className)}>
       {shown.map(({ app: a, items }) => (
         <span
           key={a.id}
-          className="inline-flex max-w-full items-center gap-1 whitespace-nowrap text-[11.5px] font-medium text-ink-muted"
+          className={cn("inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-md bg-canvas py-[1px] pl-[3px] pr-1.5 text-[11.5px] font-medium text-ink-muted ring-1 ring-inset ring-line/80", compact && "text-[11px]")}
           title={`${a.name} · ${items.map((t) => `${PLATFORM_META[t.platform].label}${t.released_at ? " (released)" : t.release ? ` (v${t.release.version_name})` : ""}`).join(", ")}`}
         >
           <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} androidIconUrl={a.icon_android_url} iosIconUrl={a.icon_ios_url} platform={items.length === 1 ? items[0].platform : null} className="h-4 w-4 rounded-[4px] text-[7px]" />
-          {names && <span className="max-w-[11rem] truncate">{a.name}</span>}
-          <span className="inline-flex items-center gap-0.5">
+          <span className="max-w-[9rem] truncate">{a.name}</span>
+          <span className="ml-0.5 inline-flex items-center gap-0.5 border-l border-line/80 pl-1">
             {items.map((t) => (
               <PlatformGlyph key={t.platform} platform={t.platform} size={11} released={!!t.released_at} />
             ))}

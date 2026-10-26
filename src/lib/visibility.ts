@@ -79,5 +79,14 @@ export async function hasTaskSeries(): Promise<boolean> {
   return seriesCol.ok;
 }
 
+let noteLinkCol: { at: number; ok: boolean } | null = null;
+/** True once migration 018 (meeting_notes.link_url / link_label) has been applied. Cached for a minute. */
+export async function hasNoteLinks(): Promise<boolean> {
+  if (noteLinkCol && Date.now() - noteLinkCol.at < 60_000) return noteLinkCol.ok;
+  const { error } = await getSupabase().from("meeting_notes").select("link_url").limit(1);
+  noteLinkCol = { at: Date.now(), ok: !error };
+  return noteLinkCol.ok;
+}
+
 /** A PostgREST `.in("id", …)` list that matches nothing when the member sees nothing. */
 export const NONE_ID = "00000000-0000-0000-0000-000000000000";

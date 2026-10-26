@@ -46,7 +46,7 @@ export function ClampedText({ text, lines = 2, rich = false, className, buttonCl
             e.stopPropagation();
             setOpen((o) => !o);
           }}
-          className={cn("mt-0.5 text-[11.5px] font-medium text-brand-700 hover:text-brand-800", buttonClassName)}
+          className={cn("font-medium text-brand-700 hover:text-brand-800", /(^|\s)text-/.test(buttonClassName ?? "") ? "" : "mt-0.5 text-[11.5px]", buttonClassName)}
         >
           {open ? lessLabel : moreLabel}
         </button>

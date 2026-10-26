@@ -15,6 +15,7 @@ import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { useTaskComposer } from "@/components/task-composer";
 import { useCachedFetch } from "@/lib/client-cache";
+import { usePref } from "@/lib/use-pref";
 import { reviewTask } from "@/lib/task-actions";
 import { displayName } from "@/lib/name";
 import { taskRef } from "@/lib/domain";
@@ -40,7 +41,7 @@ export default function DashboardPage() {
   const composer = useTaskComposer();
   const { data, loading, error, refresh } = useCachedFetch<DashboardPack>("/api/dashboard");
   const name = displayName(me?.first_name, me?.last_name)?.split(" ")[0];
-  const [tab, setTab] = useState<"mine" | "team">("mine");
+  const [tab, setTab] = usePref<"mine" | "team">("dashboard.tab", "mine");
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">

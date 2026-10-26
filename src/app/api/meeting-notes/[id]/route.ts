@@ -4,6 +4,8 @@ import { getSupabase } from "@/lib/supabase";
 import { ok, fail, serverError, readJsonObject } from "@/lib/api";
 import { cleanText, isUuid, oneOf } from "@/lib/validate";
 import { LIMITS, NOTE_KINDS } from "@/lib/domain";
+import { parseLink } from "@/app/api/meetings/[id]/notes/route";
+import { hasNoteLinks } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const kind = oneOf(b.kind, NOTE_KINDS);
     if (!kind) return fail("Invalid kind");
     patch.kind = kind;
+  }
+  if ("link_url" in b || "link_label" in b) {
+    const link = parseLink(b);
+    if ("error" in link) return fail(link.error);
+    const links = await hasNoteLinks();
+    if (link.url && !links) return fail("Links on notes need database migration 018 — ask an admin to run it");
+    if (links) {
+      patch.link_url = link.url;
+      patch.link_label = link.label;
+    }
   }
   if (!Object.keys(patch).length) return fail("Nothing to update");
   const { error } = await getSupabase().from("meeting_notes").update(patch).eq("id", id);

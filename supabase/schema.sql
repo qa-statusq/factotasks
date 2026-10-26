@@ -465,6 +465,8 @@ create table if not exists meeting_notes (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table meeting_notes add column if not exists link_url   text check (link_url is null or (length(link_url) <= 2000 and link_url ~* '^https?://'));  -- (018) a finding, doc or ticket behind the note
+alter table meeting_notes add column if not exists link_label text check (link_label is null or length(link_label) <= 60);                             -- (018) button text; "Click here" when empty
 create index if not exists meeting_notes_meeting_idx on meeting_notes (meeting_id, created_at);
 create index if not exists meeting_notes_task_idx on meeting_notes (task_id, created_at desc) where task_id is not null;
 drop trigger if exists meeting_notes_touch on meeting_notes;
@@ -1171,6 +1173,7 @@ as $$
     'notes', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', n.id, 'task_id', n.task_id, 'kind', n.kind, 'body', n.body, 'created_at', n.created_at,
+        'link_url', n.link_url, 'link_label', n.link_label,
         'author', n.author, 'about', n.about,
         'task', (select jsonb_build_object('id', t.id, 'number', t.number, 'title', t.title, 'status', t.status) from tasks t where t.id = n.task_id)
       ) order by n.created_at)

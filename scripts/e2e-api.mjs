@@ -370,8 +370,23 @@ check(r.status === 403, "member cannot add meeting notes → 403", r);
 r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "Needs a follow-up on Android 10 devices", kind: "action", task_id: task.id });
 check(r.status === 200 && r.data?.note?.task?.number === task.number, "admin adds an action item on a task", r);
 const noteId = r.data?.note?.id;
-r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "Ship 2.4.0 on Tuesday", kind: "decision" });
-check(r.status === 200 && r.data?.note?.task === null, "admin adds a general decision", r);
+r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "Ship 2.4.0 on Tuesday", kind: "decision", link_url: "https://example.com/plan", link_label: "Release plan" });
+// Until migration 018 is applied the API refuses links with a clear 400; the rest of the flow is unaffected.
+const linksLive = !(r.status === 400 && /018/.test(r.data?.error || ""));
+if (!linksLive) {
+  console.log("  · note links skipped: migration 018 not applied on this database");
+  r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "Ship 2.4.0 on Tuesday", kind: "decision" });
+}
+check(r.status === 200 && r.data?.note?.task === null && (!linksLive || (r.data?.note?.link_url === "https://example.com/plan" && r.data.note.link_label === "Release plan")), linksLive ? "admin adds a general decision with a link" : "admin adds a general decision", r);
+const linkedNoteId = r.data?.note?.id;
+r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "bad link", link_url: "javascript:alert(1)" });
+check(r.status === 400, "a note link must be http(s) → 400", r);
+if (linksLive) {
+  r = await admin.call("PATCH", `/api/meeting-notes/${linkedNoteId}`, { link_url: "" });
+  check(r.status === 200, "clearing a note link", r);
+  r = await admin.call("GET", `/api/meetings/${meetingId}`);
+  check(r.status === 200 && r.data?.notes?.find((n) => n.id === linkedNoteId)?.link_url === null, "pack shows the link cleared", r);
+}
 r = await admin.call("PATCH", `/api/meetings/${meetingId}`, { notes: "Agenda: releases, crash spike." });
 check(r.status === 200, "general minutes saved", r);
 r = await admin.call("GET", `/api/tasks/${task.id}`);

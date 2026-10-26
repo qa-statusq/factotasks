@@ -6,7 +6,7 @@ import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { taskRef } from "@/lib/domain";
 import { taskPatch, validateTaskRefs, syncTargets, loadOwnership, loadCard, involved } from "@/lib/tasks";
-import { canSeeTask, visibleAppIds, hasTaskSeries } from "@/lib/visibility";
+import { canSeeTask, visibleAppIds, hasTaskSeries, hasNoteLinks } from "@/lib/visibility";
 import { canApprove, canChangeStatus, canDeleteTask, canEditTask } from "@/lib/task-access";
 import { getSettings, needsApproval } from "@/lib/settings";
 import { notifyUsers } from "@/lib/notify";
@@ -15,6 +15,9 @@ import { USER_BRIEF_COLS, embedded, embeddedUser } from "@/lib/users";
 import type { TaskCard, TaskDetail } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+const NOTE_COLS = `id, kind, body, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), meeting:meetings(id, title, held_at)` as const;
+const NOTE_COLS_WITH_LINKS = `id, kind, body, link_url, link_label, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), meeting:meetings(id, title, held_at)` as const; // once 018 is applied
 
 /** Resolve a task id OR its human number (T-12 → /tasks/12) to the uuid. */
 async function resolveId(idOrNumber: string): Promise<string | null> {
@@ -37,12 +40,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const isAdmin = u.role === "admin";
   const none = Promise.resolve({ data: [] as never[], error: null });
+  const links = isAdmin && (await hasNoteLinks()); // 018 columns, once applied
   const [main, log, comments, attachments, notes, pins, settings, visible] = await Promise.all([
     sb.from("tasks").select(`task_card, description, created_by, status, approver:users!tasks_approved_by_fkey(${USER_BRIEF_COLS})`).eq("id", id).maybeSingle(),
     sb.from("task_status_log").select(`id, kind, from_status, to_status, note, created_at, actor:users(${USER_BRIEF_COLS})`).eq("task_id", id).order("created_at", { ascending: false }).limit(200),
     sb.from("task_comments").select(`id, body, created_at, edited_at, author:users(${USER_BRIEF_COLS})`).eq("task_id", id).order("created_at", { ascending: true }).limit(500),
     sb.from("task_attachments").select(`id, file_name, mime, size_bytes, width, height, created_at, uploader:users(${USER_BRIEF_COLS})`).eq("task_id", id).order("created_at", { ascending: true }),
-    isAdmin ? sb.from("meeting_notes").select(`id, kind, body, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), meeting:meetings(id, title, held_at)`).eq("task_id", id).order("created_at", { ascending: false }).limit(100) : none,
+    isAdmin ? sb.from("meeting_notes").select((links ? NOTE_COLS_WITH_LINKS : NOTE_COLS) as typeof NOTE_COLS_WITH_LINKS).eq("task_id", id).order("created_at", { ascending: false }).limit(100) : none,
     isAdmin ? sb.from("meeting_tasks").select("created_at, meeting:meetings(id, title, held_at, status, series:meeting_series(name, color))").eq("task_id", id).order("created_at", { ascending: false }).limit(50) : none,
     getSettings(),
     canSeeTask(u, id),
@@ -87,6 +91,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       id: r.id as string,
       kind: r.kind as TaskDetail["meeting_notes"][number]["kind"],
       body: r.body as string,
+      link_url: (r.link_url as string | null) ?? null,
+      link_label: (r.link_label as string | null) ?? null,
       created_at: r.created_at as string,
       author: embeddedUser(r.author),
       meeting: embedded<{ id: string; title: string; held_at: string }>(r.meeting) ?? { id: "", title: "Meeting", held_at: r.created_at as string },
