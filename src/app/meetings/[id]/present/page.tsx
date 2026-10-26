@@ -403,7 +403,7 @@ function buildSlides(p: Pack): Slide[] {
             ))}
           </h1>
           <p className="mt-[1cqw] text-[1.3cqw] text-ink-muted">
-            Held {fmtWhen(m.held_at)} IST · covering {windowText} · {m.app_ids?.length ? `${p.apps.length} app${p.apps.length === 1 ? "" : "s"}` : "every app"} · {p.people.length} {p.people.length === 1 ? "person" : "people"}
+            Held {fmtWhen(m.held_at)} IST · covering {windowText} · {m.app_ids?.length ? `${p.apps.length} app${p.apps.length === 1 ? "" : "s"}` : "every app"}{p.people.length > 0 && ` · ${p.people.length} ${p.people.length === 1 ? "person" : "people"}`}
           </p>
           <dl className="mt-[2.2cqw] flex gap-[4cqw] border-y border-line py-[1.4cqw]">
             {[
