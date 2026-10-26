@@ -151,7 +151,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     added = [...next].filter((x) => !cur.has(x));
     const removed = [...cur].filter((x) => !next.has(x));
     if (removed.length) await sb.from("task_assignees").delete().eq("task_id", id).in("user_id", removed);
-    if (added.length) await sb.from("task_assignees").insert(added.map((uid) => ({ task_id: id, user_id: uid, assigned_by: u.uid })));
+    if (added.length) await sb.from("task_assignees").upsert(added.map((uid) => ({ task_id: id, user_id: uid, assigned_by: u.uid })), { onConflict: "task_id,user_id", ignoreDuplicates: true });
   }
   const card = await loadCard(id);
   const actor = displayName(u.firstName, u.lastName) || u.email;

@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (action === "withdraw") {
     if (own.requested_by !== u.uid && !canApprove(u)) return fail("Only the requester can withdraw this request", 403);
     const { error } = await sb.rpc("task_clear_request", { p_task: id, p_actor: u.uid, p_kind: "withdraw", p_note: note });
-    if (error) return isNoData(error) ? fail("Task not found", 404) : serverError(error);
+    if (error) return isNoData(error) ? fail("Task not found", 404) : (error as { code?: string }).code === "P0003" ? fail("This request was already decided — refresh to see the task", 409) : serverError(error);
     after(() => logActivity({ action: "task.withdraw", entityType: "task", entityId: id, summary: `Withdrew request on ${taskRef(own.number)}`, metadata: { number: own.number } }));
     return memberJson(u, { task: await loadCard(id), mode: "withdrawn" });
   }
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // reject
   const { error } = await sb.rpc("task_clear_request", { p_task: id, p_actor: u.uid, p_kind: "reject", p_note: note });
-  if (error) return isNoData(error) ? fail("Task not found", 404) : serverError(error);
+  if (error) return isNoData(error) ? fail("Task not found", 404) : (error as { code?: string }).code === "P0003" ? fail("This request was already decided — refresh to see the task", 409) : serverError(error);
   const card = await loadCard(id);
   after(async () => {
     await logActivity({

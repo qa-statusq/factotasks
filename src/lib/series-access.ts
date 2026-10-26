@@ -36,7 +36,7 @@ export async function canAccessSeries(u: Pick<SessionUser, "uid" | "role">, seri
  * series) and stamp the time. Shared by "Close meeting" and the automatic
  * close at the end of the meeting's day.
  */
-export async function finalizeMeeting(id: string, extra: Record<string, unknown> = {}): Promise<{ error: { message: string } | null }> {
+export async function finalizeMeeting(id: string, extra: Record<string, unknown> = {}): Promise<{ error: { message: string } | null; skipped?: boolean }> {
   const sb = getSupabase();
   const { data: cur } = await sb.from("meetings").select("id, series_id, status").eq("id", id).maybeSingle();
   if (!cur || cur.status === "finalized") return { error: null };
@@ -48,7 +48,9 @@ export async function finalizeMeeting(id: string, extra: Record<string, unknown>
       patch.include_general = ser.include_general ?? true;
     }
   }
-  const { error } = await sb.from("meetings").update(patch).eq("id", id);
+  // Conditional: two instances closing the same meeting leave one close, one audit row.
+  const { data, error } = await sb.from("meetings").update(patch).eq("id", id).eq("status", "open").select("id");
+  if (!error && !data?.length) return { error: null, skipped: true };
   return { error };
 }
 

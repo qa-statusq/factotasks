@@ -3,7 +3,7 @@ import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { serverError, memberJson } from "@/lib/api";
 import { isUuid, oneOf, parseDate } from "@/lib/validate";
-import { RELEASE_SELECT, shapeRelease } from "@/lib/releases";
+import { RELEASE_SELECT_FULL, shapeRelease } from "@/lib/releases";
 import { visibleAppIds, NONE_ID } from "@/lib/visibility";
 import type { Release } from "@/lib/types";
 
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   if (u instanceof NextResponse) return u;
   const sp = new URL(req.url).searchParams;
   const sb = getSupabase();
-  let q = sb.from("releases").select(RELEASE_SELECT).order("created_at", { ascending: false }).limit(500);
+  let q = sb.from("releases").select(RELEASE_SELECT_FULL).order("created_at", { ascending: false }).limit(500);
   const app = sp.get("app");
   if (isUuid(app)) q = q.eq("app_id", app!.toLowerCase());
   const allowed = await visibleAppIds(u);

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { requireAdmin, requireAccessUser } from "@/lib/guard";
 import { canSeeApp } from "@/lib/visibility";
 import { getSupabase } from "@/lib/supabase";
@@ -15,11 +15,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
   const { id } = await params;
-  if (!(await canSeeApp(u, id))) return NextResponse.json({ error: "App not found" }, { status: 404 });
   if (!isUuid(id)) return fail("App not found", 404);
   // apps_overview is the source of truth for the shape; at team scale (a few
   // dozen apps) picking one row out of it costs nothing and keeps ONE shape.
-  const { data, error } = await getSupabase().rpc("apps_overview");
+  const [visible, { data, error }] = await Promise.all([canSeeApp(u, id), getSupabase().rpc("apps_overview")]);
+  if (!visible) return NextResponse.json({ error: "App not found" }, { status: 404 });
   if (error) return serverError(error);
   const app = ((data as { id: string }[]) || []).find((a) => a.id === id);
   if (!app) return fail("App not found", 404);
@@ -67,12 +67,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (isUniqueViolation(error)) return NextResponse.json({ error: "An app with that name already exists" }, { status: 409 });
     return serverError(error);
   }
-  await logActivity({
+  after(() => logActivity({
     action: "app.update",
     entityType: "app",
     entityId: id,
     summary: `Updated app “${(v.patch.name as string) || cur.name}” (${Object.keys(v.patch).join(", ")})`,
-  });
+  }));
   return ok();
 }
 
@@ -95,6 +95,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   }
   const { error } = await sb.from("apps").delete().eq("id", id);
   if (error) return serverError(error);
-  await logActivity({ action: "app.delete", entityType: "app", entityId: id, summary: `Deleted app “${cur.name}”` });
+  after(() => logActivity({ action: "app.delete", entityType: "app", entityId: id, summary: `Deleted app “${cur.name}”` }));
   return ok();
 }

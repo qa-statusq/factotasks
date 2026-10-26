@@ -25,12 +25,15 @@ export async function closeUpload(rec: RecordingRow, durationSec?: number | null
       if (!closed.done) return { done: false, recording: rec };
       file = closed.file;
     }
-    const { error } = await sb
+    const { data: hit, error } = await sb
       .from("meeting_recordings")
       .update({ status: "ready", drive_file_id: file?.id ?? null, upload_uri: null, size_bytes: file?.size ? Number(file.size) : st.received, ...(durationSec != null ? { duration_sec: Math.round(durationSec) } : {}) })
-      .eq("id", rec.id);
+      .eq("id", rec.id)
+      .eq("status", "uploading")
+      .select("id");
     if (error) throw error;
-    return { done: true, recovered: !st.done, recording: await loadRecording(rec.id) };
+    // Another close (the unload beacon and the return visit overlap) got there first: same outcome, no second audit row.
+    return { done: true, recovered: !st.done && !!hit?.length, recording: await loadRecording(rec.id) };
   } catch (e) {
     if (e instanceof DriveError && e.status === 404) {
       await sb.from("meeting_recordings").update({ status: "failed", upload_uri: null }).eq("id", rec.id);
@@ -49,10 +52,16 @@ const NEVER_STARTED_MS = 10 * 60_000;
  * Tidy uploads nobody is feeding any more, so the lists never show a "recording" that is not happening:
  * rows that never received a byte are removed, and rows abandoned mid-way keep what arrived.
  */
+let lastSweep = 0;
 export async function expireStaleUploads(): Promise<void> {
+  // Once a minute per instance; and never a write that touches no row (every
+  // statement on this table moves the change counter every open tab watches).
+  if (Date.now() - lastSweep < 60_000) return;
+  lastSweep = Date.now();
   const sb = getSupabase();
   const now = Date.now();
-  await sb.from("meeting_recordings").delete().eq("status", "uploading").eq("size_bytes", 0).lt("created_at", new Date(now - NEVER_STARTED_MS).toISOString());
+  const { data: dead } = await sb.from("meeting_recordings").select("id").eq("status", "uploading").eq("size_bytes", 0).lt("created_at", new Date(now - NEVER_STARTED_MS).toISOString()).limit(50);
+  if (dead?.length) await sb.from("meeting_recordings").delete().in("id", dead.map((r) => r.id as string));
   const { data } = await sb.from("meeting_recordings").select(RECORDING_SELECT).eq("status", "uploading").gt("size_bytes", 0).lt("updated_at", new Date(now - UPLOAD_IDLE_MS).toISOString()).limit(10);
   for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
     const rec = shapeRecording(row);

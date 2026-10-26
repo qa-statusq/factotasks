@@ -90,7 +90,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!isUuid(id)) return fail("Recording not found", 404);
   const rec = await loadRecording(id);
   if (!rec || !canUpload(u, rec)) return fail("Recording not found", 404);
-  if (rec.status !== "uploading" || !rec.upload_uri) return NextResponse.json({ done: rec.status === "ready", received: rec.status === "ready" ? rec.size_bytes : 0 });
+  if (rec.status !== "uploading" || !rec.upload_uri) return NextResponse.json({ done: rec.status === "ready", received: rec.status === "ready" ? rec.size_bytes : 0, recording: rec.status === "ready" ? publicRecording(rec) : null });
   try {
     const s = await uploadStatus(rec.upload_uri, rec.size_bytes || null);
     return NextResponse.json({ done: s.done, received: s.received });

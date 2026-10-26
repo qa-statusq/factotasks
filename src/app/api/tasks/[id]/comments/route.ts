@@ -26,9 +26,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = cleanText(b.body, LIMITS.comment);
   if (!body) return fail("Write something first");
 
-  const own = await loadOwnership(id);
-  if (!own) return fail("Task not found", 404);
-  if (!(await canSeeTask(u, id))) return fail("Task not found", 404);
+  const [own, visible] = await Promise.all([loadOwnership(id), canSeeTask(u, id)]);
+  if (!own || !visible) return fail("Task not found", 404);
   const sb = getSupabase();
   const { data, error } = await sb
     .from("task_comments")

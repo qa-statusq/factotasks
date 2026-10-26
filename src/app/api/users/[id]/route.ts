@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, after } from "next/server";
 import { requireAdmin } from "@/lib/guard";
 import { getAuthenticatedUser, invalidateAuthCache } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
@@ -84,7 +84,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     update.color = String(b.color).toLowerCase();
     changes.push("colour");
   }
-  if (Object.keys(update).length === 0) return fail("Nothing to update");
+  if (Object.keys(update).length === 0) {
+    // The state asked for already holds (a retried request, two admins): not an error.
+    const asked = (b.role === "admin" || b.role === "member") && b.role === target.role ? true : typeof b.is_active === "boolean" && b.is_active === target.is_active;
+    return asked ? ok({ unchanged: true }) : fail("Nothing to update");
+  }
 
   // Anything that must end existing sessions bumps token_version.
   if (update.password_hash || update.is_active === false || update.role) {
@@ -100,7 +104,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return fail("At least one active admin is required");
   }
   invalidateAuthCache(id);
-  await logActivity({ action: "user.update", entityType: "user", entityId: id, summary: `Updated ${displayName(target.first_name, target.last_name) || target.email} (${changes.join(", ")})` });
+  after(() => logActivity({ action: "user.update", entityType: "user", entityId: id, summary: `Updated ${displayName(target.first_name, target.last_name) || target.email} (${changes.join(", ")})` }));
   return ok();
 }
 
@@ -128,6 +132,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return fail("At least one active admin is required");
   }
   invalidateAuthCache(id);
-  await logActivity({ action: "user.remove", entityType: "user", entityId: id, summary: `Removed ${displayName(target.first_name, target.last_name) || target.email}` });
+  after(() => logActivity({ action: "user.remove", entityType: "user", entityId: id, summary: `Removed ${displayName(target.first_name, target.last_name) || target.email}` }));
   return ok();
 }

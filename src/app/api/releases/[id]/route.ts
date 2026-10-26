@@ -146,6 +146,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { error } = await sb.from("releases").delete().eq("id", id);
   if (error) return serverError(error);
   const app = (Array.isArray(cur.app) ? cur.app[0] : cur.app) as { name: string } | null;
-  await logActivity({ action: "release.delete", entityType: "release", entityId: id, summary: `Deleted ${app?.name ?? "App"} ${cur.platform} v${cur.version_name}` });
+  after(() => logActivity({ action: "release.delete", entityType: "release", entityId: id, summary: `Deleted ${app?.name ?? "App"} ${cur.platform} v${cur.version_name}` }));
   return ok();
 }

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { serverError, memberJson } from "@/lib/api";
@@ -13,11 +13,14 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: NextRequest) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
-  await expireStaleUploads();
-  const { data, error } = await getSupabase().from("meeting_recordings").select(RECORDING_SELECT).order("created_at", { ascending: false }).limit(200);
+  after(() => expireStaleUploads());
+  const [{ data, error }, mineIds] = await Promise.all([
+    getSupabase().from("meeting_recordings").select(RECORDING_SELECT).order("created_at", { ascending: false }).limit(200),
+    u.role === "admin" ? Promise.resolve([] as string[]) : memberSeriesIds(u.uid),
+  ]);
   if (!error && u.role !== "admin") {
     // Members: the recordings of the series they take part in.
-    const mine = new Set(await memberSeriesIds(u.uid));
+    const mine = new Set(mineIds);
     const rows = ((data ?? []) as unknown as Record<string, unknown>[]).filter((r) => {
       const m = shapeRecording(r).meeting;
       return !!m?.series?.id && mine.has(m.series.id);

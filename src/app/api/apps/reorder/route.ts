@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { requireAdmin } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { fail, serverError, readJsonObject } from "@/lib/api";
@@ -20,6 +20,6 @@ export async function PATCH(req: NextRequest) {
   if (!ids || !ids.length) return fail("Send the app ids in order");
   const { error } = await getSupabase().rpc("apps_reorder", { p_ids: ids });
   if (error) return serverError(error);
-  await logActivity({ action: "app.reorder", entityType: "app", summary: `Arranged the apps (${ids.length})`, metadata: { count: ids.length } });
+  after(() => logActivity({ action: "app.reorder", entityType: "app", summary: `Arranged the apps (${ids.length})`, metadata: { count: ids.length } }));
   return NextResponse.json({ ok: true });
 }

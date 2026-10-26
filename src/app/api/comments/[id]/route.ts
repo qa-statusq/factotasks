@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { ok, fail, serverError, readJsonObject } from "@/lib/api";
@@ -41,6 +41,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (c.user_id !== u.uid && u.role !== "admin") return fail("You can only delete your own comments", 403);
   const { error } = await getSupabase().from("task_comments").delete().eq("id", id);
   if (error) return serverError(error);
-  await logActivity({ action: "task.comment_delete", entityType: "task", entityId: c.task_id as string, summary: "Deleted a comment" });
+  after(() => logActivity({ action: "task.comment_delete", entityType: "task", entityId: c.task_id as string, summary: "Deleted a comment" }));
   return ok();
 }

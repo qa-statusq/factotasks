@@ -174,7 +174,7 @@ export async function syncTargets(taskId: string, raw: { app_id: string; platfor
   const gone = (cur || []).filter((r) => !wanted.has(key(r as { app_id: string; platform: string })));
   const add = targets.filter((t) => !have.has(key(t)));
   await Promise.all(gone.map((r) => sb.from("task_targets").delete().eq("task_id", taskId).eq("app_id", r.app_id as string).eq("platform", r.platform as string)));
-  if (add.length) await sb.from("task_targets").insert(add.map((t) => ({ task_id: taskId, app_id: t.app_id, platform: t.platform })));
+  if (add.length) await sb.from("task_targets").upsert(add.map((t) => ({ task_id: taskId, app_id: t.app_id, platform: t.platform })), { onConflict: "task_id,app_id,platform", ignoreDuplicates: true });
   const plats = new Set(targets.map((t) => t.platform));
   await sb
     .from("tasks")

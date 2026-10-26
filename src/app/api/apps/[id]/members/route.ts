@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, after } from "next/server";
 import { requireAdmin } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { ok, fail, serverError, readJsonObject } from "@/lib/api";
@@ -65,6 +65,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       if (drop.length) await sb.from("task_assignees").delete().eq("user_id", uid).in("task_id", drop);
     }
   }
-  await logActivity({ action: "app.members", entityType: "app", entityId: id, summary: `Updated members of “${app.name}” (${rows.length} people)` });
+  after(() => logActivity({ action: "app.members", entityType: "app", entityId: id, summary: `Updated members of “${app.name}” (${rows.length} people)` }));
   return ok();
 }

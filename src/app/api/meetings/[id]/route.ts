@@ -112,9 +112,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   } else if (b.status === "open" && cur.status !== "open") {
     patch.status = "open";
     patch.finalized_at = null;
+    // Reopened by hand = stays open until closed by hand; otherwise the sweep would close it again at once.
+    if (!("auto_close" in patch)) patch.auto_close = false;
     changes.push("reopened");
   }
-  if (!Object.keys(patch).length) return fail("Nothing to update");
+  // Asking for the state the meeting is already in is not an error (a retried request, two admins).
+  if (!Object.keys(patch).length) return typeof b.status === "string" && b.status === cur.status ? ok({ unchanged: true }) : fail("Nothing to update");
   const { error } = await getSupabase().from("meetings").update(patch).eq("id", id);
   if (error) return serverError(error);
   after(() => logActivity({ action: "meeting.update", entityType: "meeting", entityId: id, summary: `Updated meeting “${(patch.title as string) || cur.title}” (${changes.join(", ")})` }));
@@ -132,6 +135,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!cur) return fail("Meeting not found", 404);
   const { error } = await getSupabase().from("meetings").delete().eq("id", id);
   if (error) return serverError(error);
-  await logActivity({ action: "meeting.delete", entityType: "meeting", entityId: id, summary: `Deleted meeting “${cur.title}”` });
+  after(() => logActivity({ action: "meeting.delete", entityType: "meeting", entityId: id, summary: `Deleted meeting “${cur.title}”` }));
   return ok();
 }

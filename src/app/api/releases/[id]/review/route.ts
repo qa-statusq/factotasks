@@ -39,8 +39,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (action === "withdraw") {
     if (cur.requested_by !== u.uid && !isAdmin) return fail("Only the requester can withdraw this request", 403);
-    const { error } = await sb.from("releases").update({ requested_status: null, requested_by: null, requested_at: null, request_note: null }).eq("id", id);
+    const { data: hit, error } = await sb.from("releases").update({ requested_status: null, requested_by: null, requested_at: null, request_note: null }).eq("id", id).not("requested_status", "is", null).select("id");
     if (error) return serverError(error);
+    if (!hit?.length) return fail("This request was already decided — refresh to see the release", 409);
     after(() => logActivity({ action: "release.withdraw", entityType: "release", entityId: id, summary: `Withdrew the release request on ${label}` }));
     return respond(u, id, "withdrawn");
   }
@@ -67,9 +68,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return respond(u, id, "approved", result.closed.length);
   }
 
-  // reject
-  const { error } = await sb.from("releases").update({ requested_status: null, requested_by: null, requested_at: null, request_note: null }).eq("id", id);
+  // reject — only while the request is still pending (an approve a moment earlier wins)
+  const { data: hit, error } = await sb.from("releases").update({ requested_status: null, requested_by: null, requested_at: null, request_note: null }).eq("id", id).not("requested_status", "is", null).select("id");
   if (error) return serverError(error);
+  if (!hit?.length) return fail("This request was already decided — refresh to see the release", 409);
   after(async () => {
     await logActivity({ action: "release.reject", entityType: "release", entityId: id, summary: `Sent back the release request on ${label}${note ? ` — ${note}` : ""}` });
     await notifyUsers({ userIds: [cur.requested_by as string], kind: "release.rejected", actorId: u.uid, message: `${actor} sent back your release request for ${label}${note ? ` — ${note}` : ""}` });

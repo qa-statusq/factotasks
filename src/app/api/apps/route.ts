@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { requireAdmin, requireAccessUser } from "@/lib/guard";
 import { visibleAppIds } from "@/lib/visibility";
 import { getAuthenticatedUser } from "@/lib/auth";
@@ -18,16 +18,17 @@ export async function GET() {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
   const sb = getSupabase();
-  const { data, error } = await sb.rpc("apps_overview");
+  const [{ data, error }, allowed] = await Promise.all([sb.rpc("apps_overview"), visibleAppIds(u)]);
   if (error) return serverError(error);
-  const allowed = await visibleAppIds(u);
   // Members see only the apps they belong to.
   const apps = ((data ?? []) as { id: string; icon_url?: string | null; icon_android_url?: string | null; icon_ios_url?: string | null; android_package?: string | null; ios_bundle_id?: string | null }[]).filter((a) => allowed === null || allowed.includes(a.id));
-  // Fill in store icons (per platform) for apps that still miss one (fire-and-forget).
-  backfillAppIcons(apps, async (id, patch) => {
-    const { error } = await sb.from("apps").update(patch).eq("id", id);
-    if (error) throw error;
-  });
+  // Fill in store icons (per platform) for apps that still miss one — after the reply, never on its path.
+  after(() =>
+    backfillAppIcons(apps, async (id, patch) => {
+      const { error } = await sb.from("apps").update(patch).eq("id", id);
+      if (error) throw error;
+    })
+  );
   return memberJson(u, { apps });
 }
 
@@ -73,6 +74,6 @@ export async function POST(req: NextRequest) {
   const icons = iconPatch(await resolveAppIcons(patch.android_package as string | null, patch.ios_bundle_id as string | null));
   if (Object.keys(icons).length) await sb.from("apps").update(icons).eq("id", app.id);
 
-  await logActivity({ action: "app.create", entityType: "app", entityId: app.id, summary: `Added app “${app.name}”` });
+  after(() => logActivity({ action: "app.create", entityType: "app", entityId: app.id, summary: `Added app “${app.name}”` }));
   return NextResponse.json({ app: { id: app.id, name: app.name } });
 }

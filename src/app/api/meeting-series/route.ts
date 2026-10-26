@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
   if (error) return isUniqueViolation(error) ? fail("A series with that name already exists", 409) : serverError(error);
   const s = shapeSeries(data as Record<string, unknown>);
   if (member_ids.length) {
-    const { error: mErr } = await sb.from("meeting_series_members").insert(member_ids.map((user_id) => ({ series_id: s.id, user_id, added_by: u.uid })));
+    const { error: mErr } = await sb.from("meeting_series_members").upsert(member_ids.map((user_id) => ({ series_id: s.id, user_id, added_by: u.uid })), { onConflict: "series_id,user_id", ignoreDuplicates: true });
     if (mErr) console.error("[series] members not saved:", mErr);
   }
   after(() => logActivity({ action: "meeting.series.create", entityType: "meeting_series", entityId: s.id, summary: `Created meeting series “${s.name}”` }));

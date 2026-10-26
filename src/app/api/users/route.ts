@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { requireAdmin, requireAuth } from "@/lib/guard";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
@@ -73,11 +73,11 @@ export async function POST(req: NextRequest) {
     if (isUniqueViolation(error)) return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
     return serverError(error);
   }
-  await logActivity({
+  after(() => logActivity({
     action: "user.invite",
     entityType: "user",
     entityId: String(data.id),
     summary: `Added ${displayName(first, last)} <${mail}> as ${role} (${department})`,
-  });
+  }));
   return NextResponse.json({ user: { ...brief(data), role: data.role, title: data.title ?? null } });
 }

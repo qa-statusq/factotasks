@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
   const assignees = v.assignees ?? [];
   const [, aRes] = await Promise.all([
     syncTargets(row.id, targets ?? [], true),
-    assignees.length ? sb.from("task_assignees").insert(assignees.map((id) => ({ task_id: row.id, user_id: id, assigned_by: u.uid }))) : Promise.resolve({ error: null }),
+    assignees.length ? sb.from("task_assignees").upsert(assignees.map((id) => ({ task_id: row.id, user_id: id, assigned_by: u.uid })), { onConflict: "task_id,user_id", ignoreDuplicates: true }) : Promise.resolve({ error: null }),
   ]);
   if (aRes.error) return serverError(aRes.error);
   // Created from a release sheet: put the matching target in that version.

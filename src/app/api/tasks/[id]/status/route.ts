@@ -33,21 +33,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!isTaskStatus(to)) return fail("Pick a valid status");
   const note = cleanText(b.note, LIMITS.note) || null;
 
-  const own = await loadOwnership(id);
-  if (!own) return fail("Task not found", 404);
-  if (!(await canSeeTask(u, id))) return fail("Task not found", 404);
+  const [own, visible, settings] = await Promise.all([loadOwnership(id), canSeeTask(u, id), getSettings(true)]);
+  if (!own || !visible) return fail("Task not found", 404);
   if (!canChangeStatus(u, own)) return fail("Only an admin, the creator or an assignee can change this task's status", 403);
   if (to === own.status && !own.requested_status) return fail(`Already ${STATUS_META[to].label.toLowerCase()}`);
 
   const sb = getSupabase();
   const actor = displayName(u.firstName, u.lastName) || u.email;
   const isAdmin = u.role === "admin";
-  const settings = await getSettings(true);
   const direct = isAdmin || !needsApproval(settings.approval_policy, to);
 
   if (direct) {
     const { error } = await sb.rpc("task_apply_status", { p_task: id, p_to: to, p_actor: u.uid, p_kind: "change", p_note: note, p_completed_at: null });
-    if (error) return isNoData(error) ? fail("Task not found", 404) : serverError(error);
+    if (error) return isNoData(error) ? fail("Task not found", 404) : (error as { code?: string }).code === "P0004" ? fail(`Already ${STATUS_META[to].label.toLowerCase()}`) : serverError(error);
     const card = await loadCard(id);
     after(async () => {
       await logActivity({

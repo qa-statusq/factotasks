@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/guard";
+import { getSessionUser } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +11,9 @@ export const dynamic = "force-dynamic";
  * people at the cost of one indexed primary-key read per poll.
  */
 export async function GET() {
-  const denied = await requireAuth();
-  if (denied) return denied;
+  // The counter is a harmless integer: a valid signature is enough, no users read per poll.
+  const u = await getSessionUser();
+  if (!u) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { data } = await getSupabase().from("app_settings").select("value").eq("key", "rev").maybeSingle();
   return NextResponse.json({ rev: Number(data?.value ?? 0) });
 }

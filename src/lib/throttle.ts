@@ -1,13 +1,9 @@
 import { getSupabase } from "./supabase";
 
-const MAX_FAILS = 5; // attempts before lockout (per EMAIL)
-// Per-IP cap is much higher: a 50-person office shares one NAT address, so a
-// handful of typos across the team must not lock everyone out. The IP key
-// only catches credential-stuffing from a single source.
-const MAX_FAILS_IP = 40;
+const MAX_FAILS = 5; // attempts before lockout (per e-mail; the per-address cap is a fixed window in the login route)
 const BASE_LOCK_MIN = 15; // first lockout duration (minutes), escalates
 
-const capFor = (key: string) => (key.startsWith("ip:") ? MAX_FAILS_IP : MAX_FAILS);
+const capFor = (_key: string) => MAX_FAILS;
 
 interface ThrottleState {
   locked: boolean;
@@ -110,10 +106,11 @@ export async function reserveAttempt(keys: string[]): Promise<Map<string, number
     sb.from("auth_throttle").delete().in("key", keys).not("locked_until", "is", null).lt("locked_until", nowIso),
   ]);
   const counts = new Map<string, number>();
-  for (const key of keys) {
-    const { data, error } = await sb.rpc("throttle_hit", { p_key: key });
+  const hits = await Promise.all(keys.map((key) => sb.rpc("throttle_hit", { p_key: key })));
+  for (let i = 0; i < keys.length; i++) {
+    const { data, error } = hits[i];
     if (error || typeof data !== "number") return null;
-    counts.set(key, data);
+    counts.set(keys[i], data);
   }
   return counts;
 }

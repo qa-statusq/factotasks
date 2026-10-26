@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { ok, fail, serverError } from "@/lib/api";
@@ -115,6 +115,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   }
   const { error } = await sb.from("task_attachments").delete().eq("id", attId);
   if (error) return serverError(error);
-  await logActivity({ action: "task.detach", entityType: "task", entityId: id, summary: `Removed attachment “${att.file_name}”` });
+  after(() => logActivity({ action: "task.detach", entityType: "task", entityId: id, summary: `Removed attachment “${att.file_name}”` }));
   return ok();
 }

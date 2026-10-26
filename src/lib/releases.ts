@@ -75,8 +75,10 @@ export async function canManageApp(u: SessionUser, appId: string): Promise<boole
   return !!data;
 }
 
-/** Columns + embeds every release read uses. */
-export const RELEASE_SELECT = `id, app_id, platform, version_name, build_number, status, planned_date, released_at, description, notes, created_at, updated_at, requested_status, requested_at, request_note, app:apps(*), creator:users!releases_created_by_fkey(${USER_BRIEF_COLS}), requester:users!releases_requested_by_fkey(${USER_BRIEF_COLS}), task_targets(released_at, task:tasks(id, number, title, status, description))`;
+/** Columns + embeds the release lists use: the app as a tile, linked tasks without their descriptions. */
+export const RELEASE_SELECT = `id, app_id, platform, version_name, build_number, status, planned_date, released_at, description, notes, created_at, updated_at, requested_status, requested_at, request_note, app:apps(id, name, color, icon_url, icon_android_url, icon_ios_url, has_android, has_ios), creator:users!releases_created_by_fkey(${USER_BRIEF_COLS}), requester:users!releases_requested_by_fkey(${USER_BRIEF_COLS}), task_targets(released_at, task:tasks(id, number, title, status))`;
+/** The same with each linked task's description — the history screen prints it. */
+export const RELEASE_SELECT_FULL = RELEASE_SELECT.replace("task:tasks(id, number, title, status)", "task:tasks(id, number, title, status, description)");
 
 export function shapeRelease(r: Record<string, unknown>): Release {
   const tasks = (((r.task_targets as { released_at: string | null; task: unknown }[] | null) || [])

@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { readJsonObject } from "@/lib/api";
 import { getSupabase } from "@/lib/supabase";
 import { hashPassword, verifyPassword, safeEqual } from "@/lib/password";
 import { createSession, setSessionCookie } from "@/lib/auth";
+import { rateLimited } from "@/lib/rate-limit";
 import { checkThrottle, registerFailure, clearThrottle, clientIp, reserveAttempt, overLimit, lockIfExceeded } from "@/lib/throttle";
 import { logActivity } from "@/lib/activity";
 
@@ -31,7 +32,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
   }
 
-  const keys = [`email:${mail}`, `ip:${clientIp(req)}`];
+  // Per address: a fixed window that resets by itself, so an office behind one
+  // NAT is never locked out by its own successful sign-ins; the escalating lock
+  // below is per e-mail only.
+  const ipLimited = await rateLimited(`ip:${clientIp(req)}`, "login", 40, 900);
+  if (ipLimited) return ipLimited;
+  const keys = [`email:${mail}`];
 
   // Brute-force lockout.
   const throttle = await checkThrottle(keys);
@@ -66,8 +72,6 @@ export async function POST(req: NextRequest) {
       await logActivity({ action: "auth.login_blocked", actor: { id: user.id, email: user.email }, summary: "Sign-in blocked (account deactivated)", ip: clientIp(req) });
       return NextResponse.json({ error: "This account has been deactivated. Ask an admin to re-activate it." }, { status: 403 });
     }
-    await clearThrottle([`email:${mail}`]); // the IP counter is shared with everyone behind that address
-    await sb.from("users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
     const token = await createSession({
       uid: user.id,
       role: user.role,
@@ -76,7 +80,12 @@ export async function POST(req: NextRequest) {
       mc: !!user.must_change_password,
     });
     await setSessionCookie(token);
-    await logActivity({ action: "auth.login", actor: { id: user.id, email: user.email }, summary: "Signed in", ip: clientIp(req) });
+    // Bookkeeping after the reply: the cookie is already on it.
+    const ip = clientIp(req);
+    after(async () => {
+      await Promise.all([clearThrottle([`email:${mail}`]), sb.from("users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id)]);
+      await logActivity({ action: "auth.login", actor: { id: user.id, email: user.email }, summary: "Signed in", ip });
+    });
     return NextResponse.json({ ok: true, mustChangePassword: !!user.must_change_password });
   }
 

@@ -26,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const m0 = await loadMeeting(id);
   if (!m0) return fail("Meeting not found", 404);
   if (!(await canAccessMeeting(u, m0))) return fail("Meeting not found", 404);
-  await expireStaleUploads();
+  after(() => expireStaleUploads());
   const { data, error } = await getSupabase().from("meeting_recordings").select(RECORDING_SELECT).eq("meeting_id", id).order("created_at", { ascending: false });
   if (error) return serverError(error);
   return memberJson(u, { recordings: ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => publicRecording(shapeRecording(r))), enabled: driveConfigured(), chunk_bytes: DRIVE_CHUNK_BYTES });

@@ -238,8 +238,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         }
         if (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) return { ok: false, error: r.error || "The upload was refused" };
         await new Promise((res) => setTimeout(res, 1500 * attempt));
-        const st = await fetch(`/api/recordings/${id}/chunk`, { credentials: "same-origin" }).then((x) => (x.ok ? (x.json() as Promise<{ done?: boolean; received?: number }>) : null)).catch(() => null);
-        if (st?.done) return { ok: true, done: true };
+        const st = await fetch(`/api/recordings/${id}/chunk`, { credentials: "same-origin" }).then((x) => (x.ok ? (x.json() as Promise<{ done?: boolean; received?: number; recording?: Recording | null }>) : null)).catch(() => null);
+        if (st?.done) return { ok: true, done: true, recording: st.recording ?? undefined };
         if (typeof st?.received === "number" && st.received > at) {
           body = body.slice(st.received - at);
           at = st.received;

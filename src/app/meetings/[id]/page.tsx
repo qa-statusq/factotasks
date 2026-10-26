@@ -239,7 +239,6 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
       {editing && (
         <EditMeetingSheet
           title={m.title}
-          finalized={finalized}
           autoClose={row?.auto_close ?? null}
           seriesName={pack.series?.name ?? null}
           seriesAutoClose={seriesClose}
@@ -349,7 +348,7 @@ function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }
 }
 
 /** Title and closing rule of one meeting. The closing rule follows the series unless set here. */
-function EditMeetingSheet({ title, finalized, autoClose, seriesName, seriesAutoClose, busy, onClose, onSave }: { title: string; finalized: boolean; autoClose: boolean | null; seriesName: string | null; seriesAutoClose: boolean; busy: boolean; onClose: () => void; onSave: (body: Record<string, unknown>) => Promise<void> }) {
+function EditMeetingSheet({ title, autoClose, seriesName, seriesAutoClose, busy, onClose, onSave }: { title: string; autoClose: boolean | null; seriesName: string | null; seriesAutoClose: boolean; busy: boolean; onClose: () => void; onSave: (body: Record<string, unknown>) => Promise<void> }) {
   const [name, setName] = useState(title);
   const [rule, setRule] = useState<"series" | "auto" | "manual">(autoClose == null ? "series" : autoClose ? "auto" : "manual");
   const next = rule === "series" ? null : rule === "auto";
@@ -379,21 +378,19 @@ function EditMeetingSheet({ title, finalized, autoClose, seriesName, seriesAutoC
           <span className="text-sm font-medium text-ink">Title</span>
           <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
         </label>
-        {!finalized && (
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className="text-sm font-medium text-ink">Closing</legend>
-            <p className="mb-1 text-xs text-ink-subtle">How this meeting ends. Closing locks the minutes; open tasks carry into the next meeting either way.</p>
-            {options.map((o) => (
-              <label key={o.id} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors", rule === o.id ? "border-ink/30 bg-canvas" : "border-line hover:bg-canvas/60")}>
-                <input type="radio" name="closing" value={o.id} checked={rule === o.id} onChange={() => setRule(o.id)} className="mt-1 accent-ink" />
-                <span className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium text-ink">{o.label}</span>
-                  <span className="text-xs text-ink-subtle">{o.hint}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-        )}
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="text-sm font-medium text-ink">Closing</legend>
+          <p className="mb-1 text-xs text-ink-subtle">How this meeting ends. Closing locks the minutes; open tasks carry into the next meeting either way.</p>
+          {options.map((o) => (
+            <label key={o.id} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors", rule === o.id ? "border-ink/30 bg-canvas" : "border-line hover:bg-canvas/60")}>
+              <input type="radio" name="closing" value={o.id} checked={rule === o.id} onChange={() => setRule(o.id)} className="mt-1 accent-ink" />
+              <span className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium text-ink">{o.label}</span>
+                <span className="text-xs text-ink-subtle">{o.hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
       </div>
     </Sheet>
   );

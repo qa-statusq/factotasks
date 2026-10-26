@@ -50,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const have = new Set((cur ?? []).map((x) => x.user_id as string));
     const add = keep.filter((x) => !have.has(x));
     const drop = [...have].filter((x) => !keep.includes(x));
-    if (add.length) await sb.from("meeting_series_members").insert(add.map((user_id) => ({ series_id: id, user_id, added_by: u.uid })));
+    if (add.length) await sb.from("meeting_series_members").upsert(add.map((user_id) => ({ series_id: id, user_id, added_by: u.uid })), { onConflict: "series_id,user_id", ignoreDuplicates: true });
     if (drop.length) await sb.from("meeting_series_members").delete().eq("series_id", id).in("user_id", drop);
     if (!Object.keys(patch).length) {
       after(() => logActivity({ action: "meeting.series.update", entityType: "meeting_series", entityId: id, summary: `Updated the people of a meeting series` }));
@@ -85,6 +85,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { data, error } = await sb.from("meeting_series").delete().eq("id", id).select("id, name").maybeSingle();
   if (error) return serverError(error);
   if (!data) return fail("Series not found", 404);
-  await logActivity({ action: "meeting.series.delete", entityType: "meeting_series", entityId: id, summary: `Deleted meeting series “${data.name}”` });
+  after(() => logActivity({ action: "meeting.series.delete", entityType: "meeting_series", entityId: id, summary: `Deleted meeting series “${data.name}”` }));
   return ok();
 }

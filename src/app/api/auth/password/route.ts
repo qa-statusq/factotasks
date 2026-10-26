@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, after } from "next/server";
 import { createSession, setSessionCookie, invalidateAuthCache } from "@/lib/auth";
 import { resolveUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
@@ -49,6 +49,6 @@ export async function POST(req: NextRequest) {
   // Re-issue THIS session so the user stays signed in; all others are invalidated.
   const token = await createSession({ uid: u.uid, role: u.role, email: u.email, tv: nextVersion, mc: false });
   await setSessionCookie(token);
-  await logActivity({ action: "auth.password_change", actor: { id: u.uid, email: u.email }, summary: "Changed their password" });
+  after(() => logActivity({ action: "auth.password_change", actor: { id: u.uid, email: u.email }, summary: "Changed their password" }));
   return ok();
 }

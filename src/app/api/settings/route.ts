@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { requireAdmin, requireAuth } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { ok, fail, serverError, readJsonObject } from "@/lib/api";
@@ -49,6 +49,6 @@ export async function PATCH(req: NextRequest) {
   const { error } = await getSupabase().from("app_settings").upsert(rows.map((r) => ({ ...r, updated_at: new Date().toISOString() })), { onConflict: "key" });
   if (error) return serverError(error);
   invalidateSettingsCache();
-  await logActivity({ action: "settings.update", entityType: "settings", summary: `Updated settings (${changes.join(", ")})` });
+  after(() => logActivity({ action: "settings.update", entityType: "settings", summary: `Updated settings (${changes.join(", ")})` }));
   return ok({ settings: await getSettings() });
 }
