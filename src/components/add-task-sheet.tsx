@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Spinner, LoadError } from "@/components/ui/misc";
 import { AppTile, PriorityBadge, StatusBadge } from "@/components/ui/task-chips";
+import { useSession } from "@/components/providers/session-provider";
 import { useToast } from "@/components/ui/toast";
 import { useNameList } from "@/lib/use-name-labels";
 import { SeriesBadge } from "@/components/meeting-series";
@@ -22,6 +23,7 @@ import type { Meeting, TaskCard } from "@/lib/types";
  * (open first), click to add; already-pinned ones show a tick.
  */
 export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meetingId: string; cacheKey: string; pinned: string[]; onClose: () => void }) {
+  const { isAdmin } = useSession();
   const names = useNameList();
   const { toast } = useToast();
   const [q, setQ] = useState("");
@@ -54,6 +56,7 @@ export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meeting
   async function pin(t: TaskCard) {
     if (busy) return;
     const on = local.includes(t.id);
+    if (on && !isAdmin) return; // taking a task off the agenda is an admin's call
     setBusy(t.id);
     const r = await postJson(`/api/meetings/${meetingId}/tasks`, { task_id: t.id }, on ? "DELETE" : "POST");
     setBusy(null);
@@ -66,7 +69,7 @@ export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meeting
   }
 
   return (
-    <Sheet title="Add tasks to this meeting" description="Pinned tasks stay on the agenda whatever their app or date." onClose={onClose}>
+    <Sheet title="Add tasks to this meeting" description={isAdmin ? "Pinned tasks stay on the agenda whatever their app or date." : "Pinned tasks stay on the agenda whatever their app or date. An admin can take one off again."} onClose={onClose}>
       <div className="flex flex-col gap-3">
         <div className="relative">
           <IconSearch size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
@@ -91,7 +94,7 @@ export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meeting
               const on = local.includes(t.id);
               return (
                 <li key={t.id}>
-                  <button type="button" onClick={() => pin(t)} disabled={busy === t.id} className={cn("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-canvas/70", on && "bg-emerald-50/50")}>
+                  <button type="button" onClick={() => pin(t)} disabled={busy === t.id || (on && !isAdmin)} title={on ? (isAdmin ? "Take it off the agenda" : "On the agenda — an admin can take it off") : "Add to the agenda"} className={cn("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-canvas/70 disabled:cursor-default", on && "bg-emerald-50/50")}>
                     <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-md ring-1 ring-inset", on ? "bg-emerald-600 text-white ring-emerald-600" : "bg-surface ring-line")}>{busy === t.id ? <Spinner /> : on ? <IconCheck size={12} /> : null}</span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">

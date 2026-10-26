@@ -196,8 +196,10 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
               <div className={cn(!readOnly && "mt-3 border-t border-line/70 pt-3")}>
                 <NoteList notes={[...general].reverse()} cacheKey={cacheKey} readOnly={readOnly} />
               </div>
+            ) : !readOnly ? (
+              <p className="mt-2 text-[12px] text-ink-subtle">Decisions, action items and blockers. Use <b>Note</b> on a task to pin one to it.</p>
             ) : (
-              !readOnly && <p className="mt-2 text-[12px] text-ink-subtle">Decisions, action items and blockers. Use <b>Note</b> on a task to pin one to it.</p>
+              <p className="text-[12px] text-ink-subtle">{finalized ? "No minutes were written." : "No minutes yet — admins write them as the meeting goes."}</p>
             )}
           </section>
 

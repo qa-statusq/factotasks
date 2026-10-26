@@ -7,6 +7,7 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { DateRangeInput, type DateRange } from "@/components/ui/date-range";
 import { Avatar } from "@/components/ui/avatar";
 import { RecordingList, isAudioRecording } from "@/components/recordings";
+import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { usePref } from "@/lib/use-pref";
@@ -20,6 +21,7 @@ const fmtDay = (iso: string) => istTime(iso).replace(/, \d\d:\d\d(:\d\d)? (am|pm
 
 /** Every recorded meeting, newest first, grouped by meeting — searchable and filterable by series, person and date. */
 export default function RecordingsPage() {
+  const { isAdmin } = useSession();
   useDocumentTitle("Recordings · FactoTasks");
   const { data, loading, error, refresh } = useCachedFetch<{ recordings: Recording[]; enabled: boolean; migration?: string }>("/api/recordings");
   const [q, setQ] = useState("");
@@ -78,7 +80,7 @@ export default function RecordingsPage() {
 
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
-      <PageHeader title="Recordings" description="Screen and voice recordings of meetings. Watch or download here; admins can share one with any e-mail address." />
+      <PageHeader title="Recordings" description={isAdmin ? "Screen and voice recordings of meetings. Watch or download them here, or share one with any e-mail address." : "Screen and voice recordings of the meetings you take part in. Watch them here."} />
 
       {loading && !data ? (
         <ListSkeleton rows={4} />

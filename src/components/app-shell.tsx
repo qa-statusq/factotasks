@@ -209,7 +209,7 @@ function ScrollManager() {
  * jumps between screens, "c" opens the task composer, "?" opens the shortcuts
  * screen. Never fires while typing or while an overlay owns the keyboard.
  */
-function GlobalShortcuts({ isAdmin }: { isAdmin: boolean }) {
+function GlobalShortcuts({ isAdmin, meetings }: { isAdmin: boolean; meetings: boolean }) {
   const router = useRouter();
   const composer = useTaskComposer();
   const gAtRef = useRef(0);
@@ -240,7 +240,7 @@ function GlobalShortcuts({ isAdmin }: { isAdmin: boolean }) {
           t: "/tasks",
           a: "/apps",
           r: "/releases",
-          m: isAdmin ? "/meetings" : undefined,
+          m: meetings ? "/meetings" : undefined,
           o: "/analytics",
           e: "/team",
           n: "/notifications",
@@ -259,7 +259,7 @@ function GlobalShortcuts({ isAdmin }: { isAdmin: boolean }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [router, isAdmin, composer]);
+  }, [router, isAdmin, meetings, composer]);
   return null;
 }
 
@@ -706,7 +706,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <ScreenContextBar />
       <ScrollToTop />
       <ScrollManager />
-      <GlobalShortcuts isAdmin={!!isAdmin} />
+      <GlobalShortcuts isAdmin={!!isAdmin} meetings={!!isAdmin || (me?.series_ids?.length ?? 0) > 0} />
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-line/70 bg-surface lg:block">{Nav}</aside>
 
       {drawerOpen && <MobileDrawer onClose={() => setDrawerOpen(false)}>{Nav}</MobileDrawer>}
