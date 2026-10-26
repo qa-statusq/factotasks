@@ -79,12 +79,6 @@ export async function loadShares(recordingId: string): Promise<RecordingShare[]>
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(shapeShare);
 }
 
-/** An upload that saw no chunk for two hours is dead (tab closed mid-meeting): mark it failed so it can be removed. */
-export async function expireStaleUploads(): Promise<void> {
-  const cutoff = new Date(Date.now() - 2 * 3600_000).toISOString();
-  await getSupabase().from("meeting_recordings").update({ status: "failed", upload_uri: null }).eq("status", "uploading").lt("updated_at", cutoff);
-}
-
 /** Only admins manage a recording (rename, share, delete); the people of its series watch it. */
 export function canManage(u: { uid: string; role: string }, _r: RecordingRow): boolean {
   void _r;

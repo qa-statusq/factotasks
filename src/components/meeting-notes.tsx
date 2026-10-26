@@ -155,6 +155,7 @@ function NoteRow({ note: n, cacheKey, compact, canEdit }: { note: MeetingNote; c
   const [body, setBody] = useState(n.body);
   const [link, setLink] = useState<{ url: string; label: string } | null>(n.link_url ? { url: n.link_url, label: n.link_label ?? "" } : null);
   const [busy, setBusy] = useState(false);
+  const [gone, setGone] = useState(false);
 
   function refresh() {
     mutate(cacheKey);
@@ -183,11 +184,16 @@ function NoteRow({ note: n, cacheKey, compact, canEdit }: { note: MeetingNote; c
   }
   async function remove() {
     if (!(await confirm({ title: "Delete this note?", message: "It disappears from the minutes and from the task.", confirmLabel: "Delete", tone: "danger" }))) return;
+    setGone(true); // goes at once; comes back only if the server refuses
     const { ok, data } = await deleteJson(`/api/meeting-notes/${n.id}`);
     if (ok) refresh();
-    else toast(data?.error || "Couldn't delete", "error");
+    else {
+      setGone(false);
+      toast(data?.error || "Couldn't delete", "error");
+    }
   }
 
+  if (gone) return null;
   if (editing) {
     return (
       <li className={cn("flex flex-col gap-2", compact ? "text-sm" : "py-2.5")}>

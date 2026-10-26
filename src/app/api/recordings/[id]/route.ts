@@ -5,7 +5,7 @@ import { ok, fail, serverError, readJsonObject } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid } from "@/lib/validate";
 import { renameFile, trashFile, DriveError } from "@/lib/google-drive";
-import { loadRecording, loadShares, canManage, publicRecording, recordingFileName } from "@/lib/recordings";
+import { loadRecording, loadShares, canManage, canUpload, publicRecording, recordingFileName } from "@/lib/recordings";
 import { canAccessSeries } from "@/lib/series-access";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +56,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!isUuid(id)) return fail("Recording not found", 404);
   const rec = await loadRecording(id);
   if (!rec) return fail("Recording not found", 404);
-  if (!canManage(u, rec)) return fail("Only an admin or the person who recorded can delete it", 403);
+  // An admin deletes any recording; the person recording may discard their own one while it is still open.
+  if (!canManage(u, rec) && !(rec.status !== "ready" && canUpload(u, rec))) return fail("Only an admin can delete a recording", 403);
   if (rec.drive_file_id) {
     try {
       await trashFile(rec.drive_file_id);

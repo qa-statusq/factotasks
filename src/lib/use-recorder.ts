@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { postJson } from "@/lib/http";
+import { postJson, deleteJson } from "@/lib/http";
 import { mutate, mutatePrefix } from "@/lib/client-cache";
 import { tabMemGet, tabMemRemove, tabMemSet } from "@/lib/compat";
 import type { Recording } from "@/lib/types";
@@ -265,6 +265,16 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
       }
       for (;;) {
         const final = stopped.current && rec.current === null;
+        if (final && offset.current + queued.current === 0) {
+          // Stopped before the capture produced a byte (a refused screen, "Stop sharing" at once):
+          // there is nothing to keep, so the row goes and the message passes.
+          const id = recordingId.current;
+          recordingId.current = null;
+          failed.current = true;
+          if (id) void deleteJson(`/api/recordings/${id}`).then(() => refreshLists());
+          patch({ phase: "error", error: "Nothing was recorded — it stopped before anything was captured", blob: null, saved: null });
+          return;
+        }
         // A full chunk, or whatever 256 KiB multiples have piled up after a few seconds — so a tab that
         // vanishes loses only the last seconds, not the last 8 MiB.
         const due = queued.current >= CHUNK || (queued.current >= GRAIN && performance.now() - lastSend.current > FLUSH_MS);
@@ -291,7 +301,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         queued.current -= take;
         const body = new Blob(parts, { type: mime.current });
         const at = offset.current;
-        const r = await send(body, at, total, final ? seconds : null);
+        const r = await send(body, at, total, seconds);
         if (!r.ok) {
           failed.current = true;
           patch({ phase: "error", error: `Couldn't save the recording: ${r.error}.`, blob: fallbackBlob() });

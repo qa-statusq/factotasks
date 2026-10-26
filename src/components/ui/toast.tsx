@@ -35,21 +35,31 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
   const timers = useRef(new Map<number, number[]>());
+  // "type|message" → id of that toast while it is on screen: the same message twice in a row
+  // (a double-fired handler, two sources reporting one failure) is one message, not two.
+  const shown = useRef(new Map<string, number>());
 
   const dismiss = useCallback((id: number) => {
     for (const t of timers.current.get(id) || []) window.clearTimeout(t);
     timers.current.delete(id);
+    for (const [sig, v] of shown.current) if (v === id) shown.current.delete(sig);
     setToasts((t) => t.map((x) => (x.id === id ? { ...x, leaving: true } : x)));
     window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), EXIT_MS);
   }, []);
 
   const toast = useCallback(
     (message: string, type: ToastType = "success", detail?: string) => {
+      const sig = `${type}|${message}`;
+      if (shown.current.has(sig)) return;
       const id = ++counter.current;
+      shown.current.set(sig, id);
       // Longer messages, and errors, deserve a longer look.
       const ttl = Math.min(8000, Math.max(type === "error" ? 4500 : 3000, (message.length + (detail?.length ?? 0)) * 45));
       // Keep at most 4 visible — a burst of errors must not stack unbounded.
-      setToasts((t) => [...t.slice(-3), { id, message, type, detail, ttl }]);
+      setToasts((t) => {
+        for (const old of t.slice(0, -3)) for (const [s, v] of shown.current) if (v === old.id) shown.current.delete(s);
+        return [...t.slice(-3), { id, message, type, detail, ttl }];
+      });
       const leave = window.setTimeout(() => dismiss(id), ttl);
       timers.current.set(id, [leave]);
     },

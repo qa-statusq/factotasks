@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -41,9 +41,11 @@ export default function TaskPage() {
   const router = useRouter();
   const key = `/api/tasks/${id}`;
   const { toast } = useToast();
+  const gone = useRef(false);
   const { data, loading, error, refresh } = useCachedFetch<{ task: TaskDetail }>(key, {
     onError: (e) => {
-      if ((e as { status?: number }).status === 404) {
+      if ((e as { status?: number }).status === 404 && !gone.current) {
+        gone.current = true;
         toast("That task was deleted, or it isn't on an app you belong to", "error");
         router.replace("/tasks");
       }

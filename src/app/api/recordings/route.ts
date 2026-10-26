@@ -3,7 +3,8 @@ import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { serverError } from "@/lib/api";
 import { driveConfigured } from "@/lib/google-drive";
-import { RECORDING_SELECT, shapeRecording, publicRecording, missingTable, expireStaleUploads } from "@/lib/recordings";
+import { RECORDING_SELECT, shapeRecording, publicRecording, missingTable } from "@/lib/recordings";
+import { expireStaleUploads } from "@/lib/recording-uploads";
 import { memberSeriesIds } from "@/lib/series-access";
 
 export const dynamic = "force-dynamic";

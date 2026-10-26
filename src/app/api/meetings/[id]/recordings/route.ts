@@ -7,7 +7,8 @@ import { cleanLine, isUuid, parseNumber } from "@/lib/validate";
 import { loadMeeting } from "@/lib/meetings";
 import { rateLimited } from "@/lib/rate-limit";
 import { createUploadSession, driveConfigured, DRIVE_CHUNK_BYTES, DriveError } from "@/lib/google-drive";
-import { RECORDING_SELECT, shapeRecording, publicRecording, notConfigured, missingTable, recordingFileName, expireStaleUploads } from "@/lib/recordings";
+import { RECORDING_SELECT, shapeRecording, publicRecording, notConfigured, missingTable, recordingFileName } from "@/lib/recordings";
+import { expireStaleUploads } from "@/lib/recording-uploads";
 import { canAccessMeeting } from "@/lib/series-access";
 
 export const dynamic = "force-dynamic";

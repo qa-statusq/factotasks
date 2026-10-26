@@ -31,6 +31,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const totalRaw = req.headers.get("x-chunk-total") ?? (rec.size_bytes ? String(rec.size_bytes) : "*");
   const total = totalRaw === "*" ? null : Number(totalRaw);
   if (!Number.isInteger(offset) || offset < 0) return fail("Bad chunk offset");
+  if (total === 0 && offset === 0) {
+    // Stopped before the capture produced a byte: there is no recording to keep.
+    await getSupabase().from("meeting_recordings").delete().eq("id", id);
+    return NextResponse.json({ done: true, empty: true, received: 0, recording: null });
+  }
   if (total != null && (!Number.isInteger(total) || total <= 0 || offset > total)) return fail("Bad total size");
   const body = await req.arrayBuffer();
   if (body.byteLength > DRIVE_CHUNK_BYTES) return fail("Chunk too large");
@@ -43,8 +48,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     const r = await uploadChunk(rec.upload_uri, body, offset, total);
-    if (!r.done) return NextResponse.json({ done: false, received: r.received });
     const sb = getSupabase();
+    if (!r.done) {
+      // Size and length so far, so the meeting's card shows a recording that is really happening
+      // (every ~30 s: each write moves the change counter that every open tab watches).
+      if (Date.parse(rec.updated_at) < Date.now() - 30_000) {
+        after(async () => {
+          await sb.from("meeting_recordings").update({ size_bytes: r.received, ...(duration != null && Number.isFinite(duration) && duration >= 0 ? { duration_sec: Math.round(duration) } : {}) }).eq("id", id);
+        });
+      }
+      return NextResponse.json({ done: false, received: r.received });
+    }
     const { data: saved, error } = await sb
       .from("meeting_recordings")
       .update({

@@ -5,7 +5,8 @@ import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/field";
+import { Input, Textarea } from "@/components/ui/field";
+import { Sheet } from "@/components/ui/sheet";
 import { Breadcrumb, LoadError, Spinner, EmptyState } from "@/components/ui/misc";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
@@ -61,7 +62,7 @@ export default function MeetingPage() {
 function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
   const router = useRouter();
   const { toast } = useToast();
-  const { confirm, prompt } = useDialog();
+  const { confirm } = useDialog();
   const { isAdmin } = useSession();
   const needsApproval = useNeedsApproval();
   const m = pack.meeting;
@@ -103,11 +104,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
     if (!(await confirm({ title: "Close this meeting?", message: "Closing locks the minutes as they stand right now. Open tasks are not affected — they simply carry into the next meeting.", confirmLabel: "Close meeting" }))) return;
     await patch({ status: "finalized" }, "Meeting closed", "fin");
   }
-  async function rename() {
-    const t = await prompt({ title: "Rename meeting", defaultValue: m.title, confirmLabel: "Save" });
-    if (t === null || !t.trim()) return;
-    await patch({ title: t.trim() }, "Renamed", "title");
-  }
+  const [editing, setEditing] = useState(false);
   async function remove() {
     if (!(await confirm({ title: "Delete this meeting?", message: "Its minutes are deleted too. Tasks are untouched.", confirmLabel: "Delete", tone: "danger" }))) return;
     const { ok, data } = await deleteJson(cacheKey);
@@ -129,38 +126,17 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
           <MeetingStatusBadge status={m.status} />
           <SeriesBadge series={pack.series} />
           {isAdmin && (
-            <button type="button" onClick={rename} className="rounded p-1 text-ink-subtle hover:text-ink" aria-label="Rename">
+            <button type="button" onClick={() => setEditing(true)} className="rounded p-1 text-ink-subtle hover:text-ink" aria-label="Edit meeting" title="Edit meeting">
               <IconEdit size={14} />
             </button>
           )}
         </div>
         <p className="text-[13px] text-ink-muted">
-          {fmt(m.held_at)} · covering {pack.previous_meeting ? `since the previous ${pack.series ? pack.series.name : "meeting"} (${fmt(pack.previous_meeting)})` : "the previous 7 days"}{!finalized && " · live until closed"}
+          {fmt(m.held_at)} · covering {pack.previous_meeting ? `since the previous ${pack.series ? pack.series.name : "meeting"} (${fmt(pack.previous_meeting)})` : "the previous 7 days"}
+          {!finalized && (closesItself ? " · live until the end of its day" : " · live until closed by hand")}
           {" · "}
           <ScopeLabel scope={m} apps={ad?.apps} className="align-middle" />
         </p>
-        {!finalized && (
-          <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-muted">
-            {isAdmin ? (
-              <button
-                type="button"
-                onClick={() => patch({ auto_close: !closesItself }, closesItself ? "This meeting stays open until you close it" : "This meeting closes by itself at the end of its day", "auto")}
-                disabled={busy === "auto"}
-                className={cn("inline-flex items-center gap-2 rounded-full border px-2.5 py-1 transition-colors", closesItself ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100" : "border-line bg-surface text-ink-muted hover:bg-canvas")}
-                title="Automatic closing for this meeting — click to change"
-                aria-pressed={closesItself}
-              >
-                <span className={cn("relative h-3.5 w-6 rounded-full transition-colors", closesItself ? "bg-emerald-600" : "bg-ink/20")} aria-hidden>
-                  <span className={cn("absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white transition-[left]", closesItself ? "left-3" : "left-0.5")} />
-                </span>
-                {closesItself ? "Closes by itself at the end of the day" : "Stays open until closed by hand"}
-                {row?.auto_close == null && <span className="text-ink-subtle">· series default</span>}
-              </button>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1">{closesItself ? "Closes by itself at the end of the day" : "Stays open until closed by hand"}</span>
-            )}
-          </div>
-        )}
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/meetings/${m.id}/present`} onClick={() => tabMemSet("ft_deck_from", m.id)} className={buttonClass("primary", "sm")}>
             <IconMaximize size={14} /> Present
@@ -258,6 +234,20 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
           </section>
         </aside>
       </div>
+      {editing && (
+        <EditMeetingSheet
+          title={m.title}
+          finalized={finalized}
+          autoClose={row?.auto_close ?? null}
+          seriesName={pack.series?.name ?? null}
+          seriesAutoClose={seriesClose}
+          busy={busy === "edit"}
+          onClose={() => setEditing(false)}
+          onSave={async (body) => {
+            if (await patch(body, "Meeting updated", "edit")) setEditing(false);
+          }}
+        />
+      )}
       {adding && <AddTaskSheet meetingId={m.id} cacheKey={cacheKey} pinned={pack.pinned ?? []} onClose={() => setAdding(false)} />}
     </div>
   );
@@ -356,18 +346,75 @@ function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }
   );
 }
 
+/** Title and closing rule of one meeting. The closing rule follows the series unless set here. */
+function EditMeetingSheet({ title, finalized, autoClose, seriesName, seriesAutoClose, busy, onClose, onSave }: { title: string; finalized: boolean; autoClose: boolean | null; seriesName: string | null; seriesAutoClose: boolean; busy: boolean; onClose: () => void; onSave: (body: Record<string, unknown>) => Promise<void> }) {
+  const [name, setName] = useState(title);
+  const [rule, setRule] = useState<"series" | "auto" | "manual">(autoClose == null ? "series" : autoClose ? "auto" : "manual");
+  const next = rule === "series" ? null : rule === "auto";
+  const dirty = name.trim() !== title || next !== autoClose;
+  const options: { id: "series" | "auto" | "manual"; label: string; hint: string }[] = [
+    { id: "series", label: `Follow the series`, hint: `${seriesName ? `${seriesName} closes its meetings ` : "The series closes meetings "}${seriesAutoClose ? "by themselves at the end of their day" : "only when an admin closes them"}.` },
+    { id: "auto", label: "Close by itself at the end of its day", hint: "The night after the meeting day it closes on its own, so the next meeting starts clean." },
+    { id: "manual", label: "Stay open until closed by hand", hint: "It stays live, whatever the day, until an admin presses Close meeting." },
+  ];
+  return (
+    <Sheet
+      title="Edit meeting"
+      onClose={onClose}
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => void onSave({ ...(name.trim() !== title ? { title: name.trim() } : {}), ...(next !== autoClose ? { auto_close: next } : {}) })} disabled={busy || !dirty || !name.trim()}>
+            {busy ? <Spinner /> : <IconCheck size={14} />} Save
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-ink">Title</span>
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
+        </label>
+        {!finalized && (
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="text-sm font-medium text-ink">Closing</legend>
+            <p className="mb-1 text-xs text-ink-subtle">How this meeting ends. Closing locks the minutes; open tasks carry into the next meeting either way.</p>
+            {options.map((o) => (
+              <label key={o.id} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors", rule === o.id ? "border-ink/30 bg-canvas" : "border-line hover:bg-canvas/60")}>
+                <input type="radio" name="closing" value={o.id} checked={rule === o.id} onChange={() => setRule(o.id)} className="mt-1 accent-ink" />
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-ink">{o.label}</span>
+                  <span className="text-xs text-ink-subtle">{o.hint}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
 function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, needsApproval, onNote, meetingId }: { task: TaskCard; notes: MeetingNote[]; labels: Map<string, string>; cacheKey: string; readOnly: boolean; needsApproval: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
   const { me, isAdmin } = useSession();
   const { toast } = useToast();
+  const [gone, setGone] = useState(false);
   async function unpin() {
+    setGone(true); // leaves the agenda at once; comes back only if the server refuses
     const r = await postJson(`/api/meetings/${meetingId}/tasks`, { task_id: t.id }, "DELETE");
     if (r.ok) {
       mutate(cacheKey);
       mutate(`/api/tasks/${t.id}`);
       toast(`${taskRef(t.number)} removed from the meeting`);
-    } else toast(r.data?.error || "Couldn't remove", "error");
+    } else {
+      setGone(false);
+      toast(r.data?.error || "Couldn't remove", "error");
+    }
   }
   const desc = t.description?.trim();
+  if (gone) return null;
   return (
     <li className="px-3 py-2.5 sm:px-4">
       <div className="flex items-start gap-3">

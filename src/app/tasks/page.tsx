@@ -185,6 +185,7 @@ function TasksScreen() {
     <div className="flex flex-col gap-4 animate-fade-in">
       <PageHeader
         title="Tasks"
+        description="Everything the team is working on, newest change first. Search by title or T-number."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Segmented value={scope} onChange={(v) => set({ scope: v === "open" ? undefined : v, status: undefined })} options={SCOPES.map((o) => ({ value: o.value, label: o.label }))} aria-label="Scope" />
