@@ -16,15 +16,6 @@ import { driveConfigured, ensureFolder, uploadBytes, trashFile, DriveError } fro
 
 const ATTACHMENTS_FOLDER = "Task attachments";
 
-let driveCol: { at: number; ok: boolean } | null = null;
-/** True once migration 020 (task_attachments.drive_file_id) has been applied. Cached for a minute. */
-async function hasDriveColumn(): Promise<boolean> {
-  if (driveCol && Date.now() - driveCol.at < 60_000) return driveCol.ok;
-  const { error } = await getSupabase().from("task_attachments").select("drive_file_id").limit(1);
-  driveCol = { at: Date.now(), ok: !error };
-  return driveCol.ok;
-}
-
 export const dynamic = "force-dynamic";
 // A 15 MB upload over a slow mobile connection needs more than the default budget.
 export const maxDuration = 60;
@@ -73,7 +64,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Where it goes: the team's Google Shared Drive ("Task attachments" folder) once the panel is set up for it;
   // the Supabase bucket until then (and for every file uploaded before).
-  const toDrive = driveConfigured() && (await hasDriveColumn());
+  const toDrive = driveConfigured();
   let key: string | null = null;
   let driveFileId: string | null = null;
   if (toDrive) {
@@ -100,6 +91,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (error) {
     if (key) await sb.storage.from("attachments").remove([key]);
     if (driveFileId) await trashFile(driveFileId).catch(() => undefined);
+    if ((error as { code?: string }).code === "P0006") return fail(`A task can hold up to ${LIMITS.attachmentsPerTask} attachments`);
     return serverError(error);
   }
 

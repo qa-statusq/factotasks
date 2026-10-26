@@ -213,6 +213,15 @@ await db.query("select prefs_merge($1, '{\"a\":1}'::jsonb)", [dev.id]);
 await db.query("select prefs_merge($1, '{\"b\":\"x\"}'::jsonb)", [dev.id]);
 assert(JSON.stringify(await json("select prefs from users where id = $1", [dev.id])) === JSON.stringify({ a: 1, b: "x" }), "prefs_merge composes keys (023)");
 await db.query("select prefs_merge($1, '{\"a\":null}'::jsonb)", [dev.id]);
+assert((await json("select user_delete_guarded($1)", [admin.id])) === false, "user_delete_guarded keeps the last active admin (023)");
+for (let i = 0; i < 25; i++) await db.query("insert into task_attachments (task_id, uploaded_by, file_name, mime, size_bytes, storage_path) values ($1,$2,'f.png','image/png',1,$3)", [t2.id, admin.id, "k" + i]);
+try {
+  await db.query("insert into task_attachments (task_id, uploaded_by, file_name, mime, size_bytes, storage_path) values ($1,$2,'f.png','image/png',1,'k25')", [t2.id, admin.id]);
+  fail("the 26th attachment should be refused");
+} catch (e) {
+  assert(/attachment limit/.test(String(e.message)), "task_attachments_cap refuses the 26th file (023)");
+}
+await db.query("delete from task_attachments where task_id = $1", [t2.id]);
 assert(JSON.stringify(await json("select prefs from users where id = $1", [dev.id])) === JSON.stringify({ b: "x" }), "prefs_merge removes a null key (023)");
 assert(pack.releases.length === 1 && pack.releases[0].tasks.length === 1 && pack.releases[0].tasks[0].number === 1, "meeting_pack: upcoming release listed with its tasks");
 // As of last week's (finalized) meeting only T-2 existed, it was pending and

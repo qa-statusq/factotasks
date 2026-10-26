@@ -44,12 +44,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const failed: { email: string; error: string }[] = [];
   for (const email of emails) {
     if (existing.some((s) => s.email === email)) continue;
+    // The row claims the address first (unique per recording): a second request for the same
+    // address at the same moment claims nothing and creates no second permission.
+    const { data: claimed, error: claimErr } = await sb.from("recording_shares").upsert({ recording_id: id, email, message, shared_by: u.uid }, { onConflict: "recording_id,email", ignoreDuplicates: true }).select("id");
+    if (claimErr) {
+      failed.push({ email, error: claimErr.message });
+      continue;
+    }
+    if (!claimed?.length) continue;
     try {
       const permissionId = await shareFile(rec.drive_file_id, email, message);
-      const { error } = await sb.from("recording_shares").insert({ recording_id: id, email, permission_id: permissionId, message, shared_by: u.uid });
-      if (error) failed.push({ email, error: error.message });
-      else added.push(email);
+      await sb.from("recording_shares").update({ permission_id: permissionId }).eq("id", claimed[0].id as string);
+      added.push(email);
     } catch (e) {
+      await sb.from("recording_shares").delete().eq("id", claimed[0].id as string);
       failed.push({ email, error: e instanceof DriveError ? e.message : "Couldn't share with this address" });
     }
   }

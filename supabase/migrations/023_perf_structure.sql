@@ -465,6 +465,40 @@ as $$
    returning prefs;
 $$;
 
+-- (023) A task holds at most 25 attachments, enforced where two uploads at once cannot both slip past.
+create or replace function task_attachments_cap()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  perform 1 from tasks where id = new.task_id for update;
+  if (select count(*) from task_attachments where task_id = new.task_id) >= 25 then
+    raise exception 'attachment limit' using errcode = 'P0006';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists task_attachments_cap on task_attachments;
+create trigger task_attachments_cap before insert on task_attachments for each row execute function task_attachments_cap();
+
+-- (023) Remove a person unless they are the last active admin — one statement under a lock.
+create or replace function user_delete_guarded(p_id uuid)
+returns boolean
+language plpgsql
+set search_path = public
+as $$
+begin
+  lock table users in share row exclusive mode;
+  if exists (select 1 from users where id = p_id and role = 'admin' and is_active)
+     and not exists (select 1 from users where role = 'admin' and is_active and id <> p_id) then
+    return false;
+  end if;
+  delete from users where id = p_id;
+  return found;
+end;
+$$;
+
 -- 8. Job lease
 -- (023) A short lease for jobs that must not overlap (two instances, a scheduler
 -- retry): the first caller within p_ttl_sec gets true, the others false.

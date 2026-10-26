@@ -89,11 +89,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (wantsReleased && !mustAsk) changes.status = { from: cur.status, to: "released" };
   if (ids) await setReleaseTasks(id, cur.app_id as string, (p.platform ?? (cur.platform as "android" | "ios")), ids);
   if (Object.keys(p).length) {
-    const { error } = await sb.from("releases").update(p).eq("id", id);
+    // A status move is decided against the status the form saw: if an approval or another admin moved
+    // the version meanwhile, this write must not land on top of it.
+    let w = sb.from("releases").update(p).eq("id", id);
+    if (p.status) w = w.eq("status", cur.status as string);
+    const { data: hit, error } = await w.select("id");
     if (error) {
       if (isUniqueViolation(error)) return NextResponse.json({ error: "That version already exists for this platform" }, { status: 409 });
       return serverError(error);
     }
+    if (p.status && !hit?.length) return fail("This version changed a moment ago — refresh and try again", 409);
   }
 
   let closed: { id: string; number: number; title: string }[] = [];

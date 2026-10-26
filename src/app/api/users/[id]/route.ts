@@ -124,13 +124,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!target) return fail("User not found", 404);
   if (target.role === "admin" && target.is_active && (await adminCount(sb)) <= 1) return fail("At least one active admin is required");
 
-  const { error } = await sb.from("users").delete().eq("id", id);
+  // The floor is checked and the row removed under one lock, so two admins removing each other
+  // at the same moment leave one of them — never a restored row stripped of its memberships.
+  const { data: removed, error } = await sb.rpc("user_delete_guarded", { p_id: id });
   if (error) return serverError(error);
-  if (target.role === "admin" && (await adminCount(sb)) === 0) {
-    await sb.from("users").insert(target);
-    invalidateAuthCache(id);
-    return fail("At least one active admin is required");
-  }
+  if (removed === false) return fail("At least one active admin is required", 409);
   invalidateAuthCache(id);
   after(() => logActivity({ action: "user.remove", entityType: "user", entityId: id, summary: `Removed ${displayName(target.first_name, target.last_name) || target.email}` }));
   return ok();
