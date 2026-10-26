@@ -859,20 +859,7 @@ function TaskTable({
                   <ClampedText text={desc} lines={2} className="mt-[0.4cqw] text-[1.15cqw] leading-snug text-ink-muted" buttonClassName="mt-[0.2cqw] text-[1.05cqw]" moreLabel="Show more" lessLabel="Show less" />
                   {matrix && <DeckTargets t={t} />}
                   {t.requested_status && <p className="mt-[0.4cqw] text-[1.1cqw] font-medium text-amber-700">Asked to move to {STATUS_META[t.requested_status].label} — awaiting approval</p>}
-                  {taskNotes.length > 0 && (
-                    <ul className="mt-[0.8cqw] flex flex-col gap-[0.5cqw] border-l-[0.25cqw] border-line pl-[1cqw]">
-                      {taskNotes.slice(0, NOTES_SHOWN_PER_TASK).map((x) => (
-                        <li key={x.id} className="flex items-start gap-[0.7cqw] text-[1.15cqw] leading-snug text-ink">
-                          <NoteKind kind={x.kind} />
-                          <span className="min-w-0">
-                            <span className="whitespace-pre-wrap break-words">{x.body}</span>
-                            {x.link_url && <span className="block"><NoteLink url={x.link_url} label={x.link_label} size="deck" /></span>}
-                          </span>
-                        </li>
-                      ))}
-                      {taskNotes.length > NOTES_SHOWN_PER_TASK && <li className="text-[1.05cqw] text-ink-subtle">+ {taskNotes.length - NOTES_SHOWN_PER_TASK} more in the minutes</li>}
-                    </ul>
-                  )}
+                  {taskNotes.length > 0 && <TaskNotes notes={taskNotes} />}
                 </td>
                 <td className={cn(TD, "text-ink-muted")}>
                   <Owners users={t.assignees} labels={labels} />
@@ -993,9 +980,9 @@ function MinutesTable({ notes, labels }: { notes: MeetingNote[]; labels: Map<str
                   <span className="text-ink-subtle">General</span>
                 )}
               </td>
-              <td className={cn(TD, "text-ink")}>
-                <span className="whitespace-pre-wrap break-words">{x.body}</span>
-                {x.link_url && <span className="block"><NoteLink url={x.link_url} label={x.link_label} size="deck" /></span>}
+              <td className={cn(TD, "whitespace-pre-wrap break-words text-ink")}>
+                {x.body}
+                {x.link_url && <NoteLink url={x.link_url} label={x.link_label} size="deck" className={x.body ? "ml-[0.7cqw]" : undefined} />}
               </td>
               <td className={cn(TD, "text-ink-muted")}>{x.author ? ownerText([x.author], labels) : "—"}</td>
             </tr>
@@ -1003,6 +990,42 @@ function MinutesTable({ notes, labels }: { notes: MeetingNote[]; labels: Map<str
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * The minute lines pinned to a task, under its description: a text note keeps
+ * its link at the end of the sentence; notes that are only a link share one
+ * "Links" row, so four findings read as four buttons, not four paragraphs.
+ */
+function TaskNotes({ notes }: { notes: MeetingNote[] }) {
+  const text = notes.filter((x) => x.body.trim());
+  const linkOnly = notes.filter((x) => !x.body.trim() && x.link_url);
+  const shown = text.slice(0, NOTES_SHOWN_PER_TASK);
+  const hidden = text.length - shown.length;
+  return (
+    <ul className="mt-[0.8cqw] flex flex-col gap-[0.55cqw] border-l-[0.25cqw] border-line pl-[1cqw]">
+      {shown.map((x) => (
+        <li key={x.id} className="flex items-start gap-[0.7cqw] text-[1.15cqw] leading-snug text-ink">
+          <NoteKind kind={x.kind} />
+          <span className="min-w-0 whitespace-pre-wrap break-words">
+            {x.body}
+            {x.link_url && <NoteLink url={x.link_url} label={x.link_label} size="deck" className="ml-[0.7cqw]" />}
+          </span>
+        </li>
+      ))}
+      {linkOnly.length > 0 && (
+        <li className="flex items-start gap-[0.7cqw] text-[1.15cqw] leading-snug">
+          <NoteKind kind={linkOnly[0].kind} label={linkOnly.length === 1 ? undefined : "Links"} />
+          <span className="flex min-w-0 flex-wrap items-center gap-[0.5cqw]">
+            {linkOnly.map((x) => (
+              <NoteLink key={x.id} url={x.link_url} label={x.link_label} size="deck" />
+            ))}
+          </span>
+        </li>
+      )}
+      {hidden > 0 && <li className="text-[1.05cqw] text-ink-subtle">+ {hidden} more in the minutes</li>}
+    </ul>
   );
 }
 
@@ -1014,7 +1037,7 @@ function CarryChip({ carry }: { carry: number }) {
   );
 }
 
-function NoteKind({ kind }: { kind: MeetingNote["kind"] }) {
+function NoteKind({ kind, label }: { kind: MeetingNote["kind"]; label?: string }) {
   return (
     <span
       className={cn(
@@ -1022,7 +1045,7 @@ function NoteKind({ kind }: { kind: MeetingNote["kind"] }) {
         kind === "blocker" ? "bg-red-600 text-white ring-red-600" : kind === "decision" ? "bg-ink text-white ring-ink" : kind === "action" ? "bg-blue-600 text-white ring-blue-600" : "bg-surface text-ink-muted ring-line"
       )}
     >
-      {NOTE_KIND_META[kind].label}
+      {label ?? NOTE_KIND_META[kind].label}
     </span>
   );
 }

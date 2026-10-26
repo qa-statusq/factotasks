@@ -45,7 +45,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const b = await readJsonObject(req);
   const body = cleanText(b.body, LIMITS.note);
-  if (!body) return fail("Write the note first");
   const kind = oneOf(b.kind, NOTE_KINDS) ?? "note";
   const taskId = b.task_id ? (isUuid(b.task_id) ? String(b.task_id).toLowerCase() : null) : null;
   if (b.task_id && !taskId) return fail("Invalid task");
@@ -55,6 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (taskId && !own) return fail("Task not found", 404);
   const link = parseLink(b);
   if ("error" in link) return fail(link.error);
+  if (!body && !link.url) return fail("Write the note or add a link");
   const links = await hasNoteLinks();
   if (link.url && !links) return fail("Links on notes need database migration 018 — ask an admin to run it");
 
@@ -67,12 +67,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (error) return serverError(error);
 
   const actor = displayName(u.firstName, u.lastName) || u.email;
+  const gist = body || `link: ${link.label || link.url}`;
   after(async () => {
-    await logActivity({ action: "meeting.note", entityType: "meeting", entityId: id, summary: `${kind} in “${m.title}”${own ? ` on ${taskRef(own.number)}` : ""}: ${body.slice(0, 80)}` });
+    await logActivity({ action: "meeting.note", entityType: "meeting", entityId: id, summary: `${kind} in “${m.title}”${own ? ` on ${taskRef(own.number)}` : ""}: ${gist.slice(0, 80)}` });
     if (own) {
-      await notifyUsers({ userIds: [...involved(own), aboutId], kind: "task.mom", taskId: own.id, actorId: u.uid, message: `${actor} noted on ${taskRef(own.number)} in the meeting: ${body.slice(0, 100)}` });
+      await notifyUsers({ userIds: [...involved(own), aboutId], kind: "task.mom", taskId: own.id, actorId: u.uid, message: `${actor} noted on ${taskRef(own.number)} in the meeting: ${gist.slice(0, 100)}` });
     } else if (aboutId) {
-      await notifyUsers({ userIds: [aboutId], kind: "meeting.note", actorId: u.uid, message: `${actor} added a meeting ${kind} about you: ${body.slice(0, 100)}` });
+      await notifyUsers({ userIds: [aboutId], kind: "meeting.note", actorId: u.uid, message: `${actor} added a meeting ${kind} about you: ${gist.slice(0, 100)}` });
     }
   });
   return NextResponse.json({

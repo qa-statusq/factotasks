@@ -10,10 +10,11 @@ import { hasNoteLinks } from "@/lib/visibility";
 export const dynamic = "force-dynamic";
 
 async function load(id: string) {
-  const { data } = await getSupabase().from("meeting_notes").select("id, created_by, meeting:meetings(status)").eq("id", id).maybeSingle();
+  const links = await hasNoteLinks();
+  const { data } = await getSupabase().from("meeting_notes").select((links ? "id, body, created_by, link_url, meeting:meetings(status)" : "id, body, created_by, meeting:meetings(status)") as "id, body, created_by, link_url, meeting:meetings(status)").eq("id", id).maybeSingle();
   if (!data) return null;
   const m = (Array.isArray(data.meeting) ? data.meeting[0] : data.meeting) as { status: string } | null;
-  return { id: data.id as string, created_by: data.created_by as string | null, finalized: m?.status === "finalized" };
+  return { id: data.id as string, body: (data.body as string) ?? "", created_by: data.created_by as string | null, link_url: (data.link_url as string | null) ?? null, finalized: m?.status === "finalized" };
 }
 
 /** Edit your own note (admins: any; closed meetings: admins only). */
@@ -30,11 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (n.finalized && !admin) return fail("This meeting is closed", 403);
   const b = await readJsonObject(req);
   const patch: Record<string, unknown> = {};
-  if ("body" in b) {
-    const body = cleanText(b.body, LIMITS.note);
-    if (!body) return fail("A note can't be empty");
-    patch.body = body;
-  }
+  if ("body" in b) patch.body = cleanText(b.body, LIMITS.note);
   if ("kind" in b) {
     const kind = oneOf(b.kind, NOTE_KINDS);
     if (!kind) return fail("Invalid kind");
@@ -50,6 +47,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       patch.link_label = link.label;
     }
   }
+  // A note is its words or its link — never neither.
+  const linkAfter = "link_url" in patch ? (patch.link_url as string | null) : n.link_url;
+  const bodyAfter = "body" in patch ? (patch.body as string) : n.body;
+  if (!bodyAfter && !linkAfter) return fail("Write the note or add a link");
   if (!Object.keys(patch).length) return fail("Nothing to update");
   const { error } = await getSupabase().from("meeting_notes").update(patch).eq("id", id);
   if (error) return serverError(error);

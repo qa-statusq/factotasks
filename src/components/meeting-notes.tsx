@@ -57,9 +57,10 @@ export function NoteComposer({
 
   async function send() {
     const text = body.trim();
-    if (!text || busy) return;
+    const url = link?.url.trim() || null;
+    if ((!text && !url) || busy) return;
     setBusy(true);
-    const { ok, data } = await postJson(`/api/meetings/${meetingId}/notes`, { body: text, kind, task_id: task?.id ?? null, link_url: link?.url.trim() || null, link_label: link?.label.trim() || null });
+    const { ok, data } = await postJson(`/api/meetings/${meetingId}/notes`, { body: text, kind, task_id: task?.id ?? null, link_url: url, link_label: link?.label.trim() || null });
     setBusy(false);
     if (ok) {
       setBody("");
@@ -96,7 +97,7 @@ export function NoteComposer({
         rows={2}
         ref={areaRef}
         autoFocus={autoFocus}
-        placeholder={task ? `What was said about ${taskRef(task.number)}? (Ctrl+Enter)` : "Decision, action item, blocker or a general note… (Ctrl+Enter)"}
+        placeholder={link ? "What is this link? (optional)" : task ? `What was said about ${taskRef(task.number)}? (Ctrl+Enter)` : "Decision, action item, blocker or a general note… (Ctrl+Enter)"}
         maxLength={LIMITS.note}
         className="text-[13px]"
       />
@@ -110,7 +111,7 @@ export function NoteComposer({
             <IconLink size={13} /> Add link
           </button>
         )}
-        <Button size="sm" onClick={send} disabled={busy || !body.trim() || (!!link && !link.url.trim())} className="ml-auto">
+        <Button size="sm" onClick={send} disabled={busy || (!body.trim() && !link?.url.trim())} className="ml-auto">
           {busy ? <Spinner /> : <IconSend size={14} />} Add
         </Button>
       </div>
@@ -167,8 +168,8 @@ function NoteRow({ note: n, cacheKey, compact, canEdit }: { note: MeetingNote; c
   }
   async function save() {
     const text = body.trim();
-    if (!text || busy) return;
     const url = link?.url.trim() || null;
+    if ((!text && !url) || busy) return;
     const label = (url && link?.label.trim()) || null;
     if (text === n.body && kind === n.kind && url === n.link_url && label === (n.link_label || null)) return setEditing(false);
     setBusy(true);
@@ -218,7 +219,7 @@ function NoteRow({ note: n, cacheKey, compact, canEdit }: { note: MeetingNote; c
           <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy} className="ml-auto">
             Cancel
           </Button>
-          <Button size="sm" onClick={save} disabled={busy || !body.trim()}>
+          <Button size="sm" onClick={save} disabled={busy || (!body.trim() && !link?.url.trim())}>
             {busy ? <Spinner /> : "Save"}
           </Button>
         </div>
@@ -238,7 +239,7 @@ function NoteRow({ note: n, cacheKey, compact, canEdit }: { note: MeetingNote; c
           </Link>
         )}
         <RichText text={n.body} className={compact ? "text-[13px]" : undefined} />
-        <NoteLink url={n.link_url} label={n.link_label} />
+        <NoteLink url={n.link_url} label={n.link_label} className={n.body.trim() ? "mt-1" : "mt-0.5"} />
         {!compact && (
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-subtle">
             {n.author && (

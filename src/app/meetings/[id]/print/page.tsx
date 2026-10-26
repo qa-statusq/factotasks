@@ -281,9 +281,9 @@ function PrintDoc() {
                   <tr key={x.id} className="break-inside-avoid border-b border-line align-top">
                     <Td className="font-semibold uppercase tracking-wide text-[8pt]">{NOTE_KIND_META[x.kind].label}</Td>
                     <Td>{x.task ? <><span className="tabular-nums text-ink-subtle">{taskRef(x.task.number)}</span> {x.task.title}</> : x.about ? x.about.name : <span className="text-ink-subtle">General</span>}</Td>
-                    <Td>
-                      <span className="whitespace-pre-wrap break-words">{x.body}</span>
-                      {x.link_url && <span className="block"><NoteLink url={x.link_url} label={x.link_label} size="print" /></span>}
+                    <Td className="whitespace-pre-wrap break-words">
+                      {x.body}
+                      {x.link_url && <NoteLink url={x.link_url} label={x.link_label} size="print" className={x.body ? "ml-1.5" : undefined} />}
                     </Td>
                     <Td className="text-ink-muted">{x.author ? ownerText([x.author], labels) : "—"}</Td>
                   </tr>
@@ -393,13 +393,21 @@ function TaskRow({ t, notes, labels, done, showApp }: { t: TaskCard; notes: Meet
         {t.requested_status && <p className="mt-0.5 text-[8.5pt] text-amber-700">Asked to move to {STATUS_META[t.requested_status].label} — awaiting approval</p>}
         {notes.length > 0 && (
           <ul className="mt-1 border-l-2 border-line pl-2">
-            {notes.map((x) => (
+            {notes.filter((x) => x.body.trim()).map((x) => (
               <li key={x.id} className="py-0.5 text-[9pt]">
                 <span className="mr-1.5 text-[7.5pt] font-bold uppercase tracking-wide text-ink-muted">{NOTE_KIND_META[x.kind].label}</span>
                 <span className="whitespace-pre-wrap break-words">{x.body}</span>
-                {x.link_url && <span className="block"><NoteLink url={x.link_url} label={x.link_label} size="print" /></span>}
+                {x.link_url && <NoteLink url={x.link_url} label={x.link_label} size="print" className="ml-1.5" />}
               </li>
             ))}
+            {notes.some((x) => !x.body.trim() && x.link_url) && (
+              <li className="flex flex-wrap items-center gap-1 py-0.5 text-[9pt]">
+                <span className="mr-0.5 text-[7.5pt] font-bold uppercase tracking-wide text-ink-muted">Links</span>
+                {notes.filter((x) => !x.body.trim() && x.link_url).map((x) => (
+                  <NoteLink key={x.id} url={x.link_url} label={x.link_label} size="print" />
+                ))}
+              </li>
+            )}
           </ul>
         )}
       </Td>

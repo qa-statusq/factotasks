@@ -102,11 +102,12 @@ export default function DashboardPage() {
           </section>
 
           <UnreleasedWorkBanner compact />
-          {data.releases.length > 0 && (
+          {data.releases.some((r) => r.status === "released" || r.status === "testing") && (
             <section>
               <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">Releases</h2>
               <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {data.releases.map((r) => (
+                {/* Shipped and under test only — planned versions wait on the Releases screen. */}
+                {data.releases.filter((r) => r.status === "released" || r.status === "testing").map((r) => (
                   <li key={r.id} className="min-w-0">
                     <Link href={`/apps/${r.app.id}?tab=releases`} className="flex h-full items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 transition-colors hover:bg-canvas">
                       <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} androidIconUrl={r.app.icon_android_url} iosIconUrl={r.app.icon_ios_url} platform={r.platform} className="h-8 w-8 text-xs" />

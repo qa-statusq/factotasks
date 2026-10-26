@@ -13,10 +13,10 @@ export function NoteLink({ url, label, size = "sm", className }: { url: string |
   const text = label?.trim() || NOTE_LINK_DEFAULT_LABEL;
   const sized =
     size === "deck"
-      ? "mt-[0.4cqw] gap-[0.5cqw] rounded-[0.5cqw] px-[0.8cqw] py-[0.3cqw] text-[1.05cqw] [&_svg]:h-[1cqw] [&_svg]:w-[1cqw]"
+      ? "gap-[0.5cqw] rounded-[0.5cqw] px-[0.8cqw] py-[0.25cqw] text-[1.05cqw] leading-none [&_svg]:h-[1cqw] [&_svg]:w-[1cqw]"
       : size === "print"
-        ? "mt-0.5 gap-1 rounded px-1.5 py-0.5 text-[8.5pt] [&_svg]:h-[8pt] [&_svg]:w-[8pt]"
-        : "mt-1 gap-1 rounded-md px-2 py-0.5 text-[11.5px] [&_svg]:h-3 [&_svg]:w-3";
+        ? "gap-1 rounded px-1.5 py-[1px] text-[8.5pt] leading-tight [&_svg]:h-[8pt] [&_svg]:w-[8pt]"
+        : "gap-1 rounded-md px-2 py-0.5 text-[11.5px] [&_svg]:h-3 [&_svg]:w-3";
   return (
     <a
       href={url}
@@ -24,7 +24,7 @@ export function NoteLink({ url, label, size = "sm", className }: { url: string |
       rel="noopener noreferrer nofollow"
       onClick={(e) => e.stopPropagation()}
       title={url}
-      className={cn("inline-flex max-w-full items-center whitespace-nowrap bg-brand-50 font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-100 hover:text-brand-800", sized, className)}
+      className={cn("inline-flex max-w-full items-center whitespace-nowrap align-middle bg-brand-50 font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-100 hover:text-brand-800", sized, className)}
     >
       <span className="font-medium text-brand-600/80">Link:</span>
       <span className="truncate">{text}</span>

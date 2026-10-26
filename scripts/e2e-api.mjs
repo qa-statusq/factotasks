@@ -381,7 +381,13 @@ check(r.status === 200 && r.data?.note?.task === null && (!linksLive || (r.data?
 const linkedNoteId = r.data?.note?.id;
 r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "bad link", link_url: "javascript:alert(1)" });
 check(r.status === 400, "a note link must be http(s) → 400", r);
+r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "   " });
+check(r.status === 400, "an empty note with no link → 400", r);
 if (linksLive) {
+  r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "", link_url: "https://example.com/only-a-link", link_label: "Spec" });
+  check(r.status === 200 && r.data?.note?.body === "" && r.data.note.link_url === "https://example.com/only-a-link", "a note can be just a link", r);
+  r = await admin.call("PATCH", `/api/meeting-notes/${r.data?.note?.id}`, { link_url: "" });
+  check(r.status === 400, "a link-only note cannot lose its link → 400", r);
   r = await admin.call("PATCH", `/api/meeting-notes/${linkedNoteId}`, { link_url: "" });
   check(r.status === 200, "clearing a note link", r);
   r = await admin.call("GET", `/api/meetings/${meetingId}`);
@@ -400,7 +406,7 @@ check(r.status === 200, "admin can still amend minutes after closing", r);
 r = await member.call("DELETE", `/api/meeting-notes/${noteId}`);
 check(r.status === 403, "member cannot delete a note → 403", r);
 r = await admin.call("GET", `/api/meetings/${meetingId}`);
-check(r.status === 200 && r.data?.meeting?.status === "finalized" && r.data.notes.length === 3, "finalised pack still renders with 3 notes", r);
+check(r.status === 200 && r.data?.meeting?.status === "finalized" && r.data.notes.length === (linksLive ? 4 : 3), "finalised pack still renders with every note", r);
 
 // ---------- reports ----------
 console.log("\nReports");
