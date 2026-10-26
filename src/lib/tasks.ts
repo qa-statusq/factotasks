@@ -11,14 +11,11 @@ import type { TaskCard } from "./types";
 export interface TaskPatch {
   title?: string;
   description?: string | null;
-  app_id?: string | null;
-  platform?: string | null;
   type?: string;
   priority?: string;
   due_date?: string | null;
   labels?: string[];
   estimate_hours?: number | null;
-  release_id?: string | null;
   /** Meeting series the task is attached to (null = none). */
   series_id?: string | null;
   /** Where it ships. "both" expands to the platforms the app has (validateTaskRefs). */
@@ -40,14 +37,6 @@ export function taskPatch(
     patch.title = title;
   }
   if (has("description")) patch.description = cleanText(b.description, LIMITS.description) || null;
-  if (has("app_id")) {
-    if (b.app_id != null && b.app_id !== "" && !isUuid(b.app_id)) return { error: "Invalid app" };
-    patch.app_id = b.app_id ? String(b.app_id).toLowerCase() : null;
-  }
-  if (has("platform")) {
-    if (b.platform != null && b.platform !== "" && !oneOf(b.platform, ["android", "ios", "both"] as const)) return { error: "Invalid platform" };
-    patch.platform = b.platform ? String(b.platform) : null;
-  }
   if (has("type") && (partial || b.type !== undefined)) {
     const t = oneOf(b.type, TASK_TYPES);
     if (!t) return { error: "Pick a valid type" };
@@ -73,10 +62,6 @@ export function taskPatch(
     if (b.series_id != null && b.series_id !== "" && !isUuid(b.series_id)) return { error: "Invalid meeting series" };
     patch.series_id = b.series_id ? String(b.series_id).toLowerCase() : null;
   }
-  if (has("release_id")) {
-    if (b.release_id != null && b.release_id !== "" && !isUuid(b.release_id)) return { error: "Invalid release" };
-    patch.release_id = b.release_id ? String(b.release_id).toLowerCase() : null;
-  }
   let assignees: string[] | undefined;
   if (has("assignee_ids")) {
     const ids = parseUuidList(b.assignee_ids ?? [], LIMITS.assigneesPerTask);
@@ -99,14 +84,7 @@ export function taskPatch(
       }
     }
     patch.targets = out;
-  } else if (has("app_id")) {
-    // Older callers send app_id (+ platform); treat that as one target.
-    patch.targets = patch.app_id ? [{ app_id: patch.app_id, platform: (patch.platform as "android" | "ios" | "both" | null) || "both" }] : [];
   }
-  // app_id / platform / release_id are derived from targets by syncTargets.
-  delete patch.app_id;
-  delete patch.platform;
-  delete patch.release_id;
   return { patch, assignees };
 }
 

@@ -18,8 +18,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!isUuid(id)) return fail("Recording not found", 404);
   const rec = await loadRecording(id);
   if (!rec || !(await canAccessSeries(u, rec.meeting?.series?.id))) return fail("Recording not found", 404);
-  const shares = canManage(u, rec) ? await loadShares(id) : [];
-  return memberJson(u, { recording: { ...publicRecording(rec), shares }, can_manage: canManage(u, rec) });
+  const shares = canManage(u) ? await loadShares(id) : [];
+  return memberJson(u, { recording: { ...publicRecording(rec), shares }, can_manage: canManage(u) });
 }
 
 /** Rename: { name } (the Drive file follows). Admins or the recorder. */
@@ -30,7 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!isUuid(id)) return fail("Recording not found", 404);
   const rec = await loadRecording(id);
   if (!rec) return fail("Recording not found", 404);
-  if (!canManage(u, rec)) return fail("Only an admin or the person who recorded can rename it", 403);
+  if (!canManage(u)) return fail("Only an admin or the person who recorded can rename it", 403);
   const b = await readJsonObject(req);
   const base = cleanLine(b.name, 120).replace(/\.(webm|weba|mp4|m4a|mkv|ogg)$/i, "");
   if (!base) return fail("Give the recording a name");
@@ -57,7 +57,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const rec = await loadRecording(id);
   if (!rec) return fail("Recording not found", 404);
   // An admin deletes any recording; the person recording may discard their own one while it is still open.
-  if (!canManage(u, rec) && !(rec.status !== "ready" && canUpload(u, rec))) return fail("Only an admin can delete a recording", 403);
+  if (!canManage(u) && !(rec.status !== "ready" && canUpload(u, rec))) return fail("Only an admin can delete a recording", 403);
   if (rec.drive_file_id) {
     try {
       // Shares first: a binned file stays readable to anyone still holding a permission on it.

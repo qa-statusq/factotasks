@@ -11,12 +11,10 @@ import { notifyUsers } from "@/lib/notify";
 import { displayName } from "@/lib/name";
 import { rateLimited } from "@/lib/rate-limit";
 import { USER_BRIEF_COLS, embedded, embeddedUser } from "@/lib/users";
-import { hasNoteLinks } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
-const NOTE_COLS = `id, task_id, kind, body, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), about:users!meeting_notes_user_id_fkey(${USER_BRIEF_COLS}), task:tasks(id, number, title, status)` as const;
-const NOTE_COLS_WITH_LINKS = `id, task_id, kind, body, link_url, link_label, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), about:users!meeting_notes_user_id_fkey(${USER_BRIEF_COLS}), task:tasks(id, number, title, status)` as const;
+const NOTE_COLS = `id, task_id, kind, body, link_url, link_label, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), about:users!meeting_notes_user_id_fkey(${USER_BRIEF_COLS}), task:tasks(id, number, title, status)` as const;
 
 /** { link_url?, link_label? } → stored pair. An empty url clears both; a label needs a url. */
 export function parseLink(b: Record<string, unknown>): { url: string | null; label: string | null } | { error: string } {
@@ -28,12 +26,10 @@ export function parseLink(b: Record<string, unknown>): { url: string | null; lab
   return { url, label };
 }
 
-/** Add a minute line: { body, kind?, task_id?, user_id? }. Anyone signed in;
- * closed meetings are read-only. */
+/** Add a minute line: { body, kind?, task_id?, user_id?, link_url?, link_label? } — admins. */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
-  if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   const { id } = await params;
   if (!isUuid(id)) return fail("Meeting not found", 404);
@@ -41,7 +37,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (limited) return limited;
   const m = await loadMeeting(id);
   if (!m) return fail("Meeting not found", 404);
-  if (m.status === "finalized" && u.role !== "admin") return fail("This meeting is closed — only an admin can add notes", 403);
 
   const b = await readJsonObject(req);
   const body = cleanText(b.body, LIMITS.note);
@@ -55,13 +50,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const link = parseLink(b);
   if ("error" in link) return fail(link.error);
   if (!body && !link.url) return fail("Write the note or add a link");
-  const links = await hasNoteLinks();
-  if (link.url && !links) return fail("Links on notes need database migration 018 — ask an admin to run it");
 
   const { data, error } = await getSupabase()
     .from("meeting_notes")
-    .insert({ meeting_id: id, task_id: taskId, user_id: aboutId, kind, body, ...(links ? { link_url: link.url, link_label: link.label } : {}), created_by: u.uid })
-    .select((links ? NOTE_COLS_WITH_LINKS : NOTE_COLS) as typeof NOTE_COLS_WITH_LINKS)
+    .insert({ meeting_id: id, task_id: taskId, user_id: aboutId, kind, body, link_url: link.url, link_label: link.label, created_by: u.uid })
+    .select(NOTE_COLS)
     .single();
 
   if (error) return serverError(error);

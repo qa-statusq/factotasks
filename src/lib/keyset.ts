@@ -48,8 +48,3 @@ const qv = (v: string | number) => `"${String(v).replace(/[\\"]/g, "")}"`;
 export function tsIdKeysetDesc(col: string, c: { c: string; i: string }): string {
   return `${col}.lt.${qv(c.c)},and(${col}.eq.${qv(c.c)},id.lt.${qv(c.i)})`;
 }
-
-/** Keyset predicate for ORDER BY (number desc) — tasks have a unique integer. */
-export function numberKeysetDesc(n: number): string {
-  return `number.lt.${n}`;
-}

@@ -18,7 +18,7 @@ import type { TaskCard } from "@/lib/types";
  * same control — a move that needs approval shows as "→ Done (pending)".
  * Portaled so it never gets clipped inside a scrolling list.
  */
-export function StatusMenu({ task, size = "sm", className, canChange = true, needsApproval: _legacyNeedsApproval }: { task: TaskCard; size?: "sm" | "md"; className?: string; canChange?: boolean; needsApproval?: boolean }) {
+export function StatusMenu({ task, size = "sm", className, canChange = true }: { task: TaskCard; size?: "sm" | "md"; className?: string; canChange?: boolean }) {
   const mode = usePolicyMode();
   const { toast } = useToast();
   const { isAdmin } = useSession();

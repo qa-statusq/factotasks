@@ -3,7 +3,7 @@ import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { serverError, memberJson } from "@/lib/api";
 import { driveConfigured } from "@/lib/google-drive";
-import { RECORDING_SELECT, shapeRecording, publicRecording, missingTable } from "@/lib/recordings";
+import { RECORDING_SELECT, shapeRecording, publicRecording } from "@/lib/recordings";
 import { expireStaleUploads } from "@/lib/recording-uploads";
 import { memberSeriesIds } from "@/lib/series-access";
 
@@ -24,7 +24,6 @@ export async function GET(_req: NextRequest) {
     });
     return memberJson(u, { recordings: rows.map((r) => publicRecording(shapeRecording(r))), enabled: driveConfigured() });
   }
-  if (missingTable(error)) return NextResponse.json({ recordings: [], enabled: false, migration: "019" });
   if (error) return serverError(error);
   return NextResponse.json({ recordings: ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => publicRecording(shapeRecording(r))), enabled: driveConfigured() });
 }

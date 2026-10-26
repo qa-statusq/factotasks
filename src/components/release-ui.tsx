@@ -29,7 +29,7 @@ import { RelTime } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { LIMITS, RELEASE_STATUSES, RELEASE_STATUS_META, PLATFORM_META, taskRef, type ReleaseStatus } from "@/lib/domain";
 import { IconRocket, IconEdit, IconTrash, IconPlus, IconCheck, IconUserCheck, IconChevronDown } from "@/components/ui/icons";
-import type { AppOverview, Release, ReleaseTaskLite, TaskCard, TaskTarget } from "@/lib/types";
+import type { AppOverview, Release, TaskCard, TaskTarget } from "@/lib/types";
 
 const STATUS_OPTIONS = RELEASE_STATUSES.map((s) => ({ value: s, label: RELEASE_STATUS_META[s].label }));
 
@@ -534,22 +534,6 @@ export function ReleaseViewSheet({ release, apps, onClose }: { release: Release;
       </Sheet>
       {editing && <ReleaseFormSheet release={r} apps={apps} onClose={() => setEditing(false)} />}
     </>
-  );
-}
-
-/** Compact list of a version's tasks for meetings and minutes. */
-export function ReleaseTaskSummary({ tasks, className }: { tasks: ReleaseTaskLite[] | TaskCard[] | undefined; className?: string }) {
-  if (!tasks?.length) return null;
-  return (
-    <ul className={cn("flex flex-col gap-0.5", className)}>
-      {tasks.map((t) => (
-        <li key={t.id} className="flex items-baseline gap-1.5 text-[12.5px]">
-          <span className="shrink-0 tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
-          <span className="min-w-0 break-words text-ink">{t.title}</span>
-          <StatusBadge status={t.status} className="ml-auto shrink-0" />
-        </li>
-      ))}
-    </ul>
   );
 }
 

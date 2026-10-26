@@ -39,7 +39,6 @@
      v3, so shadow-xs keeps meaning this exact value panel-wide. */
   --shadow-xs: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
   --shadow-card: 0 1px 2px 0 rgba(16, 24, 40, 0.04);
-  --shadow-card-hover: 0 4px 14px -6px rgba(16, 24, 40, 0.12);
   --shadow-pop: 0 28px 64px -20px rgba(16, 24, 40, 0.25), 0 10px 24px -10px rgba(16, 24, 40, 0.1);
 
   --radius-lg: 0.75rem;  /* 2.0: softer geometry panel-wide (was .625) */
@@ -47,7 +46,6 @@
   --radius-2xl: 1.25rem; /* (was 1.125) */
 
   --animate-fade-in: fade-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-  --animate-pop-in: pop-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
   --animate-scale-in: scale-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   --animate-slide-up: slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   --animate-toast-out: toast-out 0.22s ease-in forwards;
@@ -58,12 +56,7 @@
   --animate-slide-in-right: slide-in-right 0.26s cubic-bezier(0.22, 1, 0.36, 1);
   --animate-offline-marquee: offline-marquee 16s linear infinite;
   --animate-nav-progress: nav-progress 1s ease-in-out infinite;
-  --animate-card-in: card-in 2s ease-out;
 
-  @keyframes pop-in {
-    0% { opacity: 0; transform: scale(0.96); }
-    100% { opacity: 1; transform: scale(1); }
-  }
   @keyframes fade-in {
     0% { opacity: 0; transform: translateY(4px); }
     100% { opacity: 1; transform: translateY(0); }
@@ -122,15 +115,6 @@
   @keyframes nav-progress {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(300%); }
-  }
-  /* A freshly-arrived card: NO movement at all (any translate made the
-     list feel like it jerked) — just a gentle fade-in plus a soft teal outline
-     glow + faint tint that quietly dissolve to the resting style. */
-  @keyframes card-in {
-    0% { opacity: 0; background-color: #eef2ff; outline-color: rgba(79, 70, 229, 0.35); }
-    22% { opacity: 1; }
-    55% { background-color: #eef2ff; outline-color: rgba(79, 70, 229, 0.25); }
-    100% { background-color: #ffffff; outline-color: rgba(79, 70, 229, 0); }
   }
 }
 
@@ -363,61 +347,9 @@ body {
    behavior differed device-to-device. Functional motion — spinners, 150ms
    one-shot entrances, transitions — now runs identically everywhere. */
 @media (prefers-reduced-motion: reduce) {
-  .ai-shimmer-text {
-    animation: none !important;
-  }
   html {
     scroll-behavior: auto !important;
   }
-}
-
-/* Marquee for a placeholder too long for its input: the text (rendered twice,
-   back to back) holds at the sentence start for a beat, glides right-to-left
-   by exactly one copy's width (-50%), and the loop restart lands pixel-perfect
-   on the second copy — so it reads as: pause at the start, scroll through,
-   start again. Applied only when the text actually overflows. */
-@keyframes ph-marquee {
-  0%,
-  18% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
-}
-.ph-marquee {
-  /* Finite, not infinite: the marquee lives inside an always-visible sticky
-     toolbar, so an infinite loop kept the compositor busy for the whole
-     session. Three passes communicate the full placeholder, then it rests. */
-  animation: ph-marquee 9s linear 3;
-}
-
-/* AI shimmer text (the "AI reasoning" label): at rest it reads as normal
-   solid brand text; every ~6s ONE light glint sweeps through the letters,
-   then it rests — the Apple Intelligence / Gemini loading-text look. The
-   glint sits outside the visible window at both loop ends, so the restart is
-   invisible. (The reduced-motion guard above disables it.) */
-@keyframes ai-shine-sweep {
-  0%,
-  62% {
-    background-position: 0% 0; /* resting — glint parked off-screen left */
-  }
-  88%,
-  100% {
-    background-position: 100% 0; /* swept through — parked off-screen right */
-  }
-}
-.ai-shimmer-text {
-  color: transparent;
-  background-image: linear-gradient(100deg, #4338ca 0%, #4338ca 40%, #818cf8 50%, #4338ca 60%, #4338ca 100%);
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  /* Finite (4 glints), not infinite: background-position is NOT a compositor
-     property, so every chip was an active main-thread animation for the whole
-     session — one per review card on screen. Each card still glints on
-     arrival (cv-cards start when first rendered), then rests as solid text. */
-  animation: ai-shine-sweep 6s ease-in-out 4;
 }
 
 /* Scrollable but no visible scrollbar (used by the sidebar nav). */

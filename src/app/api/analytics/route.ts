@@ -31,14 +31,7 @@ export async function GET(req: NextRequest) {
   if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > MAX_DAYS) from = shiftDays(to, -MAX_DAYS);
   // Members get their own apps' analytics; admins the whole team.
   const { data, error } = await getSupabase().rpc("analytics_pack", { p_from: from, p_to: to, ...(u.role === "admin" ? {} : { p_user: u.uid }) });
-  if (error) {
-    // PGRST202 = function missing or still the old signature: migration 014 hasn't been run.
-    // 424 (not 503) so the client cache treats it as final, not transient.
-    if ((error as { code?: string }).code === "PGRST202") {
-      return NextResponse.json({ error: "Analytics needs a database update — run supabase/migrations/014_app_order_analytics_range.sql in the Supabase SQL editor once." }, { status: 424 });
-    }
-    return serverError(error);
-  }
+  if (error) return serverError(error);
   // Per-person throughput is a lead's view; members see apps, periods and mixes only.
   if (u.role !== "admin" && data && typeof data === "object") delete (data as Record<string, unknown>).by_person;
   return memberJson(u, data);

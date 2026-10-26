@@ -6,7 +6,8 @@ import { logActivity } from "@/lib/activity";
 import { decodeCursor, encodeCursor, tsIdKeysetDesc } from "@/lib/keyset";
 import { isUuid, oneOf } from "@/lib/validate";
 import { OPEN_STATUSES, PRIORITIES, TASK_STATUSES, TASK_TYPES, taskRef } from "@/lib/domain";
-import { visibleAppIds, visibleTaskIds, hasTaskArrays, hasTaskSeries, NONE_ID } from "@/lib/visibility";
+import { visibleAppIds, NONE_ID } from "@/lib/visibility";
+import { istToday } from "@/lib/ist";
 import { canAccessMeeting, canAccessSeries } from "@/lib/series-access";
 import { rateLimited } from "@/lib/rate-limit";
 import { taskPatch, validateTaskRefs, syncTargets, linkTargetToRelease, loadCard } from "@/lib/tasks";
@@ -62,17 +63,11 @@ export async function GET(req: NextRequest) {
   let q = sb.from("tasks").select(SELECT);
 
   // ---- visibility (members: general tasks + tasks on their apps) ----
-  const arrays = await hasTaskArrays();
   if (u.role !== "admin") {
-    if (arrays) {
-      const apps = (await visibleAppIds(u)) ?? [];
-      // App tasks on their apps, plus general tasks they are assigned to or created.
-      const general = `and(app_ids.eq.{},or(assignee_ids.cs.{${u.uid}},created_by.eq.${u.uid}))`;
-      q = apps.length ? q.or(`app_ids.ov.{${apps.join(",")}},${general}`) : q.or(general);
-    } else {
-      const visible = (await visibleTaskIds(u)) ?? [];
-      q = q.in("id", visible.length ? visible : [NONE_ID]);
-    }
+    const apps = (await visibleAppIds(u)) ?? [];
+    // App tasks on their apps, plus general tasks they are assigned to or created.
+    const general = `and(app_ids.eq.{},or(assignee_ids.cs.{${u.uid}},created_by.eq.${u.uid}))`;
+    q = apps.length ? q.or(`app_ids.ov.{${apps.join(",")}},${general}`) : q.or(general);
   }
 
   // ---- status ----
@@ -88,16 +83,7 @@ export async function GET(req: NextRequest) {
 
   // ---- who / what ----
   if (assigneeId) q = q.eq("task_assignees.user_id", assigneeId);
-  if (assignee === "none") {
-    if (arrays) q = q.eq("assignee_ids", "{}");
-    else {
-      // Pre-009: no row in task_assignees. PostgREST can't express NOT EXISTS
-      // directly; the fallback is an id list.
-      const { data: assigned } = await sb.from("task_assignees").select("task_id");
-      const ids = Array.from(new Set((assigned || []).map((r) => r.task_id as string)));
-      if (ids.length) q = q.not("id", "in", `(${ids.join(",")})`);
-    }
-  }
+  if (assignee === "none") q = q.eq("assignee_ids", "{}");
   if (appParam === "general") q = q.is("app_id", null);
   else if (isUuid(appParam)) q = q.eq("task_targets.app_id", appParam!.toLowerCase());
   if (isUuid(releaseParam)) q = q.eq("task_targets.release_id", releaseParam!.toLowerCase());
@@ -113,7 +99,7 @@ export async function GET(req: NextRequest) {
     const pk = (pack ?? {}) as Record<string, { id: string }[] | undefined>;
     const ids = new Set<string>();
     for (const k of ["pending", "done", "approvals"]) for (const t of pk[k] ?? []) ids.add(t.id);
-    q = q.in("id", ids.size ? [...ids] : ["00000000-0000-0000-0000-000000000000"]);
+    q = q.in("id", ids.size ? [...ids] : [NONE_ID]);
   }
   const priority = oneOf(sp.get("priority"), PRIORITIES);
   if (priority) q = q.eq("priority", priority);
@@ -132,7 +118,7 @@ export async function GET(req: NextRequest) {
   if (kind === "app") q = q.not("app_id", "is", null);
   else if (kind === "general") q = q.is("app_id", null);
   const series = sp.get("series");
-  if (series && (await hasTaskSeries())) {
+  if (series) {
     if (series === "none") q = q.is("series_id", null);
     else if (series === "any") q = q.not("series_id", "is", null);
     else if (isUuid(series)) q = q.eq("series_id", series!.toLowerCase());
@@ -140,7 +126,7 @@ export async function GET(req: NextRequest) {
 
   // ---- due ----
   const due = sp.get("due");
-  const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10); // IST calendar day
+  const today = istToday();
   if (due === "overdue") q = q.lt("due_date", today);
   else if (due === "today") q = q.eq("due_date", today);
   else if (due === "week") q = q.gte("due_date", today).lt("due_date", new Date(Date.parse(today) + 7 * 86_400_000).toISOString().slice(0, 10));
@@ -210,10 +196,6 @@ export async function POST(req: NextRequest) {
 
   const sb = getSupabase();
   const { targets, ...cols } = v.patch;
-  if ("series_id" in cols && !(await hasTaskSeries())) {
-    if (cols.series_id) return fail("Attaching tasks to meetings needs the latest database update (migration 010)");
-    delete cols.series_id;
-  }
   const { data: row, error } = await sb
     .from("tasks")
     .insert({ ...cols, created_by: u.uid })

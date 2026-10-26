@@ -29,7 +29,6 @@ const mark = (bg = BRAND, fg = "#fff", pad = 0, tick = "#fff") => {
 };
 
 await mkdir("public/brand", { recursive: true });
-await writeFile("public/brand/icon.svg", mark());
 
 const png = (svg, size, out) =>
   sharp(svg, { density: 384 }).resize(size, size).png({ compressionLevel: 9 }).toFile(out);

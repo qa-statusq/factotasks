@@ -13,6 +13,7 @@ import { ListSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { AppTile } from "@/components/ui/task-chips";
 import { useToast } from "@/components/ui/toast";
+import { copyText } from "@/lib/compat";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch, mutate } from "@/lib/client-cache";
@@ -177,11 +178,7 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
     setBusy(false);
     if (ok) {
       reloadTeam();
-      try {
-        await navigator.clipboard?.writeText(password);
-      } catch {
-        /* clipboard may be unavailable */
-      }
+      await copyText(password);
       await confirm({ title: `${first} added`, message: `Temporary password: ${password}\n\nIt has been copied to your clipboard — share it with them; they'll set their own on first sign-in.`, confirmLabel: "Done", cancelLabel: null });
       onClose();
     } else setError(data?.error || "Couldn't add the teammate.");

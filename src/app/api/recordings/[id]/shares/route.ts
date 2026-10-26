@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!isUuid(id)) return fail("Recording not found", 404);
   const rec = await loadRecording(id);
   if (!rec) return fail("Recording not found", 404);
-  if (!canManage(u, rec)) return fail("Only an admin or the person who recorded can share it", 403);
+  if (!canManage(u)) return fail("Only an admin or the person who recorded can share it", 403);
   if (rec.status !== "ready" || !rec.drive_file_id) return fail("The recording hasn't finished uploading", 409);
   const limited = await rateLimited(u.uid, "share", 60, 3600);
   if (limited) return limited;
@@ -67,7 +67,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!isUuid(id) || !isUuid(shareId)) return fail("Share not found", 404);
   const rec = await loadRecording(id);
   if (!rec) return fail("Recording not found", 404);
-  if (!canManage(u, rec)) return fail("Only an admin or the person who recorded can change sharing", 403);
+  if (!canManage(u)) return fail("Only an admin or the person who recorded can change sharing", 403);
   const sb = getSupabase();
   const { data: s } = await sb.from("recording_shares").select("id, email, permission_id").eq("id", shareId).eq("recording_id", id).maybeSingle();
   if (!s) return fail("Share not found", 404);

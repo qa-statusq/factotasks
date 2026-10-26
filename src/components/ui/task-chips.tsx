@@ -183,19 +183,10 @@ export function LabelChip({ label, className, onRemove }: { label: string; class
  * Where a task ships: ONE chip per app — its tile, name and a glyph per
  * platform (ticked once that target is released) — "+N" past `max` apps.
  * `compact` drops the names when the task spans more than two apps (the
- * tooltip still carries them). Falls back to the legacy single app/platform
- * for cards without targets.
+ * tooltip still carries them). A task without targets is a general task.
  */
-export function TargetChips({ targets, app, platform, max = Infinity, compact, className }: { targets?: TaskTarget[]; app?: AppLite | null; platform?: Platform | null; max?: number; compact?: boolean; className?: string }) {
-  if (!targets?.length) {
-    if (!app) return <AppChip app={null} size="xs" className={className} />;
-    return (
-      <span className={cn("inline-flex items-center gap-1.5", className)}>
-        <AppChip app={app} size="xs" />
-        <PlatformBadge platform={platform} label={false} />
-      </span>
-    );
-  }
+export function TargetChips({ targets, max = Infinity, compact, className }: { targets?: TaskTarget[]; max?: number; compact?: boolean; className?: string }) {
+  if (!targets?.length) return <AppChip app={null} size="xs" className={className} />;
   const byApp = new Map<string, { app: AppLite; items: TaskTarget[] }>();
   for (const t of targets) {
     const g = byApp.get(t.app.id) ?? { app: t.app, items: [] };

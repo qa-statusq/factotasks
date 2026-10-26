@@ -112,7 +112,5 @@ export const isPackageId = (s: string) => PACKAGE_RE.test(s) && s.length <= 150;
 
 /** Supabase/Postgres: unique violation. */
 export const isUniqueViolation = (e: unknown) => (e as { code?: string } | null)?.code === "23505";
-/** Supabase/Postgres: a text that isn't a valid uuid reached a uuid column. */
-export const isBadUuid = (e: unknown) => (e as { code?: string } | null)?.code === "22P02";
 /** Our own plpgsql `raise ... errcode P0002` (no_data_found): row missing. */
 export const isNoData = (e: unknown) => (e as { code?: string } | null)?.code === "P0002";

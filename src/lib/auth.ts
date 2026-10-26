@@ -15,7 +15,7 @@ export interface SessionUser {
   email: string;
   tv: number; // token_version — must match the DB or the session is invalid
   mc: boolean; // must change password before using the app
-  /** DB-fresh display name (043) — never stored in the JWT, so a rename takes
+  /** DB-fresh display name — never stored in the JWT, so a rename takes
    * effect everywhere without re-login. Absent on decode-only sessions. */
   firstName?: string | null;
   lastName?: string | null;
@@ -161,10 +161,8 @@ export async function getAuthenticatedUser(): Promise<SessionUser | null> {
     try {
       const sb = getSupabase();
       // select("*") deliberately: the row is tiny, it stays server-side only
-      // (never returned raw), and it makes the read migration-proof — a column
-      // added by a later migration (e.g. 043 names) is picked up when present
-      // and simply absent before, with no 42703 failure path on the one query
-      // EVERY authenticated request depends on.
+      // (never returned raw), and a column added by a later migration is picked
+      // up without touching the one query EVERY authenticated request depends on.
       const { data, error } = await sb.from("users").select("*").eq("id", decoded.uid).maybeSingle();
       // A failed READ is not a failed AUTH. Returning null here (the old
       // behaviour) made a transient outage look exactly like a deleted user,

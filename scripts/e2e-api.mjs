@@ -2,10 +2,13 @@
 // Drives every flow the UI uses — as an admin AND as a member — and prints a
 // checklist. Leaves the sample data in place (so the UI can be eyeballed);
 // run with --cleanup to delete what it created (the admin is never touched).
-//   node --env-file=.env.local scripts/e2e-api.mjs http://localhost:3017 <admin-email> <admin-password> [--cleanup]
-const [base, adminEmail, adminPassword, ...flags] = process.argv.slice(2);
+//   node --env-file=.env.local scripts/e2e-api.mjs http://localhost:3000 <admin-email> <admin-password> [--cleanup]
+// (or set ADMIN_EMAIL / ADMIN_PASSWORD in the environment and run `npm run e2e`)
+const [base, emailArg, passwordArg, ...flags] = process.argv.slice(2);
+const adminEmail = emailArg || process.env.ADMIN_EMAIL;
+const adminPassword = passwordArg || process.env.ADMIN_PASSWORD;
 if (!base || !adminEmail || !adminPassword) {
-  console.error("Usage: node scripts/e2e-api.mjs <baseUrl> <admin-email> <admin-password> [--cleanup]");
+  console.error("Usage: node scripts/e2e-api.mjs <baseUrl> <admin-email> <admin-password> [--cleanup]  (or ADMIN_EMAIL/ADMIN_PASSWORD in env)");
   process.exit(1);
 }
 const cleanup = flags.includes("--cleanup");
@@ -135,9 +138,6 @@ r = await member.call("POST", "/api/tasks", { title: "", app_id: appId });
 check(r.status === 400, "empty title → 400", r);
 r = await member.call("POST", "/api/tasks", { title: "x", targets: [{ app_id: "00000000-0000-0000-0000-000000000000", platform: "android" }] });
 check(r.status === 400, "unknown app → 400", r);
-r = await admin.call("POST", "/api/tasks", { title: "Legacy caller", app_id: appId, platform: "ios" });
-check(r.status === 200 && r.data?.task?.targets?.length === 1 && r.data.task.targets[0].platform === "ios", "legacy app_id/platform body still creates one target", r);
-if (r.data?.task) created.tasks.push(r.data.task.id);
 
 // ---------- member visibility ----------
 console.log("\nVisibility");

@@ -9,7 +9,6 @@ import { DateRangeInput, type DateRange } from "@/components/ui/date-range";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { AppTile, GeneralTile, StatusBadge, PriorityBadge } from "@/components/ui/task-chips";
-import { useSession } from "@/components/providers/session-provider";
 import { addDays, istTodayYmd, prettyYmd } from "@/components/ui/date-input";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useNameList } from "@/lib/use-name-labels";
@@ -119,8 +118,6 @@ export default function AnalyticsPage() {
   const today = istTodayYmd();
   const range = useMemo<DateRange>(() => custom ?? (PRESETS.find((p) => p.id === preset) ?? PRESETS[5]).build(today), [preset, custom, today]);
   const { data, loading, error, refresh } = useCachedFetch<Pack>(`/api/analytics?from=${range.from}&to=${range.to}`);
-  const needsSchema = (error as { status?: number } | null)?.status === 424;
-  const { isAdmin } = useSession();
   const options = [...PRESETS.map((p) => ({ value: p.id, label: p.label })), { value: "custom", label: "Custom dates…" }];
 
   return (
@@ -151,11 +148,7 @@ export default function AnalyticsPage() {
       {loading ? (
         <PanelSkeleton />
       ) : error && !data ? (
-        needsSchema ? (
-          <EmptyState icon={<IconAnalytics size={20} />} title="One database update needed" description={isAdmin ? "Run supabase/migrations/014_app_order_analytics_range.sql once in the Supabase SQL editor, then reload this page." : "Ask an admin to apply the latest database update; analytics returns right after."} />
-        ) : (
-          <LoadError title="Couldn't load analytics" onRetry={refresh} />
-        )
+        <LoadError title="Couldn't load analytics" onRetry={refresh} />
       ) : data ? (
         <AnalyticsView data={data} />
       ) : null}

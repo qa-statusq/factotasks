@@ -25,7 +25,6 @@ export const STATUS_META: Record<TaskStatus, { label: string; tone: Tone; dot: s
 
 /** Statuses that count as "open" / pending work. */
 export const OPEN_STATUSES: readonly TaskStatus[] = ["todo", "in_progress", "in_review", "on_hold", "partial"];
-export const isOpenStatus = (s: string): boolean => (OPEN_STATUSES as readonly string[]).includes(s);
 export const isTaskStatus = (s: unknown): s is TaskStatus => typeof s === "string" && (TASK_STATUSES as readonly string[]).includes(s);
 
 /* ------------------------------ priority ------------------------------- */
@@ -132,8 +131,6 @@ export const RELEASE_STATUS_META: Record<ReleaseStatus, { label: string; tone: T
   rolled_back: { label: "Rolled back", tone: "danger" },
   cancelled: { label: "Cancelled", tone: "neutral" },
 };
-export const isReleaseStatus = (s: unknown): s is ReleaseStatus =>
-  typeof s === "string" && (RELEASE_STATUSES as readonly string[]).includes(s);
 
 /* ------------------------------- MOM notes ----------------------------- */
 

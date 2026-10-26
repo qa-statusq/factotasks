@@ -6,10 +6,9 @@ import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { taskRef } from "@/lib/domain";
 import { taskPatch, validateTaskRefs, syncTargets, loadOwnership, loadCard, involved } from "@/lib/tasks";
-import { canSeeTask, visibleAppIds, hasTaskSeries, hasNoteLinks } from "@/lib/visibility";
+import { canSeeTask, visibleAppIds } from "@/lib/visibility";
 import { trashFile } from "@/lib/google-drive";
 import { canApprove, canChangeStatus, canDeleteTask, canEditTask } from "@/lib/task-access";
-import { getSettings, needsApproval } from "@/lib/settings";
 import { notifyUsers } from "@/lib/notify";
 import { displayName } from "@/lib/name";
 import { USER_BRIEF_COLS, embedded, embeddedUser } from "@/lib/users";
@@ -19,8 +18,7 @@ import type { TaskCard, TaskDetail } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const NOTE_COLS = `id, kind, body, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), meeting:meetings(id, title, held_at, series_id)` as const;
-const NOTE_COLS_WITH_LINKS = `id, kind, body, link_url, link_label, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), meeting:meetings(id, title, held_at, series_id)` as const; // once 018 is applied
+const NOTE_COLS = `id, kind, body, link_url, link_label, created_at, author:users!meeting_notes_created_by_fkey(${USER_BRIEF_COLS}), meeting:meetings(id, title, held_at, series_id)` as const;
 
 /** Resolve a task id OR its human number (T-12 → /tasks/12) to the uuid. */
 async function resolveId(idOrNumber: string): Promise<string | null> {
@@ -47,15 +45,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const seriesIds = isAdmin ? null : await memberSeriesIds(u.uid);
   const meetingsVisible = isAdmin || (seriesIds?.length ?? 0) > 0;
   const inSeries = (sid: unknown) => isAdmin || (typeof sid === "string" && !!seriesIds?.includes(sid));
-  const links = meetingsVisible && (await hasNoteLinks()); // 018 columns, once applied
-  const [main, log, comments, attachments, notes, pins, settings, visible] = await Promise.all([
+  const [main, log, comments, attachments, notes, pins, visible] = await Promise.all([
     sb.from("tasks").select(`task_card, description, created_by, status, approver:users!tasks_approved_by_fkey(${USER_BRIEF_COLS})`).eq("id", id).maybeSingle(),
     sb.from("task_status_log").select(`id, kind, from_status, to_status, note, created_at, actor:users(${USER_BRIEF_COLS})`).eq("task_id", id).order("created_at", { ascending: false }).limit(200),
     sb.from("task_comments").select(`id, body, created_at, edited_at, author:users(${USER_BRIEF_COLS})`).eq("task_id", id).order("created_at", { ascending: true }).limit(500),
     sb.from("task_attachments").select(`id, file_name, mime, size_bytes, width, height, created_at, uploader:users(${USER_BRIEF_COLS})`).eq("task_id", id).order("created_at", { ascending: true }),
-    meetingsVisible ? sb.from("meeting_notes").select((links ? NOTE_COLS_WITH_LINKS : NOTE_COLS) as typeof NOTE_COLS_WITH_LINKS).eq("task_id", id).order("created_at", { ascending: false }).limit(100) : none,
+    meetingsVisible ? sb.from("meeting_notes").select(NOTE_COLS).eq("task_id", id).order("created_at", { ascending: false }).limit(100) : none,
     meetingsVisible ? sb.from("meeting_tasks").select("created_at, meeting:meetings(id, title, held_at, status, series_id, series:meeting_series(name, color))").eq("task_id", id).order("created_at", { ascending: false }).limit(50) : none,
-    getSettings(),
     canSeeTask(u, id),
   ]);
   if (main.error) return serverError(main.error);
@@ -114,8 +110,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       delete: canDeleteTask(u, ownership),
       status: canChangeStatus(u, ownership),
       approve: canApprove(u),
-      // Members: would a move to "done" wait for approval under the policy?
-      needs_approval: u.role !== "admin" && needsApproval(settings.approval_policy, "done"),
     },
   };
   return memberJson(u, { task: detail });
@@ -145,10 +139,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const sb = getSupabase();
   const { targets, ...cols } = v.patch;
-  if ("series_id" in cols && !(await hasTaskSeries())) {
-    if (cols.series_id) return fail("Attaching tasks to meetings needs the latest database update (migration 010)");
-    delete cols.series_id;
-  }
   if (Object.keys(cols).length) {
     const { error } = await sb.from("tasks").update(cols).eq("id", id);
     if (error) return serverError(error);
@@ -187,8 +177,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!canDeleteTask(u, own)) return fail("Only an admin can delete a task once work has started", 403);
   // Attachments in storage go first (the DB rows cascade with the task).
   const sb = getSupabase();
-  const filesRes = await sb.from("task_attachments").select("storage_path, drive_file_id").eq("task_id", id);
-  const { data: files } = filesRes.error ? await sb.from("task_attachments").select("storage_path").eq("task_id", id) : filesRes;
+  const { data: files, error: fErr } = await sb.from("task_attachments").select("storage_path, drive_file_id").eq("task_id", id);
+  if (fErr) return serverError(fErr);
   for (const f of (files ?? []) as { drive_file_id?: string | null }[]) if (f.drive_file_id) await trashFile(f.drive_file_id).catch(() => undefined);
   if (files?.length) {
     const { error: sErr } = await sb.storage.from("attachments").remove(files.map((f) => f.storage_path as string));

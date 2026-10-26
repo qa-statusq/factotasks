@@ -24,7 +24,6 @@ import { prettyDate } from "@/components/release-ui";
 import { tabMemSet } from "@/lib/compat";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
-import { useNeedsApproval } from "@/lib/use-policy";
 import { useCachedFetch, mutate } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText, type AgendaGroup } from "@/lib/meeting-agenda";
@@ -64,7 +63,6 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
   const { toast } = useToast();
   const { confirm } = useDialog();
   const { isAdmin } = useSession();
-  const needsApproval = useNeedsApproval();
   const m = pack.meeting;
   const { data: sd } = useCachedFetch<{ series: MeetingSeries[] }>("/api/meeting-series");
   // The pack carries the agenda; the meeting row (list endpoint) carries the closing rule.
@@ -183,7 +181,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
           {agenda.length === 0 ? (
             <EmptyState icon={<IconPresentation size={20} />} title="Nothing to discuss yet" description="Tasks created or completed and releases since the last meeting show up here, app by app." />
           ) : (
-            agenda.map((g) => <AppSection key={g.key} group={g} notes={notes} labels={labels} cacheKey={cacheKey} readOnly={readOnly} needsApproval={needsApproval} onNote={setNoteTask} meetingId={m.id} />)
+            agenda.map((g) => <AppSection key={g.key} group={g} notes={notes} labels={labels} cacheKey={cacheKey} readOnly={readOnly} onNote={setNoteTask} meetingId={m.id} />)
           )}
 
         </div>
@@ -266,7 +264,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "su
   );
 }
 
-function AppSection({ group: g, notes, labels, cacheKey, readOnly, needsApproval, onNote, meetingId }: { group: AgendaGroup; notes: Map<string, MeetingNote[]>; labels: Map<string, string>; cacheKey: string; readOnly: boolean; needsApproval: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
+function AppSection({ group: g, notes, labels, cacheKey, readOnly, onNote, meetingId }: { group: AgendaGroup; notes: Map<string, MeetingNote[]>; labels: Map<string, string>; cacheKey: string; readOnly: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
   const [showDone, setShowDone] = useState(g.done.length <= 5);
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-surface">
@@ -289,7 +287,7 @@ function AppSection({ group: g, notes, labels, cacheKey, readOnly, needsApproval
       {g.pending.length > 0 && (
         <ul className="divide-y divide-line/70">
           {g.pending.map((t) => (
-            <AgendaRow key={t.id} task={t} notes={notes.get(t.id) || []} labels={labels} cacheKey={cacheKey} readOnly={readOnly} needsApproval={needsApproval} onNote={onNote} meetingId={meetingId} />
+            <AgendaRow key={t.id} task={t} notes={notes.get(t.id) || []} labels={labels} cacheKey={cacheKey} readOnly={readOnly} onNote={onNote} meetingId={meetingId} />
           ))}
         </ul>
       )}
@@ -301,7 +299,7 @@ function AppSection({ group: g, notes, labels, cacheKey, readOnly, needsApproval
           {showDone && (
             <ul className="divide-y divide-line/70 border-t border-line/70">
               {g.done.map((t) => (
-                <AgendaRow key={t.id} task={t} notes={notes.get(t.id) || []} labels={labels} cacheKey={cacheKey} readOnly={readOnly} needsApproval={needsApproval} onNote={onNote} meetingId={meetingId} />
+                <AgendaRow key={t.id} task={t} notes={notes.get(t.id) || []} labels={labels} cacheKey={cacheKey} readOnly={readOnly} onNote={onNote} meetingId={meetingId} />
               ))}
             </ul>
           )}
@@ -401,7 +399,7 @@ function EditMeetingSheet({ title, finalized, autoClose, seriesName, seriesAutoC
   );
 }
 
-function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, needsApproval, onNote, meetingId }: { task: TaskCard; notes: MeetingNote[]; labels: Map<string, string>; cacheKey: string; readOnly: boolean; needsApproval: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
+function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, onNote, meetingId }: { task: TaskCard; notes: MeetingNote[]; labels: Map<string, string>; cacheKey: string; readOnly: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
   const { me, isAdmin } = useSession();
   const { toast } = useToast();
   const [gone, setGone] = useState(false);
@@ -460,7 +458,7 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, needsApproval, 
           )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <StatusMenu task={t} needsApproval={needsApproval} canChange={isAdmin || t.assignees.some((a) => a.id === me?.id)} className={PILL_WIDTH} />
+          <StatusMenu task={t} canChange={isAdmin || t.assignees.some((a) => a.id === me?.id)} className={PILL_WIDTH} />
           {!readOnly && (
             <button type="button" onClick={() => onNote(t)} className="text-[11.5px] font-medium text-brand-700 hover:text-brand-800">
               + Note

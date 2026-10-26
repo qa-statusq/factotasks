@@ -17,7 +17,7 @@ import { AppTile, PlatformGlyph, EagerIconsContext } from "@/components/ui/task-
 import { nameInitials } from "@/lib/name";
 import { ClampedText } from "@/components/ui/clamped-text";
 import { NoteLink } from "@/components/ui/note-link";
-import { useRecorder, recorderSupported } from "@/lib/use-recorder";
+import { useRecorder, screenRecordingSupported } from "@/lib/use-recorder";
 import { canRecordMeeting } from "@/components/recording-controls";
 import { fmtClock } from "@/lib/recordings";
 import { IconCircleDot } from "@/components/ui/icons";
@@ -317,7 +317,7 @@ function Deck() {
               {index + 1} / {total}
             </span>
             <span className="mx-[0.5cqw] h-[48%] w-px shrink-0 bg-white/15" aria-hidden />
-            {recorderSupported() &&
+            {screenRecordingSupported() &&
               (recording || canRecordMeeting(data.meeting)) &&
               (recording ? (
                 <button type="button" onClick={recorder.stop} className="flex h-[52%] shrink-0 items-center gap-[0.6cqw] rounded-full bg-rose-500/20 pl-[1cqw] pr-[0.5cqw] text-[1.25cqw] font-semibold tabular-nums text-rose-100 ring-1 ring-inset ring-rose-300/40 hover:bg-rose-500/30" aria-label="Stop recording" title="Stop recording">

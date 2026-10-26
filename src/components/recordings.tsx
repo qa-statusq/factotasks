@@ -264,7 +264,7 @@ function ShareSheet({ r, cacheKey, onClose }: { r: Recording; cacheKey: string; 
 /** Sidebar card on the meeting page: this meeting's recordings. */
 export function MeetingRecordingsCard({ meetingId }: { meetingId: string }) {
   const key = `/api/meetings/${meetingId}/recordings`;
-  const { data } = useCachedFetch<{ recordings: Recording[]; enabled: boolean; migration?: string }>(key);
+  const { data } = useCachedFetch<{ recordings: Recording[]; enabled: boolean }>(key);
   const list = data?.recordings ?? [];
   return (
     <section id="recordings" className="rounded-xl border border-line bg-surface p-4 scroll-mt-20">
@@ -273,7 +273,7 @@ export function MeetingRecordingsCard({ meetingId }: { meetingId: string }) {
         {list.length > 0 && <span className="rounded-full bg-canvas px-1.5 text-[11px] font-medium tabular-nums text-ink-muted">{list.length}</span>}
         <Link href="/recordings" className="ml-auto text-[11.5px] font-medium text-ink-subtle hover:text-ink">All recordings</Link>
       </h2>
-      <RecordingList recordings={list} cacheKey={key} emptyText={data?.migration ? `Database migration ${data.migration} hasn't been run yet.` : data && !data.enabled ? "Recording isn't set up on this server yet." : "None yet. Use Record meeting above, or the record button while presenting."} />
+      <RecordingList recordings={list} cacheKey={key} emptyText={data && !data.enabled ? "Recording isn't set up on this server yet." : "None yet. Use Record meeting above, or the record button while presenting."} />
     </section>
   );
 }

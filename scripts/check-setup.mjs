@@ -24,7 +24,7 @@ console.log("\n— Supabase tables —");
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
-for (const t of ["users", "apps", "app_members", "releases", "tasks", "task_targets", "task_assignees", "task_status_log", "task_comments", "task_attachments", "meetings", "meeting_series", "meeting_tasks", "meeting_notes", "notifications", "push_subscriptions", "activity_log", "auth_throttle", "app_settings"]) {
+for (const t of ["users", "apps", "app_members", "releases", "tasks", "task_targets", "task_assignees", "task_status_log", "task_comments", "task_attachments", "meetings", "meeting_series", "meeting_series_members", "meeting_tasks", "meeting_notes", "meeting_recordings", "recording_shares", "notifications", "push_subscriptions", "activity_log", "auth_throttle", "app_settings"]) {
   const { error, count } = await sb.from(t).select("*", { count: "exact", head: true });
   if (error) {
     good = false;
@@ -38,7 +38,8 @@ for (const [fn, args] of [
   ["apps_overview", {}],
   ["team_overview", {}],
   ["report_pack", { p_from: "2026-01-01", p_to: "2026-01-07" }],
-  ["analytics_pack", { p_months: 3, p_user: null }],
+  ["analytics_pack", { p_from: "2026-01-01", p_to: "2026-01-07", p_user: null }],
+  ["meeting_pack", { p_meeting: "00000000-0000-0000-0000-000000000000" }],
   ["visible_app_ids", { p_user: "00000000-0000-0000-0000-000000000000" }],
   ["task_visible", { p_task: "00000000-0000-0000-0000-000000000000", p_user: "00000000-0000-0000-0000-000000000000" }],
   ["throttle_hit", { p_key: "rl:check:setup:0" }],

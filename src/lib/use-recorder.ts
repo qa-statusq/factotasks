@@ -62,9 +62,6 @@ export function screenRecordingSupported(): boolean {
 export function audioRecordingSupported(): boolean {
   return typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined";
 }
-/** @deprecated use screenRecordingSupported */
-export const recorderSupported = screenRecordingSupported;
-
 interface RecorderApi {
   state: RecorderState;
   start: (meetingId: string, title: string, mode?: RecordMode) => Promise<void>;

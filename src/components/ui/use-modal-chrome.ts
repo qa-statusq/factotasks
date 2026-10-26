@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useSyncExternalStore } from "react";
-import { tabMemGet, tabMemSet, tabMemRemove } from "@/lib/compat";
+import { useEffect, useId, useRef } from "react";
 import { useLatest } from "@/lib/use-latest";
 
 const FOCUSABLE =
@@ -83,10 +82,6 @@ export function pushModal(entry: ModalEntry): () => void {
     }
   };
 }
-export function isTopModal(id: string): boolean {
-  return modalStack[modalStack.length - 1]?.id === id;
-}
-
 /** Set right before a `router.push` that CLOSES a sheet ("Create & open",
  * "New meeting"): the sheet's history entry is then stripped in place instead
  * of popped, so the pop can't race the navigation and cancel it. */
@@ -226,155 +221,6 @@ export function useModalChrome(onClose: () => void, panelRef?: React.RefObject<H
     // useLatest), so listing them keeps this effect running exactly once per
     // modal lifetime — which is the whole reason onClose lives in a ref.
   }, [panelRef, onCloseRef]);
-}
-
-/** Fired after this module mutates the URL via pushState/replaceState, so every
- * useDialogParam subscriber re-reads the location in the same tab. popstate
- * covers browser Back/Forward; this covers our own programmatic changes. */
-const URL_CHANGE_EVT = "facto:urlchange";
-
-/**
- * HOW the current dialog param entered the URL: a fresh forward open() in this
- * tab, vs a history traversal (Back/Forward popstate) or an initial page load.
- * Dialog position memory (dialogUiMemory) must be consumed ONLY on traversals —
- * the standard restoration contract: Back/Forward/reload return the user where
- * they were; a NEW open always starts clean. Clearing on the CLOSE side cannot
- * enforce this: the browser Back button closes dialogs without running any
- * close handler, and a navigate-away that never comes Back leaves the memory
- * behind to resurrect much later (both shipped as bugs).
- */
-let freshDialogOpen = false;
-if (typeof window !== "undefined") {
-  // Any traversal invalidates "fresh open" — including the back() that our own
-  // close() issues.
-  window.addEventListener("popstate", () => {
-    freshDialogOpen = false;
-  });
-}
-/** True when the dialog mounting right now was opened by open() in this tab —
- * i.e. NOT resurrected by Back/Forward/reload. Call at dialog mount to decide
- * whether saved section/scroll memory may be restored (no) or must be
- * discarded (yes). CONSUMES the flag: a fresh-open answer is valid for exactly
- * one mount, so a hypothetical later remount-while-open can't wrongly discard
- * the memory again (StrictMode's double run is safe — the second call takes
- * the restore branch against just-cleared memory, same clean outcome). */
-export function isFreshDialogOpen(): boolean {
-  const fresh = freshDialogOpen;
-  freshDialogOpen = false;
-  return fresh;
-}
-
-/** Subscribe to every URL change this app can make: browser Back/Forward
- * (popstate) and our own pushState/replaceState (URL_CHANGE_EVT). Exported so a
- * component can read window.location through useSyncExternalStore instead of
- * poking at it inside an effect. */
-export function subscribeUrl(cb: () => void) {
-  window.addEventListener("popstate", cb);
-  window.addEventListener(URL_CHANGE_EVT, cb);
-  return () => {
-    window.removeEventListener("popstate", cb);
-    window.removeEventListener(URL_CHANGE_EVT, cb);
-  };
-}
-
-/**
- * Sync a dialog's open state with a URL query param so the browser's Back
- * button behaves the way users expect:
- *   - opening the dialog pushes `?<param>=<value>` as a history entry, so
- *     pressing Back with the dialog open simply closes it;
- *   - navigating away from inside the dialog (e.g. clicking a review) and
- *     pressing Back returns to the URL WITH the param — the dialog reopens
- *     exactly where it was (pair with per-dialog scroll restore);
- *   - closing via ✕/backdrop/Escape pops the entry the open pushed; a fresh
- *     tab landing directly on the param URL strips it in place instead, so
- *     Back can never throw the user off the site.
- *
- * The param is read STRAIGHT from window.location through a
- * useSyncExternalStore subscription (popstate + our own change event) — never
- * through Next's useSearchParams. Next does not reliably re-render on native
- * history.pushState in production, which left the URL changed but the dialog
- * closed (and un-closable after a refresh). The server snapshot is null, so
- * SSR/hydration match and a ?param URL opens the dialog right after mount.
- * Returns [value, open, close]; `value` is null while the dialog is closed.
- */
-export function useDialogParam(param: string) {
-  // Did THIS page visit push the history entry? Refreshing keeps history.state
-  // (browsers persist it), so the `dlg` marker also survives reloads — between
-  // the two, close() knows when Back is safe vs. when to strip in place.
-  const pushedRef = useRef(false);
-  // history.back() is ASYNC — until the traversal lands, the URL still holds
-  // the param, so a second close() (Escape key auto-repeat, a fast ✕
-  // double-click) passed every guard and queued a SECOND back(), popping the
-  // page entry underneath and throwing the user off the screen. This latch
-  // makes close() a no-op while a pop is in flight; it re-arms when the URL
-  // actually changes.
-  const closingRef = useRef(false);
-  const value = useSyncExternalStore(
-    subscribeUrl,
-    () => new URLSearchParams(window.location.search).get(param),
-    () => null
-  );
-  useEffect(() => {
-    closingRef.current = false; // URL settled (param changed/cleared) — re-arm
-  }, [value]);
-  const open = useCallback(
-    (v: string = "1") => {
-      const url = new URL(window.location.href);
-      if (url.searchParams.get(param) === v) return;
-      url.searchParams.set(param, v);
-      window.history.pushState({ ...window.history.state, dlg: param }, "", url);
-      pushedRef.current = true;
-      freshDialogOpen = true; // a NEW open — saved dialog memory must not restore
-      window.dispatchEvent(new Event(URL_CHANGE_EVT));
-    },
-    [param]
-  );
-  const close = useCallback(() => {
-    if (closingRef.current) return; // a back() is already in flight
-    const url = new URL(window.location.href);
-    if (!url.searchParams.get(param)) return;
-    if (pushedRef.current || window.history.state?.dlg === param) {
-      // We're on the entry the open pushed — pop it (popstate re-renders).
-      pushedRef.current = false;
-      closingRef.current = true;
-      window.history.back();
-    } else {
-      // Shared link / fresh tab: no known previous entry — strip in place.
-      url.searchParams.delete(param);
-      window.history.replaceState(window.history.state, "", url);
-      window.dispatchEvent(new Event(URL_CHANGE_EVT));
-    }
-  }, [param]);
-  return [value, open, close] as const;
-}
-
-/**
- * Remember a dialog's internal position (open accordion section + scrollTop)
- * across a navigate-away-and-Back round trip, in tab memory (module Map with
- * a sessionStorage mirror — see lib/compat.ts: raw sessionStorage throws on
- * machines whose Chrome blocks site data, which silently killed dialog
- * position memory there). `save` is cheap enough to call from onScroll.
- * Consumption is gated by isFreshDialogOpen(): only a history traversal
- * (Back/Forward/reload) may restore; a fresh open() clears instead — never
- * clear in close handlers (the browser Back button closes dialogs without
- * running them).
- */
-export function dialogUiMemory(key: string) {
-  return {
-    read(): { openKey?: string | null; top?: number } | null {
-      try {
-        return JSON.parse(tabMemGet(key) || "null");
-      } catch {
-        return null; // corrupt mirror — treat as no memory
-      }
-    },
-    save(openKey: string | null, top: number) {
-      tabMemSet(key, JSON.stringify({ openKey, top }));
-    },
-    clear() {
-      tabMemRemove(key);
-    },
-  };
 }
 
 /**

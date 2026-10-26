@@ -143,7 +143,7 @@ export interface TaskDetail extends TaskCard {
   /** Meetings this task is pinned to, newest first. */
   meetings: TaskMeetingLink[];
   /** What THIS caller may do (computed server-side from the real rules). */
-  can: { edit: boolean; delete: boolean; status: boolean; approve: boolean; needs_approval: boolean };
+  can: { edit: boolean; delete: boolean; status: boolean; approve: boolean };
 }
 
 export interface AppOverview {

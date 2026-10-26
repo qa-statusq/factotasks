@@ -30,12 +30,9 @@ export async function postJson<T = { error?: string } & Record<string, unknown>>
   url: string,
   body?: unknown,
   method: "POST" | "PATCH" | "PUT" | "DELETE" = "POST",
-  // Per-call ceiling. It MUST exceed the target route's own budget: the AI
-  // routes declare maxDuration 30/60 and deliberately spend it (sleeping out a
-  // provider's 429 cooldown inside their deadlineAt), so the old fixed 20s cap
-  // sat BELOW the server's designed window — every slow-but-successful
-  // generation was completed, paid for, then thrown away by the client and
-  // mislabelled "Network error — check your connection".
+  // Per-call ceiling. It must exceed the slowest route's own budget (uploads
+  // and the daily job declare maxDuration 60), or a slow-but-successful save
+  // would be completed server-side and then reported as a network error.
   timeoutMs = 20_000
 ): Promise<JsonResult<T>> {
   // NEVER throws. A network failure/timeout resolves to { ok:false, status:0 }

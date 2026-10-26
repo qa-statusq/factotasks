@@ -108,13 +108,6 @@ export function deckRows(g: AgendaGroup): TaskCard[] {
   return [...g.pending, ...g.done].sort((a, b) => pos(a.status) - pos(b.status) || (b.created_at || "").localeCompare(a.created_at || ""));
 }
 
-/** The apps a task targets other than `exceptId` — shown as small tiles when a task spans apps. */
-export function otherApps(t: TaskCard, exceptId: string): AppLike[] {
-  const seen = new Map<string, AppLike>();
-  for (const x of t.targets ?? []) if (x.app.id !== exceptId) seen.set(x.app.id, x.app);
-  return [...seen.values()];
-}
-
 /** A task's targets grouped per app, Android before iOS — the release matrix of the deck. */
 export function targetMatrix(t: TaskCard): { app: AppLike; items: TaskCard["targets"] }[] {
   const m = new Map<string, { app: AppLike; items: TaskCard["targets"] }>();
@@ -125,14 +118,6 @@ export function targetMatrix(t: TaskCard): { app: AppLike; items: TaskCard["targ
   }
   for (const g of m.values()) g.items.sort((a, b) => (a.platform === b.platform ? 0 : a.platform === "android" ? -1 : 1));
   return [...m.values()];
-}
-
-/** The platforms a task ships on for ONE app (both when it targets both). */
-export function platformsOn(t: TaskCard, appId: string): ("android" | "ios")[] {
-  const out = new Set<"android" | "ios">();
-  for (const x of t.targets ?? []) if (x.app.id === appId) out.add(x.platform);
-  if (!out.size && t.platform) (t.platform === "both" ? ["android", "ios"] : [t.platform]).forEach((p) => out.add(p as "android" | "ios"));
-  return [...out].sort((a, b) => (a === b ? 0 : a === "android" ? -1 : 1));
 }
 
 type Person = Pick<UserBrief, "id" | "name"> & { first_name?: string | null; last_name?: string | null };

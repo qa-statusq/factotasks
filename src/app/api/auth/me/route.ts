@@ -5,7 +5,7 @@ import { passwordChangeRequired, resolveUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity";
 import { rateLimited } from "@/lib/rate-limit";
-import { serverError, readJsonObject, EXPECTED_EMBED_MISS } from "@/lib/api";
+import { serverError, readJsonObject } from "@/lib/api";
 import { cleanName, displayName } from "@/lib/name";
 import { cleanLine, isHexColor } from "@/lib/validate";
 import { LIMITS, USER_COLORS } from "@/lib/domain";
@@ -109,11 +109,7 @@ export async function PATCH(req: NextRequest) {
   if (Object.keys(update).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
   const { error } = await getSupabase().from("users").update(update).eq("id", u.uid);
-  if (error) {
-    // A database without 012 has no prefs column: keep the session's copy
-    // for this request and say nothing — everything else still saves.
-    if (!(prefs && EXPECTED_EMBED_MISS.has((error as { code?: string }).code ?? "") && Object.keys(update).length === 1)) return serverError(error);
-  }
+  if (error) return serverError(error);
   // The next /me (and every guard) must see the change immediately.
   invalidateAuthCache(u.uid);
   const merged: SessionUser = {

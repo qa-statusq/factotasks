@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { fail, serverError, readJsonObject, EXPECTED_EMBED_MISS } from "@/lib/api";
+import { fail, serverError, readJsonObject } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUniqueViolation, parseUuidList } from "@/lib/validate";
 import { pickDistinctColor, SERIES_COLORS } from "@/lib/colors";
-import { SERIES_SELECT, SERIES_SELECT_LEGACY, selectSeries, shapeSeries, SERIES_NAME_MAX } from "@/lib/meetings";
+import { SERIES_SELECT, shapeSeries, SERIES_NAME_MAX } from "@/lib/meetings";
 import { memberSeriesIds } from "@/lib/series-access";
 import type { MeetingSeries } from "@/lib/types";
 
@@ -20,14 +20,14 @@ export async function GET() {
     // Members get every series by name (to attach a task to one from the task form) and the full
     // shape of the series they take part in.
     const mine = new Set(await memberSeriesIds(u.uid));
-    const { data, error } = await selectSeries<Record<string, unknown>[] | null>((sel) => sb.from("meeting_series").select(sel).order("created_at"));
+    const { data, error } = await sb.from("meeting_series").select(SERIES_SELECT).order("created_at");
     if (error) return serverError(error);
     return NextResponse.json({
       series: (data || []).map((r) => (mine.has(r.id as string) ? { ...shapeSeries(r), member: true } : { id: r.id, name: r.name, color: r.color, app_ids: [], include_general: true, app_order: [] })),
     });
   }
   const [series, meetings] = await Promise.all([
-    selectSeries<Record<string, unknown>[] | null>((sel) => sb.from("meeting_series").select(sel).order("created_at")),
+    sb.from("meeting_series").select(SERIES_SELECT).order("created_at"),
     sb.from("meetings").select("id, series_id, held_at, status").order("held_at", { ascending: false }).limit(1000),
   ]);
   if (series.error) return serverError(series.error);
@@ -68,11 +68,7 @@ export async function POST(req: NextRequest) {
   const member_ids = (people ?? []).map((x) => x.id as string);
   const { data: existing } = await sb.from("meeting_series").select("color");
   const color = pickDistinctColor((existing || []).map((r) => r.color as string), SERIES_COLORS);
-  let { data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, app_order, auto_close, created_by: u.uid }).select(SERIES_SELECT).single();
-  if (error && EXPECTED_EMBED_MISS.has((error as { code?: string }).code ?? "")) {
-    // A database without 013: create it without the order column.
-    ({ data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, created_by: u.uid }).select(SERIES_SELECT_LEGACY).single());
-  }
+  const { data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, app_order, auto_close, created_by: u.uid }).select(SERIES_SELECT).single();
   if (error) return isUniqueViolation(error) ? fail("A series with that name already exists", 409) : serverError(error);
   const s = shapeSeries(data as Record<string, unknown>);
   if (member_ids.length) {

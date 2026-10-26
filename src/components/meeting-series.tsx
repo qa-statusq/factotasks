@@ -14,13 +14,11 @@ import { AppTile } from "@/components/ui/task-chips";
 import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { useCachedFetch, mutate } from "@/lib/client-cache";
-import { postJson, deleteJson } from "@/lib/http";
+import { postJson } from "@/lib/http";
 import { useOnChange } from "@/lib/use-on-change";
 import { useSubmitShortcut } from "@/lib/use-submit-shortcut";
 import { cn } from "@/lib/cn";
-import { IconCheck, IconTrash, IconPresentation } from "@/components/ui/icons";
-import { SortableList } from "@/components/ui/sortable";
-import { SHARED_ORDER_ID } from "@/lib/meeting-agenda";
+import { IconCheck, IconPresentation } from "@/components/ui/icons";
 import type { AppOverview, Meeting, MeetingSeries } from "@/lib/types";
 
 const NEW = "__new__";
@@ -211,140 +209,5 @@ export function NewMeetingSheet({ onClose, defaultSeriesId }: { onClose: () => v
         <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
       </form>
     </Sheet>
-  );
-}
-
-/* ---------------------------- Manage series ------------------------------- */
-
-export function ManageSeriesSheet({ onClose }: { onClose: () => void }) {
-  const { data: sd, error: sErr, refresh } = useCachedFetch<{ series: MeetingSeries[] }>("/api/meeting-series");
-  const { data: ad } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
-  const [adding, setAdding] = useState(false);
-  const list = sd?.series ?? [];
-  return (
-    <Sheet title="Meeting series" description="One series per kind of meeting. Each keeps its own carry-forward and scope; colours are assigned automatically." onClose={onClose} wide>
-      <div className="flex flex-col gap-3">
-        {!sd && sErr && <LoadError title="Couldn't load the series" onRetry={refresh} />}
-        {!sd && !sErr && (
-          <div className="flex justify-center py-6">
-            <Spinner />
-          </div>
-        )}
-        {list.map((s) => (
-          <SeriesEditor key={s.id} series={s} apps={ad?.apps ?? []} onChanged={refresh} canDelete={list.length > 1} />
-        ))}
-        {adding ? (
-          <SeriesEditor
-            apps={ad?.apps ?? []}
-            onChanged={() => {
-              setAdding(false);
-              refresh();
-            }}
-            onCancel={() => setAdding(false)}
-            canDelete={false}
-          />
-        ) : (
-          <Button variant="secondary" size="sm" onClick={() => setAdding(true)} className="self-start">
-            + New series
-          </Button>
-        )}
-      </div>
-    </Sheet>
-  );
-}
-
-function SeriesEditor({ series, apps, onChanged, onCancel, canDelete }: { series?: MeetingSeries; apps: AppOverview[]; onChanged: () => void; onCancel?: () => void; canDelete: boolean }) {
-  const { toast } = useToast();
-  const { confirm } = useDialog();
-  const [name, setName] = useState(series?.name ?? "");
-  const [scope, setScope] = useState<Scope>({ app_ids: series?.app_ids ?? [], include_general: series?.include_general ?? true });
-  const [order, setOrder] = useState<string[]>(series?.app_order ?? []);
-  const [busy, setBusy] = useState(false);
-  // The apps this series presents, in their current order: listed ones first, then the rest by name.
-  const inScope = apps.filter((a) => a.status !== "archived" && (scope.app_ids.length === 0 || scope.app_ids.includes(a.id)));
-  // Listed entries first in their order; the rest keep the Apps screen's
-  // arrangement. "Across apps" (tasks spanning several apps) is one more
-  // entry, last unless placed.
-  type Entry = { id: string; name: string; color: string; icon_url: string | null; shared?: boolean };
-  const entries: Entry[] = [...inScope.map((a) => ({ id: a.id, name: a.name, color: a.color, icon_url: a.icon_url })), { id: SHARED_ORDER_ID, name: "Across apps", color: "#0f766e", icon_url: null, shared: true }];
-  const ordered = [...entries].sort((a, b) => {
-    const ia = order.indexOf(a.id), ib = order.indexOf(b.id);
-    const fa = ia === -1 ? (a.shared ? order.length + entries.length : order.length) : ia;
-    const fb = ib === -1 ? (b.shared ? order.length + entries.length : order.length) : ib;
-    return fa - fb || entries.indexOf(a) - entries.indexOf(b);
-  });
-  const dirty = !series || name.trim() !== series.name || scope.app_ids.join() !== series.app_ids.join() || scope.include_general !== (series.include_general ?? true) || order.join() !== (series.app_order ?? []).join();
-
-  async function save() {
-    if (busy || !name.trim()) return;
-    setBusy(true);
-    const body = { name: name.trim(), app_ids: scope.app_ids, include_general: scope.include_general, app_order: order };
-    const r = series ? await postJson(`/api/meeting-series/${series.id}`, body, "PATCH") : await postJson("/api/meeting-series", body);
-    setBusy(false);
-    if (r.ok) {
-      toast(series ? "Series updated" : "Series created");
-      mutate("/api/meeting-series");
-      mutate("/api/meetings");
-      onChanged();
-    } else toast(r.data?.error || "Couldn't save", "error");
-  }
-  async function remove() {
-    if (!series) return;
-    if (!(await confirm({ title: `Delete “${series.name}”?`, message: "Its meetings are kept; they just lose the series. Carry-forward for them restarts.", confirmLabel: "Delete", tone: "danger" }))) return;
-    const r = await deleteJson(`/api/meeting-series/${series.id}`);
-    if (r.ok) {
-      toast("Series deleted");
-      mutate("/api/meeting-series");
-      mutate("/api/meetings");
-      onChanged();
-    } else toast(r.data?.error || "Couldn't delete", "error");
-  }
-
-  return (
-    <div className="rounded-xl border border-line bg-surface p-4">
-      <div className="flex items-center gap-3">
-        {series && <IconPresentation size={16} className="shrink-0" style={{ color: series.color }} aria-hidden />}
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Series name" maxLength={60} className="min-w-0 flex-1" autoFocus={!series} />
-      </div>
-      <div className="mt-3">
-        <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-ink-subtle">Covers <span className="font-normal normal-case tracking-normal">· an app outside this list reaches the meeting only through tasks attached to the series, and its releases stay out</span></p>
-        <AppScopePicker apps={apps} value={scope} onChange={setScope} />
-      </div>
-      {ordered.length > 1 && (
-        <div className="mt-3">
-          <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-ink-subtle">Presentation order <span className="font-normal normal-case tracking-normal">· drag to arrange · General tasks always come first</span></p>
-          <SortableList items={ordered} keyOf={(a) => a.id} onChange={(next) => setOrder(next.map((a) => a.id))}>
-            {(a) => (
-              <>
-                {a.shared ? <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-teal-700 text-[10px] font-bold text-white" aria-hidden>⇄</span> : <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />}
-                <span className="min-w-0 flex-1 truncate text-ink">{a.name}</span>
-                {a.shared && <span className="text-[11px] text-ink-subtle">tasks on several apps</span>}
-              </>
-            )}
-          </SortableList>
-        </div>
-      )}
-      <div className="mt-3 flex items-center gap-2 text-[12px] text-ink-subtle">
-        {series && (
-          <span>
-            {series.meeting_count ?? 0} meeting{(series.meeting_count ?? 0) === 1 ? "" : "s"}
-          </span>
-        )}
-        <span className="ml-auto" />
-        {series && canDelete && (
-          <Button variant="secondary" size="sm" onClick={remove} aria-label="Delete series" title="Delete series">
-            <IconTrash size={14} />
-          </Button>
-        )}
-        {onCancel && (
-          <Button variant="secondary" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-        )}
-        <Button size="sm" onClick={save} disabled={busy || !dirty || !name.trim()}>
-          {busy ? <Spinner /> : series ? "Save" : "Create"}
-        </Button>
-      </div>
-    </div>
   );
 }

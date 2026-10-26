@@ -27,15 +27,6 @@ export function fail(message: string, status = 400) {
 }
 
 /**
- * Postgres/PostgREST codes meaning "that column or relationship isn't there
- * yet" — i.e. a migration hasn't been applied. Routes that read optional
- * columns fall back to a narrower shape on ANY error (graceful degradation),
- * but must NOT log these: pre-migration is an expected, whole-environment
- * state, so logging it would emit one line per request and drown real signal.
- */
-export const EXPECTED_EMBED_MISS = new Set(["42703", "PGRST200", "PGRST204"]);
-
-/**
  * For unexpected/internal errors: log the full detail server-side, return a
  * generic message so we never leak DB schema, stack traces, or secrets.
  */

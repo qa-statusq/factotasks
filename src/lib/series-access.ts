@@ -12,7 +12,10 @@ import type { SessionUser } from "@/lib/auth";
 /** The series this person has been added to (empty for admins' purposes: they see everything anyway). */
 export async function memberSeriesIds(uid: string): Promise<string[]> {
   const { data, error } = await getSupabase().from("meeting_series_members").select("series_id").eq("user_id", uid);
-  if (error) return []; // before migration 021
+  if (error) {
+    console.error("[series] members lookup failed:", error);
+    return [];
+  }
   return (data ?? []).map((r) => r.series_id as string);
 }
 
@@ -61,7 +64,10 @@ export async function closeOverdueMeetings(force = false): Promise<number> {
   lastSweep = Date.now();
   const sb = getSupabase();
   const { data, error } = await sb.from("meetings").select("id, title, held_at, auto_close, series:meeting_series(auto_close)").eq("status", "open").limit(200);
-  if (error || !data) return 0; // before migration 021 the columns do not exist
+  if (error || !data) {
+    if (error) console.error("[meetings] auto-close sweep failed:", error);
+    return 0;
+  }
   const today = istToday();
   let closed = 0;
   for (const m of data as { id: string; title: string; held_at: string; auto_close: boolean | null; series: { auto_close?: boolean } | { auto_close?: boolean }[] | null }[]) {

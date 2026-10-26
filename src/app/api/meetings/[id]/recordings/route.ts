@@ -7,7 +7,7 @@ import { cleanLine, isUuid, parseNumber } from "@/lib/validate";
 import { loadMeeting } from "@/lib/meetings";
 import { rateLimited } from "@/lib/rate-limit";
 import { createUploadSession, driveConfigured, DRIVE_CHUNK_BYTES, DriveError } from "@/lib/google-drive";
-import { RECORDING_SELECT, shapeRecording, publicRecording, notConfigured, missingTable, recordingFileName } from "@/lib/recordings";
+import { RECORDING_SELECT, shapeRecording, publicRecording, notConfigured, recordingFileName } from "@/lib/recordings";
 import { expireStaleUploads } from "@/lib/recording-uploads";
 import { canAccessMeeting } from "@/lib/series-access";
 
@@ -28,7 +28,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!(await canAccessMeeting(u, m0))) return fail("Meeting not found", 404);
   await expireStaleUploads();
   const { data, error } = await getSupabase().from("meeting_recordings").select(RECORDING_SELECT).eq("meeting_id", id).order("created_at", { ascending: false });
-  if (missingTable(error)) return NextResponse.json({ recordings: [], enabled: false, chunk_bytes: DRIVE_CHUNK_BYTES, migration: "019" });
   if (error) return serverError(error);
   return memberJson(u, { recordings: ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => publicRecording(shapeRecording(r))), enabled: driveConfigured(), chunk_bytes: DRIVE_CHUNK_BYTES });
 }
@@ -61,7 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const sb = getSupabase();
   const { data: existing, error: probe } = await sb.from("meeting_recordings").select("id").eq("meeting_id", id).limit(50);
-  if (missingTable(probe)) return fail("Recording needs database migration 019 — ask an admin to run it", 503);
+  if (probe) return serverError(probe);
   const count = existing?.length ?? 0;
   const name = recordingFileName(m.title, cleanLine(b.name, 120) || `Recording ${count + 1}`, `.${ext}`);
 
@@ -76,7 +75,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .insert({ meeting_id: id, name, mime, size_bytes: size ?? 0, duration_sec: duration ?? null, status: "uploading", upload_uri: uploadUri, recorded_by: u.uid })
     .select(RECORDING_SELECT)
     .single();
-  if (missingTable(error)) return fail("Recording needs database migration 019 — ask an admin to run it", 503);
   if (error) return serverError(error);
   const rec = shapeRecording(data as unknown as Record<string, unknown>);
   after(() => logActivity({ action: "meeting.record", entityType: "meeting", entityId: id, summary: `Recording started for “${m.title}”` }));

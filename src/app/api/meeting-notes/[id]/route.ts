@@ -5,19 +5,16 @@ import { ok, fail, serverError, readJsonObject } from "@/lib/api";
 import { cleanText, isUuid, oneOf } from "@/lib/validate";
 import { LIMITS, NOTE_KINDS } from "@/lib/domain";
 import { parseLink } from "@/app/api/meetings/[id]/notes/route";
-import { hasNoteLinks } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
 async function load(id: string) {
-  const links = await hasNoteLinks();
-  const { data } = await getSupabase().from("meeting_notes").select((links ? "id, body, created_by, link_url, meeting:meetings(status)" : "id, body, created_by, meeting:meetings(status)") as "id, body, created_by, link_url, meeting:meetings(status)").eq("id", id).maybeSingle();
+  const { data } = await getSupabase().from("meeting_notes").select("id, body, link_url").eq("id", id).maybeSingle();
   if (!data) return null;
-  const m = (Array.isArray(data.meeting) ? data.meeting[0] : data.meeting) as { status: string } | null;
-  return { id: data.id as string, body: (data.body as string) ?? "", created_by: data.created_by as string | null, link_url: (data.link_url as string | null) ?? null, finalized: m?.status === "finalized" };
+  return { id: data.id as string, body: (data.body as string) ?? "", link_url: (data.link_url as string | null) ?? null };
 }
 
-/** Edit your own note (admins: any; closed meetings: admins only). */
+/** Edit a minute line (admins; minutes are theirs, open or closed). */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
@@ -26,9 +23,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!isUuid(id)) return fail("Note not found", 404);
   const n = await load(id);
   if (!n) return fail("Note not found", 404);
-  const admin = u.role === "admin";
-  if (n.created_by !== u.uid && !admin) return fail("You can only edit your own notes", 403);
-  if (n.finalized && !admin) return fail("This meeting is closed", 403);
   const b = await readJsonObject(req);
   const patch: Record<string, unknown> = {};
   if ("body" in b) patch.body = cleanText(b.body, LIMITS.note);
@@ -40,12 +34,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ("link_url" in b || "link_label" in b) {
     const link = parseLink(b);
     if ("error" in link) return fail(link.error);
-    const links = await hasNoteLinks();
-    if (link.url && !links) return fail("Links on notes need database migration 018 — ask an admin to run it");
-    if (links) {
-      patch.link_url = link.url;
-      patch.link_label = link.label;
-    }
+    patch.link_url = link.url;
+    patch.link_label = link.label;
   }
   // A note is its words or its link — never neither.
   const linkAfter = "link_url" in patch ? (patch.link_url as string | null) : n.link_url;
@@ -63,12 +53,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   const { id } = await params;
   if (!isUuid(id)) return fail("Note not found", 404);
-  const n = await load(id);
-  if (!n) return fail("Note not found", 404);
-  const admin = u.role === "admin";
-  if (n.created_by !== u.uid && !admin) return fail("You can only delete your own notes", 403);
-  if (n.finalized && !admin) return fail("This meeting is closed", 403);
-  const { error } = await getSupabase().from("meeting_notes").delete().eq("id", id);
+  const { error, data } = await getSupabase().from("meeting_notes").delete().eq("id", id).select("id");
   if (error) return serverError(error);
+  if (!data?.length) return fail("Note not found", 404);
   return ok();
 }

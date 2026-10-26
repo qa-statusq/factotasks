@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
  * any size with zero network. The PNG variants in /brand are generated from
  * the same geometry (scripts/make-icons.mjs).
  */
-export function Logo({ size = 32, className }: { size?: number; className?: string; priority?: boolean }) {
+export function Logo({ size = 32, className }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className={cn("shrink-0", className)}>
       <rect width="32" height="32" rx="8" fill="#059669" />

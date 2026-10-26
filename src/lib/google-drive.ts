@@ -48,10 +48,6 @@ export function driveConfigured(): boolean {
   return !!serviceKey() && !!driveId();
 }
 
-export function driveRobotEmail(): string | null {
-  return serviceKey()?.client_email ?? null;
-}
-
 let tokenCache: { token: string; exp: number } | null = null;
 const b64 = (o: unknown) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
 
@@ -190,23 +186,6 @@ export async function uploadStatus(sessionUri: string, total: number | null): Pr
   }
   if (r.ok) return { done: true, received: total ?? 0, file: (await r.json()) as ChunkResult["file"] };
   throw await driveErr(r, "Checking the upload");
-}
-
-export interface DriveFile {
-  id: string;
-  name: string;
-  mimeType: string;
-  size: number;
-  webViewLink: string | null;
-  videoMediaMetadata?: { durationMillis?: string; width?: number; height?: number };
-}
-
-export async function getFile(fileId: string): Promise<DriveFile | null> {
-  const r = await fetch(`${DRIVE}/files/${encodeURIComponent(fileId)}?supportsAllDrives=true&fields=id,name,mimeType,size,webViewLink,videoMediaMetadata`, { headers: await authHeaders() });
-  if (r.status === 404) return null;
-  if (!r.ok) throw await driveErr(r, "Reading the file");
-  const j = (await r.json()) as Omit<DriveFile, "size"> & { size?: string };
-  return { ...j, size: Number(j.size ?? 0), webViewLink: j.webViewLink ?? null };
 }
 
 /** The file's bytes, honouring a Range header so <video> can seek. */

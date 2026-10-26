@@ -23,7 +23,7 @@ const fmtDay = (iso: string) => istTime(iso).replace(/, \d\d:\d\d(:\d\d)? (am|pm
 export default function RecordingsPage() {
   const { isAdmin } = useSession();
   useDocumentTitle("Recordings · FactoTasks");
-  const { data, loading, error, refresh } = useCachedFetch<{ recordings: Recording[]; enabled: boolean; migration?: string }>("/api/recordings");
+  const { data, loading, error, refresh } = useCachedFetch<{ recordings: Recording[]; enabled: boolean }>("/api/recordings");
   const [q, setQ] = useState("");
   const [seriesPref, setSeries] = usePref<string>("recordings.series", "");
   const [person, setPerson] = useState("");
@@ -87,7 +87,7 @@ export default function RecordingsPage() {
       ) : error && !data ? (
         <LoadError onRetry={refresh} />
       ) : !all.length ? (
-        <EmptyState icon={<IconPlay size={22} />} title="No recordings yet" description={data?.migration ? `The database migration ${data.migration} hasn't been run yet.` : data?.enabled ? "Press “Record meeting” on a meeting, or the record button while presenting." : "Recording isn't set up on this server yet."} />
+        <EmptyState icon={<IconPlay size={22} />} title="No recordings yet" description={data?.enabled ? "Press “Record meeting” on a meeting, or the record button while presenting." : "Recording isn't set up on this server yet."} />
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2">

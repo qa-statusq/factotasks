@@ -143,7 +143,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(task.number)}</span>
-          <StatusMenu task={task} size="md" canChange={task.can.status} needsApproval={task.can.needs_approval} />
+          <StatusMenu task={task} size="md" canChange={task.can.status} />
           <div className="ml-auto flex items-center gap-2">
             {task.can.edit && (
               <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
@@ -159,7 +159,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
         </div>
         <h1 className={cn("break-words text-[20px] font-bold leading-tight tracking-[-0.02em] text-ink sm:text-[24px]", task.status === "cancelled" && "text-ink-muted line-through")}>{task.title}</h1>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px] text-ink-muted">
-          <TargetChips targets={task.targets} app={task.app} platform={task.platform} />
+          <TargetChips targets={task.targets} />
           <SeriesChip series={task.series} />
           <ReleaseProgress progress={task.release_progress} />
           <TypeBadge type={task.type} />

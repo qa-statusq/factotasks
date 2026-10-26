@@ -9,7 +9,6 @@ import { AvatarStack } from "@/components/ui/avatar";
 import { PlatformBadge, PriorityBadge, TargetChips, ReleaseProgress, SeriesChip, AppTile, StatusBadge, GeneralTile } from "@/components/ui/task-chips";
 import { StatusMenu } from "@/components/status-menu";
 import { EmptyState } from "@/components/ui/misc";
-import { useNeedsApproval } from "@/lib/use-policy";
 import { useSession } from "@/components/providers/session-provider";
 import { IconMessage, IconPaperclip, IconTasks, IconArrowRight } from "@/components/ui/icons";
 import { Avatar } from "@/components/ui/avatar";
@@ -58,7 +57,7 @@ export const PILL_WIDTH = "sm:min-w-[8.5rem]";
  * context, then two fixed columns — people, and the status pill that changes
  * status in place — so every row's controls sit on the same vertical line.
  */
-export function TaskRow({ task, showApp = true, showDescription = false, trailing, below, needsApproval, canChange = true }: { task: TaskCard; showApp?: boolean; showDescription?: boolean; trailing?: React.ReactNode; below?: React.ReactNode; needsApproval: boolean; canChange?: boolean }) {
+export function TaskRow({ task, showApp = true, showDescription = false, trailing, below, canChange = true }: { task: TaskCard; showApp?: boolean; showDescription?: boolean; trailing?: React.ReactNode; below?: React.ReactNode; canChange?: boolean }) {
   return (
     <li className="cv-card group px-3 py-2.5 transition-colors hover:bg-canvas/60 sm:px-4">
       <div className="flex items-start gap-3">
@@ -73,7 +72,7 @@ export function TaskRow({ task, showApp = true, showDescription = false, trailin
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-[22px] text-[11.5px] text-ink-subtle">
             <span className="whitespace-nowrap tabular-nums">{taskRef(task.number)}</span>
             {showApp || (task.targets?.length ?? 0) > 1 ? (
-              <TargetChips targets={task.targets} app={task.app} platform={task.platform} compact />
+              <TargetChips targets={task.targets} compact />
             ) : (
               <PlatformBadge platform={task.platform} label={false} className="px-1 py-0 ring-0 bg-transparent" />
             )}
@@ -99,7 +98,7 @@ export function TaskRow({ task, showApp = true, showDescription = false, trailin
           <span className="flex justify-end sm:w-[5rem]">
             <AvatarStack users={task.assignees} size="sm" />
           </span>
-          <StatusMenu task={task} needsApproval={needsApproval} canChange={canChange} className={PILL_WIDTH} />
+          <StatusMenu task={task} canChange={canChange} className={PILL_WIDTH} />
           {trailing}
         </div>
       </div>
@@ -162,7 +161,6 @@ export function TaskList({
   renderBelow?: (t: TaskCard) => React.ReactNode;
   className?: string;
 }) {
-  const needsApproval = useNeedsApproval();
   const { me, isAdmin } = useSession();
   // The API lets an admin, the creator or an assignee change a status; the pill says so up front.
   const mayChange = (t: TaskCard) => isAdmin || t.created_by?.id === me?.id || t.assignees.some((a) => a.id === me?.id);
@@ -182,7 +180,7 @@ export function TaskList({
             </header>
             <ul className="divide-y divide-line/70">
               {g.tasks.map((t) => (
-                <TaskRow key={t.id} task={t} showApp={false} showDescription={showDescription} needsApproval={needsApproval} canChange={mayChange(t)} trailing={renderTrailing?.(t)} below={renderBelow?.(t)} />
+                <TaskRow key={t.id} task={t} showApp={false} showDescription={showDescription} canChange={mayChange(t)} trailing={renderTrailing?.(t)} below={renderBelow?.(t)} />
               ))}
             </ul>
           </section>
@@ -193,7 +191,7 @@ export function TaskList({
   return (
     <ul className={cn("divide-y divide-line/70", className)}>
       {tasks.map((t) => (
-        <TaskRow key={t.id} task={t} showApp={showApp} showDescription={showDescription} needsApproval={needsApproval} canChange={mayChange(t)} trailing={renderTrailing?.(t)} below={renderBelow?.(t)} />
+        <TaskRow key={t.id} task={t} showApp={showApp} showDescription={showDescription} canChange={mayChange(t)} trailing={renderTrailing?.(t)} below={renderBelow?.(t)} />
       ))}
     </ul>
   );

@@ -38,7 +38,7 @@ export function relativeTime(input: string | null | undefined): string {
  *
  * ONE module-level formatter, not toLocaleString(opts): with an options bag
  * V8 constructs a fresh Intl.DateTimeFormat on every call (~0.1–1ms), and this
- * runs twice per review card — a long list render was spending tens of ms on
+ * runs once or twice per list row — a long list render was spending tens of ms on
  * formatter construction alone. Built lazily so importing this module on the
  * server can't throw where the ICU data/timezone differs.
  */

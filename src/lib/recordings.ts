@@ -80,19 +80,13 @@ export async function loadShares(recordingId: string): Promise<RecordingShare[]>
 }
 
 /** Only admins manage a recording (rename, share, delete); the people of its series watch it. */
-export function canManage(u: { uid: string; role: string }, _r: RecordingRow): boolean {
-  void _r;
+export function canManage(u: { role: string }): boolean {
   return u.role === "admin";
 }
 
 /** Who may push bytes into a recording's upload: an admin, or whoever started it. */
 export function canUpload(u: { uid: string; role: string }, r: RecordingRow): boolean {
   return u.role === "admin" || r.recorded_by === u.uid;
-}
-
-/** True until migration 019 has been applied (Postgres 42P01, or PostgREST's schema-cache miss). */
-export function missingTable(e: { code?: string; message?: string } | null | undefined): boolean {
-  return !!e && (e.code === "42P01" || e.code === "PGRST205" || /schema cache/i.test(e.message ?? ""));
 }
 
 export function notConfigured(): NextResponse {

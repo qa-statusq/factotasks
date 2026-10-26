@@ -19,10 +19,7 @@ export async function PATCH(req: NextRequest) {
   const ids = parseUuidList(b.ids, 200);
   if (!ids || !ids.length) return fail("Send the app ids in order");
   const { error } = await getSupabase().rpc("apps_reorder", { p_ids: ids });
-  if (error) {
-    if ((error as { code?: string }).code === "PGRST202") return NextResponse.json({ error: "Arranging apps needs a database update — run supabase/migrations/014_app_order_analytics_range.sql once." }, { status: 424 });
-    return serverError(error);
-  }
+  if (error) return serverError(error);
   await logActivity({ action: "app.reorder", entityType: "app", summary: `Arranged the apps (${ids.length})`, metadata: { count: ids.length } });
   return NextResponse.json({ ok: true });
 }
