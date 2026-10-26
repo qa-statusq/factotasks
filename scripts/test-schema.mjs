@@ -144,6 +144,18 @@ assert(pack.carried.length === 1 && pack.carried[0].number === 2 && pack.carried
 assert(pack.new.length === 0 && pack.pending.length === 1, "meeting_pack: pending/new split");
 assert(pack.notes.length === 1 && pack.notes[0].task.number === 2, "meeting_pack: notes joined to tasks");
 assert(pack.notes[0].link_url === "https://example.com/finding" && pack.notes[0].link_label === "Crash report", "meeting_pack: notes carry their link (018)");
+// 021: people of a series, and the closing rule
+await db.query("insert into meeting_series_members (series_id, user_id, added_by) values ($1,$2,$3)", [weekly.id, dev.id, admin.id]);
+assert((await db.query("select count(*)::int as n from meeting_series_members where series_id = $1 and user_id = $2", [weekly.id, dev.id])).rows[0].n === 1, "meeting_series_members: a person added to a series (021)");
+try {
+  await db.query("insert into meeting_series_members (series_id, user_id) values ($1,$2)", [weekly.id, dev.id]);
+  fail("the same person twice in a series should be rejected");
+} catch (e) {
+  assert(/duplicate|unique|primary/i.test(String(e.message)), "meeting_series_members: one row per person (021)");
+}
+assert((await db.query("select auto_close from meeting_series where id = $1", [weekly.id])).rows[0].auto_close === true, "meeting_series.auto_close defaults to true (021)");
+assert((await db.query("select auto_close from meetings where id = $1", [m2.id])).rows[0].auto_close === null, "meetings.auto_close defaults to null = follow the series (021)");
+await db.query("delete from meeting_series_members where series_id = $1 and user_id = $2", [weekly.id, dev.id]);
 // 019: recordings live on the meeting; shares are one row per e-mail.
 const recRow = await one("insert into meeting_recordings (meeting_id, name, size_bytes, duration_sec, status, drive_file_id, recorded_by) values ($1,'Weekly sync.webm',4200000,95,'ready','drive-file-1',$2) returning id, status", [m2.id, admin.id]);
 assert(recRow.status === "ready", "meeting_recordings: row stored (019)");

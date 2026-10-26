@@ -4,6 +4,7 @@ import { fail } from "@/lib/api";
 import { isUuid } from "@/lib/validate";
 import { streamFile, DriveError } from "@/lib/google-drive";
 import { loadRecording } from "@/lib/recordings";
+import { canAccessSeries } from "@/lib/series-access";
 import { patchWebmHead, type WebmHeadPatch } from "@/lib/webm-duration";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +51,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!isUuid(id)) return fail("Recording not found", 404);
   const rec = await loadRecording(id);
   if (!rec || rec.status !== "ready" || !rec.drive_file_id) return fail("Recording not found", 404);
+  if (!(await canAccessSeries(u, rec.meeting?.series?.id))) return fail("Recording not found", 404);
   const download = !!new URL(req.url).searchParams.get("download");
+  if (download && u.role !== "admin") return fail("Only admins download recordings", 403);
   const fileId = rec.drive_file_id;
   try {
     const patch = await headPatch(fileId, rec.mime, rec.duration_sec);

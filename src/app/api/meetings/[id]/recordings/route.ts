@@ -8,6 +8,7 @@ import { loadMeeting } from "@/lib/meetings";
 import { rateLimited } from "@/lib/rate-limit";
 import { createUploadSession, driveConfigured, DRIVE_CHUNK_BYTES, DriveError } from "@/lib/google-drive";
 import { RECORDING_SELECT, shapeRecording, publicRecording, notConfigured, missingTable, recordingFileName, expireStaleUploads } from "@/lib/recordings";
+import { canAccessMeeting } from "@/lib/series-access";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +16,15 @@ export const dynamic = "force-dynamic";
 const MAX_BYTES = 4 * 1024 * 1024 * 1024;
 const MIMES = ["video/webm", "video/mp4", "video/x-matroska", "audio/webm", "audio/mp4", "audio/ogg"];
 
-/** The meeting's recordings, newest first. Anyone signed in may watch. */
+/** The meeting's recordings, newest first — for admins and the people of its series. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
   const { id } = await params;
   if (!isUuid(id)) return fail("Meeting not found", 404);
+  const m0 = await loadMeeting(id);
+  if (!m0) return fail("Meeting not found", 404);
+  if (!(await canAccessMeeting(u, m0))) return fail("Meeting not found", 404);
   await expireStaleUploads();
   const { data, error } = await getSupabase().from("meeting_recordings").select(RECORDING_SELECT).eq("meeting_id", id).order("created_at", { ascending: false });
   if (missingTable(error)) return NextResponse.json({ recordings: [], enabled: false, chunk_bytes: DRIVE_CHUNK_BYTES, migration: "019" });
@@ -32,19 +36,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
  * Start saving a recording: { mime, size_bytes?, duration_sec? } → a row in
  * `uploading` state plus the chunk size to send to PUT /api/recordings/:id/chunk.
  * The size is unknown while the browser records and uploads at the same time;
- * it is given when a kept file is re-sent. Admins only (they run the meetings).
+ * it is given when a kept file is re-sent. Admins, and the people of the meeting's series.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
-  if (u.role !== "admin") return fail("Only admins record meetings", 403);
   const { id } = await params;
   if (!isUuid(id)) return fail("Meeting not found", 404);
   if (!driveConfigured()) return notConfigured();
-  const limited = await rateLimited(u.uid, "record", 160, 3600);
-  if (limited) return limited;
   const m = await loadMeeting(id);
   if (!m) return fail("Meeting not found", 404);
+  if (!(await canAccessMeeting(u, m))) return fail("Only admins and the people of this meeting's series record it", 403);
+  const limited = await rateLimited(u.uid, "record", 160, 3600);
+  if (limited) return limited;
 
   const b = await readJsonObject(req);
   const size = b.size_bytes == null ? null : parseNumber(b.size_bytes, 1, MAX_BYTES);

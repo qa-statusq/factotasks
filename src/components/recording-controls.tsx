@@ -107,6 +107,43 @@ export function RecordingBadge({ seconds, className }: { seconds: number; classN
 const SAVED_SHOWN_MS = 12_000;
 
 /**
+ * The saving bar. Most of the file went up while recording, so after Stop only
+ * a small tail is sent (shown for real, 0–60%); the storage then needs a
+ * moment to close a file of this size, which no request reports on — that
+ * part is paced by a size-based estimate and eases towards 98% until the
+ * file is confirmed. Animated per frame, so it never sits still or jumps.
+ */
+function useSavingBar(active: boolean, startedAt: number, uploadFraction: number, totalBytes: number): number {
+  const [shown, setShown] = useState(0);
+  const target = useRef(0);
+  useEffect(() => {
+    if (!active) return;
+    let raf = 0;
+    let first = true;
+    let last = performance.now();
+    const expectedMs = 2200 + (totalBytes / 30_000_000) * 1000; // ~2 s fixed + 30 MB/s of closing work
+    const tick = () => {
+      if (first) {
+        first = false;
+        target.current = 0;
+        setShown(0);
+      }
+      const now = performance.now();
+      const elapsed = now - startedAt;
+      const paced = 1 - Math.exp(-elapsed / (expectedMs * 0.6));
+      target.current = Math.min(0.98, 0.6 * Math.min(1, uploadFraction) + 0.38 * paced);
+      const dt = Math.min(100, now - last);
+      last = now;
+      setShown((cur) => (target.current > cur ? Math.min(target.current, cur + (target.current - cur) * Math.min(1, dt / 180)) : cur));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [active, startedAt, uploadFraction, totalBytes]);
+  return active ? shown : 0;
+}
+
+/**
  * What the panel shows about its own recording:
  *  - while recording: a small dock at the bottom centre (never behind sticky
  *    headers, never where the offline strip lives) with the time and Stop;
@@ -124,6 +161,7 @@ export function RecorderOverlay() {
   const { toast } = useToast();
   const [player, setPlayer] = useState(false);
   const [hold, setHold] = useState(false);
+  const bar = useSavingBar(phase === "finishing", state.finishStartedAt, state.finishProgress / 0.95, state.recordedBytes);
 
   // A recording that never started (no microphone, no screen, permission refused) is a passing message, not a card.
   const startFailure = phase === "error" && !state.blob;
@@ -141,7 +179,7 @@ export function RecorderOverlay() {
   }, [phase, hold, player, dismiss]);
 
   if (phase === "idle" || phase === "starting" || startFailure) return null;
-  const pct = Math.round(Math.min(0.95, state.finishProgress) * 100);
+  const pct = Math.round(bar * 100);
   const label = state.saved ? recordingLabel(state.saved) : state.title;
 
   if (phase === "recording") {

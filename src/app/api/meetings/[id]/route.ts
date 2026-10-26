@@ -7,21 +7,33 @@ import { cleanLine, cleanText, isUuid, parseUuidList } from "@/lib/validate";
 import { LIMITS } from "@/lib/domain";
 import { getSettings } from "@/lib/settings";
 import { loadMeeting } from "@/lib/meetings";
+import { canAccessMeeting, closeOverdueMeetings } from "@/lib/series-access";
+import { visibleTaskIds } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
-/** The whole MOM in one call (meeting_pack RPC) + workspace name for the deck. */
+/** The whole MOM in one call (meeting_pack RPC) + workspace name for the deck. Admins, and the people of its series. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
-  if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
-  if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   const { id } = await params;
   if (!isUuid(id)) return fail("Meeting not found", 404);
+  await closeOverdueMeetings();
+  const cur = await loadMeeting(id);
+  if (!cur) return fail("Meeting not found", 404);
+  if (!(await canAccessMeeting(u, cur))) return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   const [{ data, error }, settings] = await Promise.all([getSupabase().rpc("meeting_pack", { p_meeting: id }), getSettings()]);
   if (error) return serverError(error);
-  const pack = data as { meeting?: { id?: string } } | null;
+  const pack = data as (Record<string, unknown> & { meeting?: { id?: string } }) | null;
   if (!pack?.meeting?.id) return fail("Meeting not found", 404);
+  if (u.role !== "admin") {
+    // A member sees the agenda through their own visibility: only tasks they may see, and no approvals queue.
+    const visible = new Set((await visibleTaskIds(u)) ?? []);
+    const keep = (list: unknown) => (Array.isArray(list) ? list.filter((t) => visible.has((t as { id: string }).id)) : []);
+    for (const k of ["pending", "done", "carried", "new", "overdue"]) pack[k] = keep(pack[k]);
+    pack.approvals = [];
+    pack.notes = Array.isArray(pack.notes) ? (pack.notes as { task_id: string | null }[]).filter((n) => !n.task_id || visible.has(n.task_id)) : [];
+  }
   return NextResponse.json({ ...pack, workspace_name: settings.workspace_name });
 }
 
@@ -70,6 +82,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ("include_general" in b) {
     patch.include_general = b.include_general === true;
     changes.push("scope");
+  }
+  if ("auto_close" in b) {
+    patch.auto_close = b.auto_close === null ? null : b.auto_close === true;
+    changes.push("closing");
   }
   if (b.status === "finalized" && cur.status !== "finalized") {
     patch.status = "finalized";

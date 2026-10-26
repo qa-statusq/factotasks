@@ -33,7 +33,7 @@ import { cn } from "@/lib/cn";
 import { LIMITS, taskRef } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
 import { IconMaximize, IconPrint, IconCheck, IconTrash, IconEdit, IconPresentation, IconChevronDown, IconPlus, IconX } from "@/components/ui/icons";
-import type { AppOverview, MeetingNote, MeetingPack, TaskCard } from "@/lib/types";
+import type { AppOverview, MeetingNote, MeetingPack, MeetingSeries, TaskCard } from "@/lib/types";
 
 type Pack = MeetingPack & { workspace_name: string };
 const fmt = (iso: string) => istTime(iso).replace(/:\d\d (am|pm)/, " $1");
@@ -65,9 +65,13 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
   const { isAdmin } = useSession();
   const needsApproval = useNeedsApproval();
   const m = pack.meeting;
+  const { data: sd } = useCachedFetch<{ series: MeetingSeries[] }>("/api/meeting-series");
+  const closesItself = m.auto_close ?? sd?.series.find((x) => x.id === m.series_id)?.auto_close ?? true;
   const finalized = m.status === "finalized";
   // Closed = locked for everyone (an admin reopens to change anything), so the copy stays true.
-  const readOnly = finalized;
+  // Members of the series read the minutes, present, print, record and add tasks; everything else is the admins'.
+  const readOnly = finalized || !isAdmin;
+  const canAdd = !finalized;
   const [noteTask, setNoteTask] = useState<TaskCard | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -130,6 +134,18 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
           {fmt(m.held_at)} · covering {pack.previous_meeting ? `since the previous ${pack.series ? pack.series.name : "meeting"} (${fmt(pack.previous_meeting)})` : "the previous 7 days"}{!finalized && " · live until closed"}
           {" · "}
           <ScopeLabel scope={m} apps={ad?.apps} className="align-middle" />
+          {!finalized && (
+            <>
+              {" · "}
+              {isAdmin ? (
+                <button type="button" onClick={() => patch({ auto_close: !closesItself }, "Closing updated", "auto")} className="rounded px-1 text-[12.5px] font-medium text-ink-muted underline decoration-dotted underline-offset-4 hover:text-ink" title="Click to change for this meeting">
+                  {closesItself ? "closes by itself tonight" : "stays open until closed by hand"}
+                </button>
+              ) : (
+                <span>{closesItself ? "closes by itself tonight" : "stays open until closed by hand"}</span>
+              )}
+            </>
+          )}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/meetings/${m.id}/present`} onClick={() => tabMemSet("ft_deck_from", m.id)} className={buttonClass("primary", "sm")}>
@@ -138,8 +154,8 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
           <Link href={`/meetings/${m.id}/print`} target="_blank" rel="noopener" className={buttonClass("secondary", "sm")} title="Minutes as an A4 document — print or save as PDF">
             <IconPrint size={14} /> Print
           </Link>
-          {isAdmin && canRecordMeeting(m) && <RecordButton meetingId={m.id} title={m.title} />}
-          {!readOnly && (
+          {canRecordMeeting(m) && <RecordButton meetingId={m.id} title={m.title} />}
+          {canAdd && (
             <Button variant="secondary" size="sm" onClick={() => setAdding(true)} title="Pin any task to this meeting">
               <IconPlus size={14} /> Add task
             </Button>
@@ -327,6 +343,7 @@ function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }
 }
 
 function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, needsApproval, onNote, meetingId }: { task: TaskCard; notes: MeetingNote[]; labels: Map<string, string>; cacheKey: string; readOnly: boolean; needsApproval: boolean; onNote: (t: TaskCard) => void; meetingId: string }) {
+  const { me, isAdmin } = useSession();
   const { toast } = useToast();
   async function unpin() {
     const r = await postJson(`/api/meetings/${meetingId}/tasks`, { task_id: t.id }, "DELETE");
@@ -378,7 +395,7 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, needsApproval, 
           )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <StatusMenu task={t} needsApproval={needsApproval} className={PILL_WIDTH} />
+          <StatusMenu task={t} needsApproval={needsApproval} canChange={isAdmin || t.assignees.some((a) => a.id === me?.id)} className={PILL_WIDTH} />
           {!readOnly && (
             <button type="button" onClick={() => onNote(t)} className="text-[11.5px] font-medium text-brand-700 hover:text-brand-800">
               + Note

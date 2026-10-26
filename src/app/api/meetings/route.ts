@@ -6,16 +6,22 @@ import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid } from "@/lib/validate";
 import { LIMITS } from "@/lib/domain";
 import { MEETING_SELECT, selectSeries, shapeMeeting, shapeSeries, defaultTitle, ensureDefaultSeries } from "@/lib/meetings";
+import { memberSeriesIds, closeOverdueMeetings } from "@/lib/series-access";
 
 export const dynamic = "force-dynamic";
 
-/** Meetings, newest first. */
+/** Meetings, newest first: every one for admins, those of their series for members. */
 export async function GET() {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
-  if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
-  if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
-  const { data, error } = await getSupabase().from("meetings").select(MEETING_SELECT).order("held_at", { ascending: false }).limit(200);
+  await closeOverdueMeetings();
+  let q = getSupabase().from("meetings").select(MEETING_SELECT).order("held_at", { ascending: false }).limit(200);
+  if (u.role !== "admin") {
+    const mine = await memberSeriesIds(u.uid);
+    if (!mine.length) return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
+    q = q.in("series_id", mine);
+  }
+  const { data, error } = await q;
   if (error) return serverError(error);
   const meetings = ((data as unknown as Record<string, unknown>[]) || []).map(shapeMeeting);
   return NextResponse.json({ meetings });

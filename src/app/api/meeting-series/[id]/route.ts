@@ -33,7 +33,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (ids === null) return fail("Invalid app order");
     patch.app_order = ids;
   }
-  if (!Object.keys(patch).length) return fail("Nothing to update");
+  if ("auto_close" in b) patch.auto_close = b.auto_close === true;
+  let memberIds: string[] | null = null;
+  if ("member_ids" in b) {
+    memberIds = parseUuidList(b.member_ids, 100);
+    if (memberIds === null) return fail("Invalid people list");
+  }
+  if (!Object.keys(patch).length && memberIds === null) return fail("Nothing to update");
+  if (memberIds !== null) {
+    // Only real, active teammates can take part.
+    const sb = getSupabase();
+    const { data: users } = memberIds.length ? await sb.from("users").select("id").in("id", memberIds) : { data: [] as { id: string }[] };
+    const valid = new Set((users ?? []).map((x) => x.id as string));
+    const keep = memberIds.filter((x) => valid.has(x));
+    const { data: cur } = await sb.from("meeting_series_members").select("user_id").eq("series_id", id);
+    const have = new Set((cur ?? []).map((x) => x.user_id as string));
+    const add = keep.filter((x) => !have.has(x));
+    const drop = [...have].filter((x) => !keep.includes(x));
+    if (add.length) await sb.from("meeting_series_members").insert(add.map((user_id) => ({ series_id: id, user_id, added_by: u.uid })));
+    if (drop.length) await sb.from("meeting_series_members").delete().eq("series_id", id).in("user_id", drop);
+    if (!Object.keys(patch).length) {
+      after(() => logActivity({ action: "meeting.series.update", entityType: "meeting_series", entityId: id, summary: `Updated the people of a meeting series` }));
+      return ok();
+    }
+  }
   let { data, error } = await getSupabase().from("meeting_series").update(patch).eq("id", id).select("id, name").maybeSingle();
   if (error && "app_order" in patch && EXPECTED_EMBED_MISS.has((error as { code?: string }).code ?? "")) {
     // A database without 013 has no app_order column yet: save the rest.

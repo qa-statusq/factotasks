@@ -417,6 +417,9 @@ create table if not exists meeting_series (
   updated_at timestamptz not null default now()
 );
 alter table meeting_series add column if not exists app_order uuid[] not null default '{}';
+alter table meeting_series add column if not exists auto_close boolean not null default true; -- (021) meetings close by themselves after their day
+alter table meeting_series add column if not exists auto_close boolean not null default true; -- (021) meetings close by themselves after their day
+alter table meeting_series add column if not exists auto_close boolean not null default true; -- (021) meetings close by themselves after their day
 create unique index if not exists meeting_series_name_idx on meeting_series (lower(name));
 drop trigger if exists meeting_series_touch on meeting_series;
 create trigger meeting_series_touch before update on meeting_series for each row execute function touch_updated_at();
@@ -445,6 +448,9 @@ create table if not exists meetings (
 create index if not exists meetings_held_idx on meetings (held_at desc);
 -- Upgrades from before 003: add the columns, and put old meetings in one series.
 alter table meetings add column if not exists series_id uuid references meeting_series(id) on delete set null;
+alter table meetings add column if not exists auto_close boolean; -- (021) per-meeting override; null = follow the series
+alter table meetings add column if not exists auto_close boolean; -- (021) per-meeting override; null = follow the series
+alter table meetings add column if not exists auto_close boolean; -- (021) per-meeting override; null = follow the series
 alter table meetings add column if not exists app_ids uuid[] not null default '{}';
 alter table meetings add column if not exists include_general boolean not null default true;
 alter table meeting_series add column if not exists include_general boolean not null default true;
@@ -505,6 +511,39 @@ create table if not exists recording_shares (
   unique (recording_id, email)
 );
 create index if not exists recording_shares_recording_idx on recording_shares (recording_id, created_at);
+
+-- (021) The team members who take part in a series: they see its meetings and recordings,
+-- present / print / record / add tasks and move their own tasks; the rest stays with admins.
+create table if not exists meeting_series_members (
+  series_id  uuid not null references meeting_series(id) on delete cascade,
+  user_id    uuid not null references users(id) on delete cascade,
+  added_by   uuid references users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (series_id, user_id)
+);
+create index if not exists meeting_series_members_user_idx on meeting_series_members (user_id);
+
+-- (021) The team members who take part in a series: they see its meetings and recordings,
+-- present / print / record / add tasks and move their own tasks; the rest stays with admins.
+create table if not exists meeting_series_members (
+  series_id  uuid not null references meeting_series(id) on delete cascade,
+  user_id    uuid not null references users(id) on delete cascade,
+  added_by   uuid references users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (series_id, user_id)
+);
+create index if not exists meeting_series_members_user_idx on meeting_series_members (user_id);
+
+-- (021) The team members who take part in a series: they see its meetings and recordings,
+-- present / print / record / add tasks and move their own tasks; the rest stays with admins.
+create table if not exists meeting_series_members (
+  series_id  uuid not null references meeting_series(id) on delete cascade,
+  user_id    uuid not null references users(id) on delete cascade,
+  added_by   uuid references users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (series_id, user_id)
+);
+create index if not exists meeting_series_members_user_idx on meeting_series_members (user_id);
 
 -- Tasks pinned to a meeting by hand, regardless of app or date. A task can
 -- sit in any number of meetings.
@@ -1492,6 +1531,9 @@ alter table notifications    enable row level security;
 alter table push_subscriptions enable row level security;
 alter table meeting_recordings enable row level security;
 alter table recording_shares   enable row level security;
+alter table meeting_series_members enable row level security;
+alter table meeting_series_members enable row level security;
+alter table meeting_series_members enable row level security;
 
 revoke all on all tables    in schema public from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;

@@ -413,6 +413,42 @@ check(r.status === 403, "member cannot delete a note → 403", r);
 r = await admin.call("GET", `/api/meetings/${meetingId}`);
 check(r.status === 200 && r.data?.meeting?.status === "finalized" && r.data.notes.length === (linksLive ? 4 : 3), "finalised pack still renders with every note", r);
 
+// ---------- series people (021) ----------
+r = await member.call("GET", "/api/meetings");
+check(r.status === 403, "a member outside every series gets no meetings → 403", r);
+r = await admin.call("PATCH", `/api/meeting-series/${seriesId}`, { member_ids: [memberId] });
+check(r.status === 200, "admin adds the member to the series", r);
+r = await admin.call("GET", "/api/meeting-series");
+check(r.status === 200 && r.data?.series?.find((s) => s.id === seriesId)?.member_ids?.includes(memberId), "the series lists its people", r);
+r = await member.call("GET", "/api/auth/me");
+check(r.status === 200 && r.data?.user?.series_ids?.includes(seriesId), "the member's session carries the series", r);
+r = await member.call("GET", "/api/meetings");
+check(r.status === 200 && r.data?.meetings?.some((m) => m.id === meetingId) && r.data.meetings.every((m) => m.series_id === seriesId), "the member lists the meetings of their series only", r);
+r = await member.call("GET", `/api/meetings/${meetingId}`);
+check(r.status === 200 && r.data?.meeting?.id === meetingId && Array.isArray(r.data.pending) && r.data.approvals.length === 0, "the member opens a meeting of their series (no approvals queue)", r);
+r = await member.call("POST", `/api/meetings/${meetingId}/tasks`, { task_id: task.id });
+check(r.status === 200, "the member adds a task to the meeting", r);
+r = await member.call("DELETE", `/api/meetings/${meetingId}/tasks`, { task_id: task.id });
+check(r.status === 403, "the member cannot remove a task from the meeting → 403", r);
+r = await member.call("PATCH", `/api/meetings/${meetingId}`, { status: "finalized" });
+check(r.status === 403, "the member cannot close the meeting → 403", r);
+r = await member.call("DELETE", `/api/meetings/${meetingId}`);
+check(r.status === 403, "the member cannot delete the meeting → 403", r);
+r = await member.call("POST", `/api/meetings/${meetingId}/notes`, { body: "no" });
+check(r.status === 403, "the member cannot write minutes → 403", r);
+r = await member.call("GET", `/api/meetings/${meetingId}/recordings`);
+check(r.status === 200 && Array.isArray(r.data?.recordings), "the member lists the meeting's recordings", r);
+r = await member.call("GET", "/api/recordings");
+check(r.status === 200 && Array.isArray(r.data?.recordings), "the member lists recordings of their series", r);
+r = await admin.call("PATCH", `/api/meeting-series/${seriesId}`, { member_ids: [] });
+check(r.status === 200, "admin removes the member from the series", r);
+r = await member.call("GET", `/api/meetings/${meetingId}`);
+check(r.status === 403, "once removed, the meeting is closed to them again → 403", r);
+r = await admin.call("PATCH", `/api/meeting-series/${seriesId}`, { auto_close: false });
+check(r.status === 200, "series: automatic closing can be switched off", r);
+r = await admin.call("PATCH", `/api/meetings/${meetingId}`, { auto_close: true });
+check(r.status === 200, "meeting: its own closing rule can be set", r);
+
 // ---------- recordings (019) ----------
 r = await member.call("GET", "/api/recordings");
 check(r.status === 200 && Array.isArray(r.data?.recordings), "members can list recordings", r);

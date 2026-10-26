@@ -57,6 +57,7 @@ function screenContext(pathname: string): { label: string; icon: React.ReactNode
   if (pathname === "/apps") return { label: "Apps", icon: <IconApps size={15} /> };
   if (pathname === "/releases") return { label: "Releases", icon: <IconRocket size={15} /> };
   if (pathname === "/meetings") return { label: "Meetings", icon: <IconPresentation size={15} /> };
+  if (pathname === "/meetings/series") return { label: "Meeting series", icon: <IconPresentation size={15} /> };
   if (pathname === "/recordings") return { label: "Recordings", icon: <IconPlay size={15} /> };
   if (pathname === "/approvals") return { label: "Approvals", icon: <IconUserCheck size={15} /> };
   if (pathname === "/analytics") return { label: "Analytics", icon: <IconAnalytics size={15} /> };
@@ -664,8 +665,8 @@ function Shell({ children }: { children: React.ReactNode }) {
           {item("/tasks", "Tasks", <IconTasks size={18} />, pathname === "/tasks" || pathname.startsWith("/tasks/"), undefined, ["/api/tasks?scope=open", "/api/apps", "/api/users"])}
           {item("/apps", "Apps", <IconApps size={18} />, pathname === "/apps" || pathname.startsWith("/apps/"), undefined, ["/api/apps"])}
           {item("/releases", "Releases", <IconRocket size={18} />, pathname === "/releases", undefined, ["/api/releases", "/api/apps"])}
-          {isAdmin && item("/meetings", "Meetings", <IconPresentation size={18} />, pathname === "/meetings" || pathname.startsWith("/meetings/"), undefined, ["/api/meetings"])}
-          {item("/recordings", "Recordings", <IconPlay size={18} />, pathname === "/recordings", undefined, ["/api/recordings"])}
+          {(isAdmin || (me?.series_ids?.length ?? 0) > 0) && item("/meetings", "Meetings", <IconPresentation size={18} />, pathname === "/meetings" || pathname.startsWith("/meetings/"), undefined, ["/api/meetings"])}
+          {(isAdmin || (me?.series_ids?.length ?? 0) > 0) && item("/recordings", "Recordings", <IconPlay size={18} />, pathname === "/recordings", undefined, ["/api/recordings"])}
           {isAdmin && item("/approvals", "Approvals", <IconUserCheck size={18} />, pathname === "/approvals", countBadge(approvals), ["/api/tasks?scope=approvals"])}
           {item("/analytics", "Analytics", <IconAnalytics size={18} />, pathname === "/analytics", undefined, [])}
         </div>

@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/activity";
 import { cleanLine, isUniqueViolation, parseUuidList } from "@/lib/validate";
 import { pickDistinctColor, SERIES_COLORS } from "@/lib/colors";
 import { SERIES_SELECT, SERIES_SELECT_LEGACY, selectSeries, shapeSeries, SERIES_NAME_MAX } from "@/lib/meetings";
+import { memberSeriesIds } from "@/lib/series-access";
 import type { MeetingSeries } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +17,14 @@ export async function GET() {
   if (u instanceof NextResponse) return u;
   const sb = getSupabase();
   if (u.role !== "admin") {
-    // Members only need the names, to attach a task to a series from the
-    // task form; meetings themselves stay with admins.
-    const { data, error } = await sb.from("meeting_series").select("id, name, color").order("created_at");
+    // Members get every series by name (to attach a task to one from the task form) and the full
+    // shape of the series they take part in.
+    const mine = new Set(await memberSeriesIds(u.uid));
+    const { data, error } = await selectSeries<Record<string, unknown>[] | null>((sel) => sb.from("meeting_series").select(sel).order("created_at"));
     if (error) return serverError(error);
-    return NextResponse.json({ series: (data || []).map((r) => ({ id: r.id, name: r.name, color: r.color, app_ids: [], include_general: true, app_order: [] })) });
+    return NextResponse.json({
+      series: (data || []).map((r) => (mine.has(r.id as string) ? { ...shapeSeries(r), member: true } : { id: r.id, name: r.name, color: r.color, app_ids: [], include_general: true, app_order: [] })),
+    });
   }
   const [series, meetings] = await Promise.all([
     selectSeries<Record<string, unknown>[] | null>((sel) => sb.from("meeting_series").select(sel).order("created_at")),
@@ -28,8 +32,10 @@ export async function GET() {
   ]);
   if (series.error) return serverError(series.error);
   if (meetings.error) return serverError(meetings.error);
-  const out: MeetingSeries[] = (series.data || []).map((r) => ({ ...shapeSeries(r as Record<string, unknown>), meeting_count: 0, last_held_at: null, open_meeting_id: null }));
+  const out: MeetingSeries[] = (series.data || []).map((r) => ({ ...shapeSeries(r as Record<string, unknown>), member_ids: [], meeting_count: 0, last_held_at: null, open_meeting_id: null }));
   const byId = new Map(out.map((s) => [s.id, s]));
+  const { data: members } = await sb.from("meeting_series_members").select("series_id, user_id");
+  for (const row of members || []) byId.get(row.series_id as string)?.member_ids?.push(row.user_id as string);
   for (const m of meetings.data || []) {
     const s = m.series_id ? byId.get(m.series_id as string) : undefined;
     if (!s) continue;
@@ -53,16 +59,23 @@ export async function POST(req: NextRequest) {
   const include_general = b.include_general === undefined ? true : b.include_general === true;
   const app_order = b.app_order === undefined ? [] : parseUuidList(b.app_order, 60);
   if (app_order === null) return fail("Invalid app order");
+  const member_ids = b.member_ids === undefined ? [] : parseUuidList(b.member_ids, 100);
+  if (member_ids === null) return fail("Invalid people list");
+  const auto_close = b.auto_close === undefined ? true : b.auto_close === true;
   const sb = getSupabase();
   const { data: existing } = await sb.from("meeting_series").select("color");
   const color = pickDistinctColor((existing || []).map((r) => r.color as string), SERIES_COLORS);
-  let { data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, app_order, created_by: u.uid }).select(SERIES_SELECT).single();
+  let { data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, app_order, auto_close, created_by: u.uid }).select(SERIES_SELECT).single();
   if (error && EXPECTED_EMBED_MISS.has((error as { code?: string }).code ?? "")) {
     // A database without 013: create it without the order column.
     ({ data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, created_by: u.uid }).select(SERIES_SELECT_LEGACY).single());
   }
   if (error) return isUniqueViolation(error) ? fail("A series with that name already exists", 409) : serverError(error);
   const s = shapeSeries(data as Record<string, unknown>);
+  if (member_ids.length) {
+    const { error: mErr } = await sb.from("meeting_series_members").insert(member_ids.map((user_id) => ({ series_id: s.id, user_id, added_by: u.uid })));
+    if (mErr) console.error("[series] members not saved:", mErr);
+  }
   after(() => logActivity({ action: "meeting.series.create", entityType: "meeting_series", entityId: s.id, summary: `Created meeting series “${s.name}”` }));
-  return NextResponse.json({ series: s });
+  return NextResponse.json({ series: { ...s, member_ids } });
 }

@@ -5,7 +5,7 @@ import { fail, serverError, readJsonObject } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid, parseNumber } from "@/lib/validate";
 import { uploadStatus, uploadChunk, DriveError } from "@/lib/google-drive";
-import { loadRecording, canManage, publicRecording } from "@/lib/recordings";
+import { loadRecording, canUpload, publicRecording } from "@/lib/recordings";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   if (!isUuid(id)) return fail("Recording not found", 404);
   const rec = await loadRecording(id);
-  if (!rec || !canManage(u, rec)) return fail("Recording not found", 404);
+  if (!rec || !canUpload(u, rec)) return fail("Recording not found", 404);
   if (rec.status === "ready") return NextResponse.json({ done: true, recording: publicRecording(rec) });
   if (rec.status !== "uploading" || !rec.upload_uri) return fail("This recording can't be recovered", 410);
   const b = await readJsonObject(req).catch(() => ({}) as Record<string, unknown>);

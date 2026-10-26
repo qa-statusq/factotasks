@@ -1,3 +1,4 @@
+import { memberSeriesIds } from "@/lib/series-access";
 import { NextRequest, NextResponse, after } from "next/server";
 import { invalidateAuthCache, type SessionUser } from "@/lib/auth";
 import { passwordChangeRequired, resolveUser } from "@/lib/guard";
@@ -60,7 +61,8 @@ export async function GET() {
     }
   });
 
-  return NextResponse.json({ user: publicMe(u) });
+  const series_ids = u.role === "admin" ? [] : await memberSeriesIds(u.uid);
+  return NextResponse.json({ user: { ...publicMe(u), series_ids } });
 }
 
 /**

@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid } from "@/lib/validate";
 import { renameFile, trashFile, DriveError } from "@/lib/google-drive";
 import { loadRecording, loadShares, canManage, publicRecording, recordingFileName } from "@/lib/recordings";
+import { canAccessSeries } from "@/lib/series-access";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   if (!isUuid(id)) return fail("Recording not found", 404);
   const rec = await loadRecording(id);
-  if (!rec) return fail("Recording not found", 404);
+  if (!rec || !(await canAccessSeries(u, rec.meeting?.series?.id))) return fail("Recording not found", 404);
   const shares = canManage(u, rec) ? await loadShares(id) : [];
   return NextResponse.json({ recording: { ...publicRecording(rec), shares }, can_manage: canManage(u, rec) });
 }

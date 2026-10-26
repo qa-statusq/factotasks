@@ -43,9 +43,11 @@ export interface RecorderState {
   blob: Blob | null;
   /** A word on how it ended, e.g. after a reload. */
   note: string | null;
+  /** When Stop was pressed (ms since page load) — the saving bar paces itself from it. */
+  finishStartedAt: number;
 }
 
-const IDLE: RecorderState = { meetingId: null, title: "", mode: "screen", phase: "idle", seconds: 0, recordedBytes: 0, sentBytes: 0, progress: 0, finishProgress: 0, error: null, saved: null, blob: null, note: null };
+const IDLE: RecorderState = { meetingId: null, title: "", mode: "screen", phase: "idle", seconds: 0, recordedBytes: 0, sentBytes: 0, progress: 0, finishProgress: 0, error: null, saved: null, blob: null, note: null, finishStartedAt: 0 };
 const PENDING_KEY = "ft_rec_pending";
 const VIDEO_MIMES = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
 const AUDIO_MIMES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
@@ -336,7 +338,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     // failure is already on screen and must not turn into an endless "Saving…".
     if (failed.current) return;
     if (!finishBase.current) finishBase.current = offset.current;
-    patch({ phase: "finishing", finishProgress: 0 });
+    patch({ phase: "finishing", finishProgress: 0, finishStartedAt: performance.now() });
     void pump();
   }, [patch, pump, releaseMedia]);
 
@@ -345,7 +347,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     if (!r) return;
     stopped.current = true;
     finishBase.current = offset.current;
-    patch({ phase: "finishing", finishProgress: 0 });
+    patch({ phase: "finishing", finishProgress: 0, finishStartedAt: performance.now() });
     if (r.state !== "inactive") r.stop(); // onstop → finish()
     else finish();
   }, [patch, finish]);
@@ -466,7 +468,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     if (!blob || !m) return;
     failed.current = false;
     finishBase.current = 0;
-    patch({ phase: "finishing", error: null, progress: 0, finishProgress: 0, sentBytes: 0, recordedBytes: blob.size });
+    patch({ phase: "finishing", error: null, progress: 0, finishProgress: 0, finishStartedAt: performance.now(), sentBytes: 0, recordedBytes: blob.size });
     const started = await postJson<{ recording?: Recording; error?: string }>(`/api/meetings/${m.id}/recordings`, { mime: blob.type || mime.current, size_bytes: blob.size, duration_sec: state.seconds });
     if (!started.ok || !started.data?.recording) {
       patch({ phase: "error", error: started.data?.error || "Couldn't start saving the recording" });

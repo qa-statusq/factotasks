@@ -266,6 +266,10 @@ export interface MeetingSeries {
   include_general: boolean;
   /** Presentation order of apps (ids); unlisted apps follow alphabetically. */
   app_order?: string[];
+  /** (021) Meetings of the series close by themselves after their day. */
+  auto_close?: boolean;
+  /** (021) Team members who take part (admins only see this). */
+  member_ids?: string[];
   created_at?: string;
   /** Rollups from the list endpoint. */
   meeting_count?: number;
@@ -285,6 +289,8 @@ export interface Meeting {
   note_count?: number;
   series_id?: string | null;
   series?: { id: string; name: string; color: string } | null;
+  /** (021) null = follow the series' auto_close. */
+  auto_close?: boolean | null;
   /** Scope: empty = every app. */
   app_ids?: string[];
   include_general?: boolean;
@@ -373,4 +379,6 @@ export interface Me {
   color: string;
   /** Small UI preferences, per person (see lib/use-pref). */
   prefs?: Record<string, string | number | boolean>;
+  /** (021) Meeting series this person takes part in (members); admins see every series anyway. */
+  series_ids?: string[];
 }

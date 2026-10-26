@@ -18,3 +18,16 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
   if (loading || !isAdmin) return null;
   return <>{children}</>;
 }
+
+/** Meetings and recordings: admins, and members who take part in at least one series. */
+export function MeetingsGate({ children }: { children: React.ReactNode }) {
+  const { me, isAdmin, loading, error, refresh } = useSession();
+  const router = useRouter();
+  const allowed = isAdmin || (me?.series_ids?.length ?? 0) > 0;
+  useEffect(() => {
+    if (!loading && me && !allowed) router.replace("/");
+  }, [loading, me, allowed, router]);
+  if (error) return <LoadError title="Couldn't check who you are" onRetry={refresh} />;
+  if (loading || !allowed) return null;
+  return <>{children}</>;
+}

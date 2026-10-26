@@ -6,17 +6,18 @@ import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { loadMeeting } from "@/lib/meetings";
 import { taskRef } from "@/lib/domain";
+import { canAccessMeeting } from "@/lib/series-access";
 
 export const dynamic = "force-dynamic";
 
 async function guard(params: Promise<{ id: string }>, req: NextRequest) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return { res: u };
-  if (u.role !== "admin") return { res: NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 }) };
   const { id } = await params;
   if (!isUuid(id)) return { res: fail("Meeting not found", 404) };
   const m = await loadMeeting(id);
   if (!m) return { res: fail("Meeting not found", 404) };
+  if (!(await canAccessMeeting(u, m))) return { res: NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 }) };
   if (m.status === "finalized" && u.role !== "admin") return { res: fail("This meeting is closed", 403) };
   const b = await readJsonObject(req);
   if (!isUuid(b.task_id)) return { res: fail("Pick a task") };
@@ -35,10 +36,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   return ok();
 }
 
-/** Unpin. Body: { task_id } */
+/** Unpin (admin). Body: { task_id } */
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const g = await guard(params, req);
   if ("res" in g) return g.res;
+  if (g.u.role !== "admin") return fail("Only an admin can remove a task from a meeting", 403);
   const { error } = await getSupabase().from("meeting_tasks").delete().eq("meeting_id", g.m.id).eq("task_id", g.t.id);
   if (error) return serverError(error);
   after(() => logActivity({ action: "meeting.unpin", entityType: "meeting", entityId: g.m.id, summary: `Removed ${taskRef(g.t.number)} from “${g.m.title}”` }));

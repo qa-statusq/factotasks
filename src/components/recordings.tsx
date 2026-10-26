@@ -20,7 +20,7 @@ import type { Recording, RecordingShare } from "@/lib/types";
 
 /** The recordings of one meeting (sidebar card) or of every meeting (the Recordings screen). */
 export function RecordingList({ recordings, cacheKey, showMeeting, emptyText }: { recordings: Recording[]; cacheKey: string; showMeeting?: boolean; emptyText?: string }) {
-  const { me, isAdmin } = useSession();
+  const { isAdmin } = useSession();
   const [playing, setPlaying] = useState<Recording | null>(null);
   const [sharing, setSharing] = useState<Recording | null>(null);
   const [gone, setGone] = useState<Set<string>>(new Set());
@@ -30,7 +30,7 @@ export function RecordingList({ recordings, cacheKey, showMeeting, emptyText }: 
     <>
       <ul className="flex flex-col divide-y divide-line/70">
         {shown.map((r) => (
-          <RecordingRow key={r.id} r={r} cacheKey={cacheKey} showMeeting={showMeeting} canManage={isAdmin || r.recorder?.id === me?.id} onPlay={() => setPlaying(r)} onShare={() => setSharing(r)} onGone={(back) => setGone((prev) => { const n = new Set(prev); if (back) n.delete(r.id); else n.add(r.id); return n; })} />
+          <RecordingRow key={r.id} r={r} cacheKey={cacheKey} showMeeting={showMeeting} canManage={isAdmin} onPlay={() => setPlaying(r)} onShare={() => setSharing(r)} onGone={(back) => setGone((prev) => { const n = new Set(prev); if (back) n.delete(r.id); else n.add(r.id); return n; })} />
         ))}
       </ul>
       {playing && <PlayerSheet r={playing} onClose={() => setPlaying(null)} />}
@@ -111,9 +111,11 @@ function RecordingRow({ r, cacheKey, showMeeting, canManage, onPlay, onShare, on
         </div>
         {ready && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <a href={`/api/recordings/${r.id}/stream?download=1`} className={buttonClass("secondary", "sm", "h-7 px-2 text-[12px]")} download={r.name}>
-              <IconDownload size={13} /> Download
-            </a>
+            {canManage && (
+              <a href={`/api/recordings/${r.id}/stream?download=1`} className={buttonClass("secondary", "sm", "h-7 px-2 text-[12px]")} download={r.name}>
+                <IconDownload size={13} /> Download
+              </a>
+            )}
             {canManage && (
               <>
                 <Button variant="secondary" size="sm" onClick={onShare} className="h-7 px-2 text-[12px]">
@@ -145,13 +147,16 @@ export const isAudioRecording = (r: Pick<Recording, "mime">) => r.mime.startsWit
 
 /** Inline player — the file streams through the panel, no Google sign-in. */
 export function PlayerSheet({ r, onClose }: { r: Recording; onClose: () => void }) {
+  const { isAdmin } = useSession();
   return (
     <Sheet title={r.meeting ? r.meeting.title : recordingLabel(r)} description={`${recordingLabel(r)} · ${fmtDuration(r.duration_sec)} · ${fmtBytes(r.size_bytes)}`} onClose={onClose} wide
       footer={
         <div className="flex items-center justify-end gap-2">
-          <a href={`/api/recordings/${r.id}/stream?download=1`} className={buttonClass("secondary", "sm")} download={r.name}>
-            <IconDownload size={14} /> Download
-          </a>
+          {isAdmin && (
+            <a href={`/api/recordings/${r.id}/stream?download=1`} className={buttonClass("secondary", "sm")} download={r.name}>
+              <IconDownload size={14} /> Download
+            </a>
+          )}
           <Button size="sm" onClick={onClose}>Close</Button>
         </div>
       }

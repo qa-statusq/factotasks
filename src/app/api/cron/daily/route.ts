@@ -5,6 +5,7 @@ import { purgeOldActivity, logActivity } from "@/lib/activity";
 import { notifyUsers, purgeOldNotifications } from "@/lib/notify";
 import { istToday } from "@/lib/ist";
 import { taskRef } from "@/lib/domain";
+import { closeOverdueMeetings } from "@/lib/series-access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -24,6 +25,8 @@ export async function GET(req: NextRequest) {
   }
   const sb = getSupabase();
   const today = istToday();
+  const closedMeetings = await closeOverdueMeetings(true);
+  void closedMeetings;
   const tomorrow = new Date(Date.parse(today) + 86_400_000).toISOString().slice(0, 10);
 
   // Open tasks due tomorrow or already overdue, with their assignees.

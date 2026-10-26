@@ -14,7 +14,7 @@ import { usePref } from "@/lib/use-pref";
 import { istTime } from "@/lib/time";
 import { RelTime } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
-import { NewMeetingSheet, ManageSeriesSheet, ScopeLabel, SeriesBadge, MeetingStatusBadge } from "@/components/meeting-series";
+import { NewMeetingSheet, ScopeLabel, SeriesBadge, MeetingStatusBadge } from "@/components/meeting-series";
 import { RecordingBadge } from "@/components/recording-controls";
 import { useRecorder } from "@/lib/use-recorder";
 import { IconPresentation, IconPlus, IconMaximize, IconSettings, IconSearch, IconX, IconCalendar, IconMessage } from "@/components/ui/icons";
@@ -28,7 +28,7 @@ export default function MeetingsPage() {
   const { data: sd } = useCachedFetch<{ series: MeetingSeries[] }>("/api/meeting-series");
   const { data: ad } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
   const [creating, setCreating] = useState(false);
-  const [managing, setManaging] = useState(false);
+
   const [filterPref, setFilter] = usePref<string>("meetings.filter", "all");
   const [q, setQ] = useState("");
   const [range, setRange] = useState<DateRange | null>(null);
@@ -61,9 +61,9 @@ export default function MeetingsPage() {
         actions={
           isAdmin ? (
             <div className="flex items-center gap-2">
-              <Button variant="secondary" onClick={() => setManaging(true)} title="Manage series">
+              <Link href="/meetings/series" className={buttonClass("secondary")} title="Series: scope, order, people, closing">
                 <IconSettings size={15} /> Series
-              </Button>
+              </Link>
               <Button onClick={() => setCreating(true)}>
                 <IconPlus size={16} /> New meeting
               </Button>
@@ -118,7 +118,7 @@ export default function MeetingsPage() {
       )}
       {(filter !== "all" || narrowed) && shown.length > 0 && <p className="text-[12px] text-ink-subtle">Showing {shown.length} of {meetings.length} meetings, newest first.</p>}
       {creating && <NewMeetingSheet onClose={() => setCreating(false)} defaultSeriesId={filter === "all" ? null : filter} />}
-      {managing && <ManageSeriesSheet onClose={() => setManaging(false)} />}
+
     </div>
   );
 }
