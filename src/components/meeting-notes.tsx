@@ -16,6 +16,7 @@ import { useSession } from "@/components/providers/session-provider";
 import { mutate } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
 import { istTime } from "@/lib/time";
+import { scrollIntoViewNearest } from "@/lib/compat";
 import { RelTime } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { LIMITS, NOTE_KINDS, NOTE_KIND_META, taskRef, type NoteKind } from "@/lib/domain";
@@ -46,8 +47,8 @@ export function NoteComposer({
     if (!task) return;
     const el = areaRef.current;
     if (!el) return;
-    el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    el.focus();
+    scrollIntoViewNearest(el);
+    el.focus({ preventScroll: true });
   }, [task]);
   const { toast } = useToast();
   const [kind, setKind] = useState<NoteKind>(defaultKind);

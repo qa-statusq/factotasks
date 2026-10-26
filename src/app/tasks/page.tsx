@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Segmented } from "@/components/ui/segmented";
@@ -71,7 +71,6 @@ export default function TasksPage() {
 }
 
 function TasksScreen() {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { me, isAdmin } = useSession();
@@ -97,13 +96,19 @@ function TasksScreen() {
     (patch: Filters) => {
       const next: Filters = { ...filters, ...patch };
       for (const k of KEYS) if (!next[k]) delete next[k];
-      router.replace(`${pathname}${toQuery(next)}`, { scroll: false });
+      // The address is client state: replaceState updates useSearchParams at once, with no server round trip.
+      window.history.replaceState(null, "", `${pathname}${toQuery(next)}`);
     },
-    [filters, pathname, router]
+    [filters, pathname]
   );
 
   const [q, setQ] = useState(filters.q || "");
-  useOnChange(filters.q || "", () => setQ(filters.q || ""));
+  const searchRef = useRef<HTMLInputElement>(null);
+  // The address follows the box, never the other way round while the person is typing in it.
+  useOnChange(filters.q || "", () => {
+    if (typeof document !== "undefined" && document.activeElement === searchRef.current) return;
+    setQ(filters.q || "");
+  });
   const setRef = useLatest(set);
   useEffect(() => {
     if ((filters.q || "") === q.trim()) return;
@@ -126,6 +131,11 @@ function TasksScreen() {
     return [...first, ...more.tasks.filter((t) => !seen.has(t.id))];
   }, [data, more, url]);
   const hasMore = more && more.url === url ? more.hasMore : !!data?.hasMore;
+  // While a new filter/search loads, the previous list stays on screen dimmed: no skeleton flash, no page collapse.
+  const [lastTasks, setLastTasks] = useState<TaskCard[]>([]);
+  if (data && lastTasks !== tasks) setLastTasks(tasks);
+  const stale = loading && lastTasks.length > 0;
+  const shownTasks = loading ? lastTasks : tasks;
 
   async function loadMore() {
     if (loadingMore || !data) return;
@@ -200,7 +210,7 @@ function TasksScreen() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
           <IconSearch size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search or T-12…" className={cn(controlClass, "h-9 pl-8 pr-8")} aria-label="Search tasks" />
+          <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search or T-12…" className={cn(controlClass, "h-9 pl-8 pr-8")} aria-label="Search tasks" />
           {q && (
             <button type="button" onClick={() => setQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-ink-subtle hover:text-ink" aria-label="Clear search">
               <IconX size={14} />
@@ -263,18 +273,18 @@ function TasksScreen() {
         </div>
       )}
 
-      {loading ? (
+      {loading && !stale ? (
         <ListSkeleton rows={8} />
       ) : error && !data ? (
         <LoadError title="Couldn't load tasks" onRetry={refresh} />
       ) : grouped ? (
         <>
-          <TaskList tasks={tasks} groupBy="app" appOrder={appOrder} empty={scope === "mine" ? "Nothing assigned to you" : q ? `No tasks match “${q}”` : "No tasks match these filters"} />
+          <TaskList tasks={shownTasks} groupBy="app" appOrder={appOrder} className={cn(stale && "opacity-60 pointer-events-none")} empty={scope === "mine" ? "Nothing assigned to you" : q ? `No tasks match “${q}”` : "No tasks match these filters"} />
           {hasMore && <LoadMore onClick={loadMore} busy={loadingMore} />}
         </>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface">
-          <TaskList tasks={tasks} empty={scope === "mine" ? "Nothing assigned to you" : q ? `No tasks match “${q}”` : "No tasks match these filters"} />
+          <TaskList tasks={shownTasks} className={cn(stale && "opacity-60 pointer-events-none")} empty={scope === "mine" ? "Nothing assigned to you" : q ? `No tasks match “${q}”` : "No tasks match these filters"} />
           {hasMore && <LoadMore onClick={loadMore} busy={loadingMore} bordered />}
         </div>
       )}

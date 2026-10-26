@@ -208,6 +208,12 @@ assert(packDev.people.length === 0 && packDev.approvals.length === 0 && packDev.
 const ids = (await db.query("select meeting_task_ids($1) as id", [m2.id])).rows.map((r) => r.id);
 assert(ids.includes(t1.id) && ids.includes(t2.id), "meeting_task_ids: the agenda's ids without cards (023)");
 assert((await json("select cron_lease('t', 60)")) === true && (await json("select cron_lease('t', 60)")) === false, "cron_lease: one run at a time (023)");
+await db.query("update users set prefs = '{}'::jsonb where id = $1", [dev.id]);
+await db.query("select prefs_merge($1, '{\"a\":1}'::jsonb)", [dev.id]);
+await db.query("select prefs_merge($1, '{\"b\":\"x\"}'::jsonb)", [dev.id]);
+assert(JSON.stringify(await json("select prefs from users where id = $1", [dev.id])) === JSON.stringify({ a: 1, b: "x" }), "prefs_merge composes keys (023)");
+await db.query("select prefs_merge($1, '{\"a\":null}'::jsonb)", [dev.id]);
+assert(JSON.stringify(await json("select prefs from users where id = $1", [dev.id])) === JSON.stringify({ b: "x" }), "prefs_merge removes a null key (023)");
 assert(pack.releases.length === 1 && pack.releases[0].tasks.length === 1 && pack.releases[0].tasks[0].number === 1, "meeting_pack: upcoming release listed with its tasks");
 // As of last week's (finalized) meeting only T-2 existed, it was pending and
 // had been through no earlier meeting; T-1 was created this week.

@@ -16,6 +16,9 @@ const POLL_MS = 15_000;
 // The last counter value this tab has reconciled with. Module-level so a
 // write made from this tab can move it without waiting for the next poll.
 let last: number | null = null;
+// When the counter was last seen unchanged / reconciled: a tick that finds it moved
+// refetches everything fetched before this moment, however recent.
+let lastTickAt = 0;
 let syncTimer = 0;
 
 /**
@@ -30,7 +33,10 @@ export function syncRevAfterOwnWrite() {
   syncTimer = window.setTimeout(async () => {
     try {
       const r = await fetch("/api/ping", { signal: timeoutSignal(8_000), cache: "no-store" });
-      if (r.ok) last = ((await r.json()) as { rev: number }).rev;
+      if (r.ok) {
+        last = ((await r.json()) as { rev: number }).rev;
+        lastTickAt = Date.now();
+      }
     } catch {
       /* the regular poll will reconcile */
     }
@@ -50,7 +56,9 @@ export function useLiveUpdates(enabled = true) {
           const r = await fetch("/api/ping", { signal: timeoutSignal(8_000), cache: "no-store" });
           if (r.ok) {
             const { rev } = (await r.json()) as { rev: number };
-            if (last !== null && rev !== last) revalidateAllMounted();
+            const since = lastTickAt;
+            lastTickAt = Date.now();
+            if (last !== null && rev !== last) revalidateAllMounted(since);
             last = rev;
           }
         } catch {

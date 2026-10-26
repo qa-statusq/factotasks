@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText } from "@/lib/meeting-agenda";
-import { istTime } from "@/lib/time";
+import { istTime, istDate, fmtYmd } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRef } from "@/lib/domain";
 import { dueInfo } from "@/components/task-list";
@@ -22,8 +22,8 @@ import type { MeetingNote, MeetingPack, TaskCard } from "@/lib/types";
  */
 type Pack = MeetingPack & { workspace_name: string };
 const fmtWhen = (iso: string) => istTime(iso).replace(/:\d\d (am|pm) IST$/, " $1");
-const fmtDay = (iso: string) => istTime(iso).replace(/, \d\d:\d\d(:\d\d)? (am|pm) IST$/, "");
-const ymd = (s: string) => new Date(s + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const fmtDay = istDate;
+const ymd = (s: string) => fmtYmd(s, { year: true });
 
 export default function PrintPage() {
   return (

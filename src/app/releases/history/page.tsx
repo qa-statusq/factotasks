@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/field";
@@ -16,7 +16,9 @@ import { ReleaseViewSheet, prettyDate } from "@/components/release-ui";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useNameLabels } from "@/lib/use-name-labels";
 import { usePref } from "@/lib/use-pref";
-import { istTime } from "@/lib/time";
+import { istTime, fmtYmd } from "@/lib/time";
+import { istDayKey } from "@/lib/ist";
+import { releaseDay } from "@/lib/release-day";
 import { cn } from "@/lib/cn";
 import { PLATFORM_META, RELEASE_STATUSES, RELEASE_STATUS_META, taskRef, type ReleaseStatus } from "@/lib/domain";
 import { IconRocket, IconCalendar, IconCheck, IconChevronDown, IconEdit, IconUserCheck, IconX, IconSearch } from "@/components/ui/icons";
@@ -25,8 +27,7 @@ import type { ReleaseEvent } from "@/app/api/releases/history/route";
 
 type Group = "app" | "month" | "date";
 
-const dayOf = (r: Release) => (r.released_at ? new Date(Date.parse(r.released_at) + 5.5 * 3600_000).toISOString().slice(0, 10) : r.planned_date ?? new Date(Date.parse(r.created_at) + 5.5 * 3600_000).toISOString().slice(0, 10));
-const monthLabel = (ym: string) => new Date(ym + "-01T00:00:00Z").toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
+const monthLabel = (ym: string) => fmtYmd(ym, { month: "long", year: true });
 const fmtWhen = (iso: string) => istTime(iso).replace(/:\d\d (am|pm)/, " $1");
 
 export default function ReleaseHistoryPage() {
@@ -38,7 +39,6 @@ export default function ReleaseHistoryPage() {
 }
 
 function HistoryScreen() {
-  const router = useRouter();
   const sp = useSearchParams();
   const app = sp.get("app") || "";
   const platform = sp.get("platform") || "";
@@ -53,7 +53,7 @@ function HistoryScreen() {
       if (v) next.set(k, v);
       else next.delete(k);
     }
-    router.replace(`/releases/history${next.toString() ? `?${next}` : ""}`);
+    window.history.replaceState(null, "", `/releases/history${next.toString() ? `?${next}` : ""}`);
   };
   const qs = new URLSearchParams({ ...(app ? { app } : {}), ...(platform ? { platform } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }).toString();
   const { data, loading, error, refresh } = useCachedFetch<{ releases: Release[]; events: ReleaseEvent[] }>(`/api/releases/history${qs ? `?${qs}` : ""}`);
@@ -81,11 +81,11 @@ function HistoryScreen() {
     [needle, status, eventsByRelease]
   );
   const groups = useMemo(() => {
-    const releases = [...(data?.releases ?? [])].filter(matches).sort((a, b) => dayOf(b).localeCompare(dayOf(a)) || b.created_at.localeCompare(a.created_at));
+    const releases = [...(data?.releases ?? [])].filter(matches).sort((a, b) => releaseDay(b).localeCompare(releaseDay(a)) || b.created_at.localeCompare(a.created_at));
     const m = new Map<string, { label: string; sub?: string; items: Release[]; app?: Release["app"] }>();
     for (const r of releases) {
-      const key = group === "app" ? r.app_id : group === "month" ? dayOf(r).slice(0, 7) : dayOf(r);
-      const g = m.get(key) ?? { label: group === "app" ? (r.app?.name ?? "App") : group === "month" ? monthLabel(dayOf(r).slice(0, 7)) : prettyDate(dayOf(r)), items: [], app: r.app };
+      const key = group === "app" ? r.app_id : group === "month" ? releaseDay(r).slice(0, 7) : releaseDay(r);
+      const g = m.get(key) ?? { label: group === "app" ? (r.app?.name ?? "App") : group === "month" ? monthLabel(releaseDay(r).slice(0, 7)) : prettyDate(releaseDay(r)), items: [], app: r.app };
       g.items.push(r);
       m.set(key, g);
     }
@@ -181,7 +181,7 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
   const label = useNameLabels();
   const plannedMoves = events.filter((e) => e.changes?.planned_date);
   const firstPlanned = plannedMoves.length ? (plannedMoves[0].changes!.planned_date.from as string | null) : null;
-  const releasedDay = r.released_at ? new Date(Date.parse(r.released_at) + 5.5 * 3600_000).toISOString().slice(0, 10) : null;
+  const releasedDay = r.released_at ? istDayKey(r.released_at) : null;
   const slipped = firstPlanned && r.planned_date && firstPlanned !== r.planned_date;
   const tasks = r.tasks ?? [];
   const shippedTasks = tasks.filter((t) => t.released_at).length;

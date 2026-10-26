@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { serverError, memberJson } from "@/lib/api";
-import { istToday } from "@/lib/ist";
+import { istToday, isYmd } from "@/lib/ist";
 
 export const dynamic = "force-dynamic";
 
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_DAYS = 400;
 
 function shiftDays(ymd: string, n: number): string {
@@ -25,7 +24,7 @@ export async function GET(req: NextRequest) {
   const today = istToday();
   let to = sp.get("to") || today;
   let from = sp.get("from") || shiftDays(today, -182);
-  if (!YMD.test(from) || !YMD.test(to) || Number.isNaN(Date.parse(from)) || Number.isNaN(Date.parse(to))) return NextResponse.json({ error: "Dates must be YYYY-MM-DD" }, { status: 400 });
+  if (!isYmd(from) || !isYmd(to)) return NextResponse.json({ error: "Dates must be YYYY-MM-DD" }, { status: 400 });
   if (from > to) [from, to] = [to, from];
   if (to > today) to = today;
   if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > MAX_DAYS) from = shiftDays(to, -MAX_DAYS);

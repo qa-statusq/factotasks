@@ -4,12 +4,12 @@ import { tabMemGet, tabMemRemove } from "@/lib/compat";
 
 import Link from "next/link";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { buildAgenda, notesByTask, deckRows, nameLabels, packPeople, ownerText, targetMatrix, SHARED_KEY, type AgendaGroup } from "@/lib/meeting-agenda";
-import { istTime } from "@/lib/time";
+import { istTime, istDate, fmtYmd } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRef, type TaskStatus, type ReleaseStatus } from "@/lib/domain";
 import { dueInfo } from "@/components/task-list";
@@ -36,7 +36,7 @@ import type { MeetingNote, MeetingPack, TaskCard, UserBrief } from "@/lib/types"
 type Pack = MeetingPack & { workspace_name: string };
 type Release = MeetingPack["releases"][number];
 
-const fmtDay = (iso: string) => istTime(iso).replace(/, \d\d:\d\d(:\d\d)? (am|pm) IST$/, "");
+const fmtDay = istDate;
 /** Cover title as lines: the name, then the date on its own line (no separator dot). */
 function titleParts(title: string, heldAt: string): string[] {
   const i = title.lastIndexOf(" · ");
@@ -45,7 +45,7 @@ function titleParts(title: string, heldAt: string): string[] {
   return title.includes(day) ? [title] : [title, day];
 }
 const fmtWhen = (iso: string) => istTime(iso).replace(/:\d\d (am|pm) IST$/, " $1");
-const ymdPretty = (ymd: string) => new Date(ymd + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+const ymdPretty = (ymd: string) => fmtYmd(ymd);
 const NOTES_SHOWN_PER_TASK = 3;
 
 /* Projector-safe status colours: solid fills, white type, no two alike. */
@@ -102,6 +102,33 @@ function activePanel(): HTMLElement | null {
   return el && el.scrollHeight > el.clientHeight + 2 ? el : null;
 }
 
+/** One slide, re-rendered only when its own inputs change — never on the deck's chrome fades or the recording clock. */
+const SlideSection = memo(function SlideSection({ slide, n, total, active }: { slide: Slide; n: number; total: number; active: boolean }) {
+  return (
+    <section className={cn("deck-slide absolute inset-0 flex flex-col transition-opacity duration-200", active ? "opacity-100" : "pointer-events-none opacity-0")} aria-hidden={!active} inert={!active ? true : undefined}>
+      {slide.render(n, total)}
+    </section>
+  );
+});
+
+/** The record / stop control in the title band: the only part of the deck that follows the recorder's clock. */
+function DeckRecordControls({ meetingId, meeting }: { meetingId: string; meeting: Pack["meeting"] }) {
+  const recorder = useRecorder();
+  const recPhase = recorder.state.phase;
+  const recording = recPhase === "recording";
+  if (!screenRecordingSupported() || !(recording || canRecordMeeting(meeting))) return null;
+  return recording ? (
+    <button type="button" onClick={recorder.stop} className="flex h-[52%] shrink-0 items-center gap-[0.6cqw] rounded-full bg-rose-500/20 pl-[1cqw] pr-[0.5cqw] text-[1.25cqw] font-semibold tabular-nums text-rose-100 ring-1 ring-inset ring-rose-300/40 hover:bg-rose-500/30" aria-label="Stop recording" title="Stop recording">
+      <span className="h-[0.8cqw] w-[0.8cqw] animate-pulse rounded-full bg-rose-400" aria-hidden /> {fmtClock(recorder.state.seconds)}
+      <span className="ml-[0.3cqw] flex h-[2cqw] w-[2cqw] items-center justify-center rounded-full bg-white/10"><span className="block h-[0.9cqw] w-[0.9cqw] rounded-[0.15cqw] bg-rose-300" aria-hidden /></span>
+    </button>
+  ) : (
+    <button type="button" onClick={() => recorder.start(meetingId, meeting.title, "screen")} disabled={recPhase === "starting" || recPhase === "finishing"} className="flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-rose-300 disabled:opacity-40" aria-label="Record" title="Record this meeting — screen and microphone, saved to the team's Shared Drive">
+      <IconCircleDot className="h-[58%] w-[58%]" />
+    </button>
+  );
+}
+
 function Deck() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -128,10 +155,6 @@ function Deck() {
 
   const slides = useMemo<Slide[]>(() => (data ? buildSlides(data) : []), [data]);
   const total = slides.length;
-  // Screen + mic recording, shared with the meeting page (it may have started there).
-  const recorder = useRecorder();
-  const recPhase = recorder.state.phase;
-  const recording = recPhase === "recording";
   const last = Math.max(0, total - 1);
   const index = Math.min(Math.max(0, rawIndex), last);
   const go = useCallback((n: number) => setIndex(Math.max(0, Math.min(last, n))), [last]);
@@ -283,9 +306,7 @@ function Deck() {
           </span>
         </div>
         {slides.map((s, i) => (
-          <section key={s.key} className={cn("deck-slide absolute inset-0 flex flex-col transition-opacity duration-200", i === index ? "opacity-100" : "pointer-events-none opacity-0")} aria-hidden={i !== index} inert={i !== index ? true : undefined}>
-            {s.render(i + 1, total)}
-          </section>
+          <SlideSection key={s.key} slide={s} n={i + 1} total={total} active={i === index} />
         ))}
         {/* Section strip in the title band: every section one tap away, never over the content. */}
         <nav className="deck-chrome absolute right-0 top-0 flex items-center justify-end" style={{ height: "9.6%", width: "70%", containerType: "inline-size" }} aria-label="Sections">
@@ -317,18 +338,7 @@ function Deck() {
               {index + 1} / {total}
             </span>
             <span className="mx-[0.5cqw] h-[48%] w-px shrink-0 bg-white/15" aria-hidden />
-            {screenRecordingSupported() &&
-              (recording || canRecordMeeting(data.meeting)) &&
-              (recording ? (
-                <button type="button" onClick={recorder.stop} className="flex h-[52%] shrink-0 items-center gap-[0.6cqw] rounded-full bg-rose-500/20 pl-[1cqw] pr-[0.5cqw] text-[1.25cqw] font-semibold tabular-nums text-rose-100 ring-1 ring-inset ring-rose-300/40 hover:bg-rose-500/30" aria-label="Stop recording" title="Stop recording">
-                  <span className="h-[0.8cqw] w-[0.8cqw] animate-pulse rounded-full bg-rose-400" aria-hidden /> {fmtClock(recorder.state.seconds)}
-                  <span className="ml-[0.3cqw] flex h-[2cqw] w-[2cqw] items-center justify-center rounded-full bg-white/10"><span className="block h-[0.9cqw] w-[0.9cqw] rounded-[0.15cqw] bg-rose-300" aria-hidden /></span>
-                </button>
-              ) : (
-                <button type="button" onClick={() => recorder.start(id, data.meeting.title, "screen")} disabled={recPhase === "starting" || recPhase === "finishing"} className="flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-rose-300 disabled:opacity-40" aria-label="Record" title="Record this meeting — screen and microphone, saved to the team's Shared Drive">
-                  <IconCircleDot className="h-[58%] w-[58%]" />
-                </button>
-              ))}
+            <DeckRecordControls meetingId={id} meeting={data.meeting} />
             <button type="button" onClick={() => setJumpOpen((o) => !o)} className={cn("flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-white", jumpOpen && "bg-white/15 text-white")} aria-label="Jump to a section" title="Jump to a section (a)">
               <IconApps className="h-[58%] w-[58%]" />
             </button>

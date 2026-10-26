@@ -4,8 +4,9 @@ import { getSupabase } from "@/lib/supabase";
 import { serverError, memberJson } from "@/lib/api";
 import { isUuid, oneOf, parseDate } from "@/lib/validate";
 import { RELEASE_SELECT_FULL, shapeRelease } from "@/lib/releases";
+import { releaseDay } from "@/lib/release-day";
+import { displayName } from "@/lib/name";
 import { visibleAppIds, NONE_ID } from "@/lib/visibility";
-import type { Release } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -43,9 +44,8 @@ export async function GET(req: NextRequest) {
   if (error) return serverError(error);
   const from = parseDate(sp.get("from"));
   const to = parseDate(sp.get("to"));
-  const dayOf = (r: Release) => (r.released_at ? new Date(Date.parse(r.released_at) + 5.5 * 3600_000).toISOString().slice(0, 10) : r.planned_date ?? new Date(Date.parse(r.created_at) + 5.5 * 3600_000).toISOString().slice(0, 10));
   const releases = ((data as unknown as Record<string, unknown>[]) || []).map(shapeRelease).filter((r) => {
-    const d = dayOf(r);
+    const d = releaseDay(r);
     return (!from || d >= from) && (!to || d <= to);
   });
 
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     // Who did it, by name. The address is the fallback for admins only.
     const actorIds = [...new Set((log || []).map((r) => r.user_id as string | null).filter((x): x is string => !!x))];
     const { data: people } = actorIds.length ? await sb.from("users").select("id, first_name, last_name").in("id", actorIds) : { data: [] as { id: string; first_name: string | null; last_name: string | null }[] };
-    const nameOf = new Map((people || []).map((p) => [p.id as string, [p.first_name, p.last_name].filter(Boolean).join(" ")]));
+    const nameOf = new Map((people || []).map((p) => [p.id as string, displayName(p.first_name as string | null, p.last_name as string | null)]));
     events = (log || []).map((r) => {
       const md = (r.metadata ?? null) as { changes?: Record<string, { from: unknown; to: unknown }>; closed?: number } | null;
       const name = (r.user_id && nameOf.get(r.user_id as string)) || (u.role === "admin" ? ((r.user_email as string) || "system").split("@")[0] : "Teammate");

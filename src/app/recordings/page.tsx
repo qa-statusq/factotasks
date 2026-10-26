@@ -12,12 +12,12 @@ import { useCachedFetch } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { usePref } from "@/lib/use-pref";
 import { istDayKey } from "@/lib/ist";
-import { istTime } from "@/lib/time";
+import { istDate } from "@/lib/time";
 import { fmtBytes, fmtDuration, recordingLabel } from "@/lib/recordings";
 import { IconPlay, IconSearch, IconPresentation } from "@/components/ui/icons";
 import type { Recording } from "@/lib/types";
 
-const fmtDay = (iso: string) => istTime(iso).replace(/, \d\d:\d\d(:\d\d)? (am|pm) IST$/, "");
+const fmtDay = istDate;
 
 /** Every recorded meeting, newest first, grouped by meeting — searchable and filterable by series, person and date. */
 export default function RecordingsPage() {

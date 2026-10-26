@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { fmtYmd } from "@/lib/time";
+import { anchorRect } from "@/lib/viewport";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { controlClass } from "@/components/ui/field";
@@ -32,7 +34,7 @@ export function daysBetween(a: string, b: string): number {
 export function prettyYmd(k: string, opts: { weekday?: boolean; year?: boolean } = {}): string {
   const p = parseYmd(k);
   if (!p) return "";
-  return new Date(Date.UTC(p.y, p.m - 1, p.d)).toLocaleDateString("en-IN", { ...(opts.weekday !== false ? { weekday: "short" } : {}), day: "numeric", month: "short", ...(opts.year !== false ? { year: "numeric" } : {}), timeZone: "UTC" });
+  return fmtYmd(k, { weekday: opts.weekday !== false, year: opts.year !== false });
 }
 /** Today in IST as YYYY-MM-DD (for min/max). */
 export const istTodayYmd = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
@@ -51,12 +53,22 @@ export function usePopover(open: boolean, close: () => void, anchorRef: React.Re
   const [pos, setPos] = useState<{ left: number; top: number; up: boolean } | null>(null);
   useEffect(() => {
     if (!open) return;
+    let raf = 0;
     const place = () => {
-      const r = anchorRef.current?.getBoundingClientRect();
+      const r = anchorRef.current ? anchorRect(anchorRef.current) : null;
       if (!r) return;
-      const up = window.innerHeight - r.bottom < height + 12 && r.top > height + 12;
-      const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
-      setPos({ left, top: up ? r.top - 6 : r.bottom + 6, up });
+      const up = r.vh - r.bottom < height + 12 && r.top > height + 12;
+      const left = Math.max(8, Math.min(r.left, r.vw - width - 8));
+      const top = up ? r.top - 6 : r.bottom + 6;
+      // Same spot → no state change → no re-render while the page scrolls under an open picker.
+      setPos((cur) => (cur && cur.left === left && cur.top === top && cur.up === up ? cur : { left, top, up }));
+    };
+    const placeSoon = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        place();
+      });
     };
     place();
     const onDoc = (e: MouseEvent) => {
@@ -72,17 +84,18 @@ export function usePopover(open: boolean, close: () => void, anchorRef: React.Re
     };
     const onScroll = (e: Event) => {
       if (popRef.current && e.target instanceof Node && popRef.current.contains(e.target)) return;
-      place();
+      placeSoon();
     };
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey, true);
     window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", place);
+    window.addEventListener("resize", placeSoon);
     return () => {
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey, true);
       window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", place);
+      window.removeEventListener("resize", placeSoon);
+      cancelAnimationFrame(raf);
     };
   }, [open, close, anchorRef, popRef, height, width]);
   return pos;
@@ -274,7 +287,7 @@ export function DateInput({ value, onChange, min, max, withTime, placeholder, cl
       {open &&
         pos &&
         createPortal(
-          <div ref={popRef} role="dialog" aria-label="Choose a date" className="fixed z-[320] rounded-xl border border-line bg-surface p-3 shadow-pop animate-fade-in" style={{ left: pos.left, top: pos.top, transform: pos.up ? "translateY(-100%)" : undefined }}>
+          <div ref={popRef} role="dialog" aria-label="Choose a date" className="fixed z-[200] rounded-xl border border-line bg-surface p-3 shadow-pop animate-fade-in" style={{ left: pos.left, top: pos.top, transform: pos.up ? "translateY(-100%)" : undefined }}>
             <MonthGrid view={view} onView={setView} selected={parsed ? ymd(parsed.y, parsed.m, parsed.d) : null} focusDay={focusDay} onFocusDay={setFocusDay} min={min} max={max} onPick={pickDay} />
             {withTime && <TimeRow h={parsed?.h ?? 10} min={parsed?.min ?? 0} onChange={setTime} />}
             <div className="mt-2.5 flex items-center justify-between border-t border-line/70 pt-2.5">

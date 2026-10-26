@@ -5,6 +5,7 @@ import { usePolicyMode, willRequestStatus } from "@/lib/use-policy";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
+import { anchorRect } from "@/lib/viewport";
 import { useToast } from "@/components/ui/toast";
 import { useSession } from "@/components/providers/session-provider";
 import { changeTaskStatus, statusToast } from "@/lib/task-actions";
@@ -32,10 +33,10 @@ export function StatusMenu({ task, size = "sm", className, canChange = true }: {
 
   useEffect(() => {
     if (!open) return;
-    const b = btnRef.current?.getBoundingClientRect();
+    const b = btnRef.current ? anchorRect(btnRef.current) : null;
     if (b) {
-      const up = window.innerHeight - b.bottom < 280 && b.top > 280;
-      setPos({ left: Math.min(b.left, window.innerWidth - 200), top: up ? b.top - 6 : b.bottom + 6, up });
+      const up = b.vh - b.bottom < 280 && b.top > 280;
+      setPos({ left: Math.min(b.left, b.vw - 200), top: up ? b.top - 6 : b.bottom + 6, up });
     }
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node;

@@ -56,7 +56,8 @@ function AppScreen() {
   const app = data?.app ?? null;
   const tabParam = searchParams.get("tab") as Tab | null;
   const tab: Tab = tabParam && ["tasks", "releases", "members", "settings"].includes(tabParam) && (tabParam !== "settings" || isAdmin) ? tabParam : "tasks";
-  const setTab = (t: Tab) => router.replace(`/apps/${id}${t === "tasks" ? "" : `?tab=${t}`}`, { scroll: false });
+  // Client state in the address: replaceState switches the tab at once, with no server round trip.
+  const setTab = (t: Tab) => window.history.replaceState(null, "", `/apps/${id}${t === "tasks" ? "" : `?tab=${t}`}`);
   const [editing, setEditing] = useState(false);
   useDocumentTitle(app ? `${app.name} · FactoTasks` : "App · FactoTasks");
 

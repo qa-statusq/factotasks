@@ -19,3 +19,13 @@ export function compactCount(n: number | null | undefined): string {
   if (Math.round(m) >= 1000) return "1B";
   return (m < 10 ? m.toFixed(1).replace(/\.0$/, "") : String(Math.round(m))) + "M";
 }
+
+/** "812 KB", "4.2 MB", "1.3 GB" — one byte formatter for attachments and recordings. */
+export function fmtBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+

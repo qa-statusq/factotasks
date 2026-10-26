@@ -3,6 +3,7 @@ import { getSupabase } from "@/lib/supabase";
 import { USER_BRIEF_COLS, embedded, embeddedUser } from "@/lib/users";
 import { fail } from "@/lib/api";
 import type { Recording, RecordingShare } from "@/lib/types";
+export { fmtBytes } from "./format";
 
 export const RECORDING_SELECT = `id, meeting_id, name, mime, size_bytes, duration_sec, status, drive_file_id, upload_uri, recorded_by, created_at, updated_at, recorder:users!meeting_recordings_recorded_by_fkey(${USER_BRIEF_COLS}), meeting:meetings(id, title, held_at, status, series:meeting_series(id, name, color))`;
 export const SHARE_SELECT = `id, recording_id, email, permission_id, message, created_at, sharer:users!recording_shares_shared_by_fkey(${USER_BRIEF_COLS})`;
@@ -91,14 +92,6 @@ export function canUpload(u: { uid: string; role: string }, r: RecordingRow): bo
 
 export function notConfigured(): NextResponse {
   return fail("Recording isn't set up on this server yet", 503);
-}
-
-/** Bytes → "412 MB". */
-export function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 /** Seconds → "00:12:34" (always hours, for the live recording clock). */

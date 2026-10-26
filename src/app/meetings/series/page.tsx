@@ -53,8 +53,8 @@ function SeriesSettings() {
   const selected = creating ? null : (list.find((s) => s.id === wanted) ?? list[0] ?? null);
   // The first series is the default pick; keep the address in step so a reload lands on the same one.
   useEffect(() => {
-    if (!creating && selected && wanted !== selected.id) router.replace(`/meetings/series?id=${selected.id}`, { scroll: false });
-  }, [creating, selected, wanted, router]);
+    if (!creating && selected && wanted !== selected.id) window.history.replaceState(null, "", `/meetings/series?id=${selected.id}`);
+  }, [creating, selected, wanted]);
 
   return (
     <div className="flex flex-col gap-5 animate-fade-in">

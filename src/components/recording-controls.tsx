@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Button, buttonClass } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { PlayerSheet } from "@/components/recordings";
@@ -10,6 +10,7 @@ import { useRecorder, screenRecordingSupported, audioRecordingSupported, type Re
 import { fmtBytes, fmtClock, fmtDuration, recordingLabel } from "@/lib/recordings";
 import { istDayKey } from "@/lib/ist";
 import { cn } from "@/lib/cn";
+import { useLatest } from "@/lib/use-latest";
 import { IconCircleDot, IconDownload, IconX, IconMic, IconVideo, IconChevronDown, IconPlay, IconCheck, IconPresentation } from "@/components/ui/icons";
 
 /** True on the meeting's day in India and any day after, while the meeting is still open. */
@@ -116,12 +117,13 @@ const SAVED_SHOWN_MS = 12_000;
 function useSavingBar(active: boolean, startedAt: number, uploadFraction: number, totalBytes: number): number {
   const [shown, setShown] = useState(0);
   const target = useRef(0);
+  // Live inputs are read through a ref: a progress event must feed the running loop, not restart it at 0.
+  const live = useLatest({ uploadFraction, totalBytes });
   useEffect(() => {
     if (!active) return;
     let raf = 0;
     let first = true;
     let last = performance.now();
-    const expectedMs = 2200 + (totalBytes / 30_000_000) * 1000; // ~2 s fixed + 30 MB/s of closing work
     const tick = () => {
       if (first) {
         first = false;
@@ -130,8 +132,9 @@ function useSavingBar(active: boolean, startedAt: number, uploadFraction: number
       }
       const now = performance.now();
       const elapsed = now - startedAt;
+      const expectedMs = 2200 + (live.current.totalBytes / 30_000_000) * 1000; // ~2 s fixed + 30 MB/s of closing work
       const paced = 1 - Math.exp(-elapsed / (expectedMs * 0.6));
-      target.current = Math.min(0.98, 0.6 * Math.min(1, uploadFraction) + 0.38 * paced);
+      target.current = Math.min(0.98, 0.6 * Math.min(1, live.current.uploadFraction) + 0.38 * paced);
       const dt = Math.min(100, now - last);
       last = now;
       setShown((cur) => (target.current > cur ? Math.min(target.current, cur + (target.current - cur) * Math.min(1, dt / 180)) : cur));
@@ -139,7 +142,7 @@ function useSavingBar(active: boolean, startedAt: number, uploadFraction: number
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [active, startedAt, uploadFraction, totalBytes]);
+  }, [active, startedAt, live]);
   return active ? shown : 0;
 }
 
@@ -162,6 +165,11 @@ export function RecorderOverlay() {
   const [player, setPlayer] = useState(false);
   const [hold, setHold] = useState(false);
   const bar = useSavingBar(phase === "finishing", state.finishStartedAt, state.finishProgress / 0.95, state.recordedBytes);
+  // The kept file's download link: one URL per file, revoked when the file goes (a blob can be hundreds of MB).
+  const blobUrl = useMemo(() => (state.blob ? URL.createObjectURL(state.blob) : null), [state.blob]);
+  useEffect(() => () => {
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+  }, [blobUrl]);
 
   // A recording that never started (no microphone, no screen, permission refused) is a passing message, not a card.
   const startFailure = phase === "error" && !state.blob;
@@ -186,7 +194,7 @@ export function RecorderOverlay() {
     if (presenting) return null;
     return (
       <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
-        <div role="status" aria-live="polite" className="pointer-events-auto flex h-10 max-w-full items-center gap-3 rounded-full border border-line bg-surface/95 pl-3.5 pr-1.5 text-[12.5px] text-ink shadow-[0_6px_24px_rgba(0,0,0,0.12)] backdrop-blur">
+        <div role="status" aria-live="polite" className="pointer-events-auto flex h-10 max-w-full items-center gap-3 rounded-full border border-line bg-surface pl-3.5 pr-1.5 text-[12.5px] text-ink shadow-[0_6px_24px_rgba(0,0,0,0.12)]">
           <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-rose-500" aria-hidden />
           <span className="shrink-0 font-semibold tabular-nums">{fmtClock(state.seconds)}</span>
           <span className="hidden h-4 w-px shrink-0 bg-line sm:block" aria-hidden />
@@ -278,7 +286,7 @@ export function RecorderOverlay() {
               {state.blob && (
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pl-[2.1rem]">
                   <Button size="sm" onClick={retry} className="h-7 px-2.5 text-[12px]">Try again</Button>
-                  <a href={URL.createObjectURL(state.blob)} download={`${state.title}.${state.mode === "audio" ? "weba" : "webm"}`} className={buttonClass("secondary", "sm", "h-7 px-2.5 text-[12px]")}>
+                  <a href={blobUrl ?? undefined} download={`${state.title}.${state.mode === "audio" ? "weba" : "webm"}`} className={buttonClass("secondary", "sm", "h-7 px-2.5 text-[12px]")}>
                     <IconDownload size={12} /> Download ({fmtBytes(state.blob.size)})
                   </a>
                 </div>

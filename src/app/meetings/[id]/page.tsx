@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -471,7 +471,12 @@ function GeneralMinutes({ pack, cacheKey, canEdit }: { pack: MeetingPack; cacheK
   const { toast } = useToast();
   const [text, setText] = useState(pack.meeting.notes ?? "");
   const [saving, setSaving] = useState(false);
-  useOnChange(pack.meeting.notes ?? "", () => setText(pack.meeting.notes ?? ""));
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  // Another admin's save arriving through the live poll must not replace a draft being typed here.
+  useOnChange(pack.meeting.notes ?? "", () => {
+    if (typeof document !== "undefined" && document.activeElement === areaRef.current) return;
+    setText(pack.meeting.notes ?? "");
+  });
   async function save() {
     if ((pack.meeting.notes ?? "") === text) return;
     setSaving(true);
@@ -487,7 +492,7 @@ function GeneralMinutes({ pack, cacheKey, canEdit }: { pack: MeetingPack; cacheK
         Agenda & remarks {saving && <Spinner className="h-3 w-3 text-ink-subtle" />}
       </h2>
       {canEdit ? (
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} onBlur={save} rows={4} maxLength={LIMITS.meetingNotes} placeholder="Announcements, anything not tied to a task. Saves when you click away." className="text-[13px]" />
+        <Textarea ref={areaRef} value={text} onChange={(e) => setText(e.target.value)} onBlur={save} rows={4} maxLength={LIMITS.meetingNotes} placeholder="Announcements, anything not tied to a task. Saves when you click away." className="text-[13px]" />
       ) : (
         <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">{pack.meeting.notes}</p>
       )}

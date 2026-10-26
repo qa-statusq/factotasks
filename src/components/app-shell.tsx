@@ -114,16 +114,32 @@ function ScrollManager() {
   useEffect(() => {
     window.history.scrollRestoration = "manual";
     let raf = 0;
+    let flushTimer = 0;
+    let pendingY: number | null = null;
+    // The position is noted per frame in memory and written to storage on a trailing
+    // timer (and on hide): one synchronous storage write per scroll, not per frame.
+    const flush = () => {
+      flushTimer = 0;
+      if (pendingY === null) return;
+      const map = readScrollMap();
+      map[pathRef.current] = pendingY;
+      pendingY = null;
+      tabMemSet("ft:scroll", JSON.stringify(map));
+    };
     const save = () => {
       if (restoringRef.current || bodyScrollLocked()) return;
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         if (restoringRef.current || bodyScrollLocked()) return;
-        const map = readScrollMap();
-        map[pathRef.current] = window.scrollY;
-        tabMemSet("ft:scroll", JSON.stringify(map));
+        pendingY = window.scrollY;
+        if (!flushTimer) flushTimer = window.setTimeout(flush, 250);
       });
     };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
     const onPop = () => {
       if (window.location.pathname !== pathRef.current) fromHistoryRef.current = true;
     };
@@ -131,6 +147,10 @@ function ScrollManager() {
     window.addEventListener("popstate", onPop);
     return () => {
       window.removeEventListener("scroll", save);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+      window.clearTimeout(flushTimer);
+      flush();
       window.removeEventListener("popstate", onPop);
       cancelAnimationFrame(raf);
     };

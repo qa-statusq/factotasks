@@ -19,6 +19,8 @@ import { useLatest } from "./use-latest";
 interface Entry {
   data: unknown;
   ts: number;
+  /** When an optimistic edit last painted this entry (it keeps `ts`, so it still revalidates). */
+  optAt?: number;
 }
 
 const cache = new Map<string, Entry>();
@@ -145,7 +147,7 @@ export function mutateWhere(prefix: string, fn: (data: unknown, key: string) => 
     if (next === undefined || next === entry.data) continue;
     // Keep the entry's own timestamp: an optimistic edit is a guess, not a
     // fresh fetch, so the next mount / poll still asks the server.
-    cache.set(key, { data: next, ts: entry.ts });
+    cache.set(key, { data: next, ts: entry.ts, optAt: Date.now() });
     notify(key);
     if (PERSIST_KEYS.has(key)) schedulePersist();
   }
@@ -163,10 +165,11 @@ export function revalidatePrefix(prefix: string) {
  * Fresh entries (younger than DEDUPE_MS) are skipped: they already reflect
  * the change that bumped the counter.
  */
-export function revalidateAllMounted() {
+export function revalidateAllMounted(since = Date.now() - DEDUPE_MS) {
   for (const key of subscribers.keys()) {
     const e = cache.get(key);
-    if (!e || Date.now() - e.ts > DEDUPE_MS) revalidate(key).catch(reportAuthFailure);
+    // Anything fetched before the counter was last reconciled may predate the change.
+    if (!e || e.ts <= since) revalidate(key).catch(reportAuthFailure);
   }
 }
 
@@ -364,7 +367,7 @@ function revalidate(key: string, force = false): Promise<unknown> {
       // An optimistic mutate(key, data) landed AFTER this fetch started — the
       // fetch carries pre-write data; committing it would visibly revert the
       // user's action until the next refresh. The optimistic value wins.
-      if (prev !== undefined && prev.ts > startedAt) return d;
+      if (prev !== undefined && (prev.ts > startedAt || (prev.optAt ?? 0) > startedAt)) return d;
       // Skip the notify when the payload is byte-identical to what's cached —
       // background revalidations that changed nothing shouldn't re-render every
       // subscriber (payloads here are small, so the stringify is cheap).
@@ -482,6 +485,8 @@ export function useCachedFetch<T = unknown>(
     run();
   }, [enabled, key, run]);
 
+  const refresh = useCallback(() => run(true), [run]);
+
   // `loading` is DERIVED from cache absence — never a lagging useState — so the
   // very same render that switches to an uncached key already reports
   // loading=true. The old effect-set state left one painted frame with
@@ -494,6 +499,6 @@ export function useCachedFetch<T = unknown>(
     error,
     // refresh is a USER action — it must supersede an in-flight background
     // revalidation, not be deduped into it.
-    refresh: () => run(true),
+    refresh,
   };
 }

@@ -274,7 +274,7 @@ body {
    behaviour is one rule with one rationale, and so every screen at 640px and
    above renders byte-identically to before. */
 @media (width < 40rem) {
-  .truncate {
+  .truncate:not([data-nowrap]) {
     overflow: visible;
     text-overflow: clip;
     white-space: normal;

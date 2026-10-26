@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
+import { zoomFactor } from "@/lib/viewport";
 import { IconChevronUp, IconChevronDown, IconGrip } from "@/components/ui/icons";
 
 /**
@@ -58,7 +59,7 @@ export function SortableList<T>({
     const el = rows().find((r) => r.dataset.sortKey === dragKey);
     if (!el) return;
     el.style.transition = "none";
-    el.style.transform = `translateY(${g.lastY - g.pointerY - (el.offsetTop - g.rowTop)}px)`;
+    el.style.transform = `translateY(${(g.lastY - g.pointerY) / zoomFactor() - (el.offsetTop - g.rowTop)}px)`;
   };
 
   useLayoutEffect(() => {
@@ -79,7 +80,9 @@ export function SortableList<T>({
     }
     tops.current = next;
     placeDragged();
-  });
+    // Rows move only when the list or the drag changes — not on every parent keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, dragKey]);
 
   const onPointerMove = (e: React.PointerEvent) => {
     const g = grab.current;
@@ -89,12 +92,13 @@ export function SortableList<T>({
     const from = list.findIndex((r) => r.dataset.sortKey === dragKey);
     if (from === -1) return;
     // Slot = the row whose middle is nearest the pointer (layout positions, transforms ignored).
-    const base = listRef.current!.getBoundingClientRect().top;
+    const z = zoomFactor(); // pointer and rects are real pixels; offsetTop is CSS pixels
+    const base = listRef.current!.getBoundingClientRect().top / z;
     let over = from;
     let best = Infinity;
     list.forEach((r, i) => {
       const mid = base + r.offsetTop + r.offsetHeight / 2;
-      const d = Math.abs(e.clientY - mid);
+      const d = Math.abs(e.clientY / z - mid);
       if (d < best) {
         best = d;
         over = i;

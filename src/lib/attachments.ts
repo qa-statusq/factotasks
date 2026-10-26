@@ -140,8 +140,4 @@ export function extFor(mime: string, fileName: string): string {
   return "bin";
 }
 
-export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
+export { fmtBytes as formatBytes } from "./format";

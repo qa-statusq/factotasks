@@ -13,6 +13,7 @@ import { addDays, istTodayYmd, prettyYmd } from "@/components/ui/date-input";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useNameList } from "@/lib/use-name-labels";
 import { cn } from "@/lib/cn";
+import { fmtYmd } from "@/lib/time";
 import { STATUS_META, TYPE_META, PRIORITY_META, RELEASE_STATUS_META, formatDuration, taskRef, type TaskStatus, type TaskType, type Priority, type ReleaseStatus } from "@/lib/domain";
 import { IconAnalytics, IconRocket, IconPresentation, IconClock, IconCheckCircle, IconPlus, IconTasks, IconAlert, IconCalendar, IconPlay } from "@/components/ui/icons";
 import type { AppLite, UserBrief } from "@/lib/types";
@@ -99,12 +100,12 @@ const PRESETS: { id: string; label: string; build: (today: string) => DateRange 
 ];
 
 function periodLabel(key: string, bucket: "week" | "month"): string {
-  if (bucket === "month") return new Date(key + "-01T00:00:00Z").toLocaleDateString("en-IN", { month: "short", year: "2-digit", timeZone: "UTC" });
-  return new Date(key + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+  if (bucket === "month") return fmtYmd(key, { year: "2-digit" });
+  return fmtYmd(key);
 }
 /** Column heads: the month alone (year on January), or the week's first day. */
 function periodShort(key: string, bucket: "week" | "month"): string {
-  if (bucket === "month") return new Date(key + "-01T00:00:00Z").toLocaleDateString("en-IN", { month: "short", timeZone: "UTC" }) + (key.endsWith("-01") ? ` ${key.slice(2, 4)}` : "");
+  if (bucket === "month") return fmtYmd(key) + (key.endsWith("-01") ? ` ${key.slice(2, 4)}` : "");
   return periodLabel(key, bucket);
 }
 

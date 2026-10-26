@@ -23,7 +23,9 @@ export function usePref<T extends PrefValue>(key: string, fallback: T): [T, (val
       if (!me) return;
       const prefs = { ...(me.prefs ?? {}), [key]: next };
       mutate("/api/auth/me", { user: { ...me, prefs } as Me });
-      void postJson("/api/auth/me", { prefs: { [key]: next } }, "PATCH");
+      void postJson("/api/auth/me", { prefs: { [key]: next } }, "PATCH").then((r) => {
+        if (!r.ok) mutate("/api/auth/me"); // the paint was a guess; show what the server kept
+      });
     },
     [me, key]
   );

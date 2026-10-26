@@ -76,10 +76,11 @@ export async function PATCH(req: NextRequest) {
   if (!u) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (u.mc) return passwordChangeRequired();
 
-  const limited = await rateLimited(u.uid, "profile", 10, 60);
+  const b = await readJsonObject(req);
+  // Preferences are small and frequent (a sort, a layout); profile fields are rare.
+  const limited = await rateLimited(u.uid, b.prefs && Object.keys(b).length === 1 ? "prefs" : "profile", b.prefs && Object.keys(b).length === 1 ? 120 : 10, 60);
   if (limited) return limited;
 
-  const b = await readJsonObject(req);
   const update: Record<string, unknown> = {};
   if ("first_name" in b || "last_name" in b) {
     const first = cleanName(b.first_name);
@@ -93,23 +94,30 @@ export async function PATCH(req: NextRequest) {
     if (!isHexColor(b.color)) return NextResponse.json({ error: "Pick a valid colour" }, { status: 400 });
     update.color = String(b.color).toLowerCase();
   }
-  // UI preferences: merged into the person's own prefs. Scalars only, bounded.
-  let prefs: Record<string, string | number | boolean> | null = null;
+  // UI preferences: merged into the person's own prefs IN SQL, so two quick changes
+  // (a sort, then a layout) compose instead of the later one overwriting the earlier.
+  let patch: Record<string, string | number | boolean | null> | null = null;
   if (b.prefs && typeof b.prefs === "object" && !Array.isArray(b.prefs)) {
-    prefs = { ...(u.prefs ?? {}) };
+    patch = {};
     for (const [k, v] of Object.entries(b.prefs as Record<string, unknown>)) {
       if (!/^[a-z][a-z0-9_.-]{0,39}$/i.test(k)) return NextResponse.json({ error: "Invalid preference" }, { status: 400 });
-      if (v === null || v === undefined) delete prefs[k];
-      else if (typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && v.length <= 80)) prefs[k] = v;
+      if (v === null || v === undefined) patch[k] = null;
+      else if (typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && v.length <= 80)) patch[k] = v;
       else return NextResponse.json({ error: "Invalid preference value" }, { status: 400 });
     }
-    if (Object.keys(prefs).length > 60) return NextResponse.json({ error: "Too many preferences" }, { status: 400 });
-    update.prefs = prefs;
+    if (Object.keys({ ...(u.prefs ?? {}), ...patch }).length > 60) return NextResponse.json({ error: "Too many preferences" }, { status: 400 });
   }
-  if (Object.keys(update).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+  if (Object.keys(update).length === 0 && !patch) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
-  const { error } = await getSupabase().from("users").update(update).eq("id", u.uid);
-  if (error) return serverError(error);
+  const sb = getSupabase();
+  if (Object.keys(update).length) {
+    const { error } = await sb.from("users").update(update).eq("id", u.uid);
+    if (error) return serverError(error);
+  }
+  if (patch) {
+    const { error } = await sb.rpc("prefs_merge", { p_user: u.uid, p_patch: patch });
+    if (error) return serverError(error);
+  }
   // The next /me (and every guard) must see the change immediately.
   invalidateAuthCache(u.uid);
   const merged: SessionUser = {
@@ -118,9 +126,9 @@ export async function PATCH(req: NextRequest) {
     lastName: "last_name" in update ? (update.last_name as string | null) : u.lastName,
     title: "title" in update ? (update.title as string | null) : u.title,
     color: (update.color as string | undefined) ?? u.color,
-    prefs: prefs ?? u.prefs,
+    prefs: patch ? Object.fromEntries(Object.entries({ ...(u.prefs ?? {}), ...patch }).filter(([, v]) => v !== null)) as Record<string, string | number | boolean> : u.prefs,
   };
-  const onlyPrefs = prefs && Object.keys(update).length === 1;
+  const onlyPrefs = !!patch && Object.keys(update).length === 0;
   if (!onlyPrefs) await logActivity({
     action: "user.profile",
     entityType: "user",

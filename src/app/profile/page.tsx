@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import { useSession } from "@/components/providers/session-provider";
 import { mutate } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
-import { NAME_MAX } from "@/lib/name";
+import { NAME_MAX, displayName } from "@/lib/name";
 import { DEPARTMENT_META, LIMITS } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
 import { IconUser, IconLock, IconEye, IconEyeOff, IconBell } from "@/components/ui/icons";
@@ -81,7 +81,7 @@ function AccountCard() {
           <Avatar user={{ ...me, first_name: first || me?.first_name, last_name: last || me?.last_name, color: me?.color }} size="xl" />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="truncate font-semibold text-ink">{[first, last].filter(Boolean).join(" ") || me?.email}</span>
+              <span className="truncate font-semibold text-ink">{displayName(first, last) || me?.email}</span>
               <Badge tone={me?.role === "admin" ? "brand" : "neutral"} className="capitalize">
                 {me?.role}
               </Badge>

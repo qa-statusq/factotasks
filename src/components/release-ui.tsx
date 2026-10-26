@@ -24,7 +24,7 @@ import { useDiscardGuard, same } from "@/lib/use-discard-guard";
 import { istDayKey } from "@/lib/ist";
 import { useCachedFetch, mutate, mutatePrefix, mutateWhere, revalidatePrefix } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
-import { istTime } from "@/lib/time";
+import { istTime, fmtYmd } from "@/lib/time";
 import { RelTime } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { LIMITS, RELEASE_STATUSES, RELEASE_STATUS_META, PLATFORM_META, taskRef, type ReleaseStatus } from "@/lib/domain";
@@ -33,8 +33,7 @@ import type { AppOverview, Release, TaskCard, TaskTarget } from "@/lib/types";
 
 const STATUS_OPTIONS = RELEASE_STATUSES.map((s) => ({ value: s, label: RELEASE_STATUS_META[s].label }));
 
-export const prettyDate = (ymd: string | null | undefined) =>
-  ymd ? new Date(ymd + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "";
+export const prettyDate = (ymd: string | null | undefined) => (ymd ? fmtYmd(ymd, { year: true }) : "");
 
 
 /** Paint a fresh release into every cached list/detail immediately (optimistic),
@@ -614,7 +613,7 @@ export function ReleaseStatusMenu({ release: r, size = "sm", className }: { rele
       {open &&
         pos &&
         createPortal(
-          <div ref={menuRef} role="listbox" className="fixed z-[320] w-52 rounded-xl border border-line/80 bg-surface p-1 shadow-pop animate-fade-in" style={{ left: pos.left, top: pos.top, transform: pos.up ? "translateY(-100%)" : undefined }} onClick={(e) => e.stopPropagation()}>
+          <div ref={menuRef} role="listbox" className="fixed z-[200] w-52 rounded-xl border border-line/80 bg-surface p-1 shadow-pop animate-fade-in" style={{ left: pos.left, top: pos.top, transform: pos.up ? "translateY(-100%)" : undefined }} onClick={(e) => e.stopPropagation()}>
             {RELEASE_STATUSES.map((st) => (
               <button key={st} type="button" role="option" aria-selected={st === r.status} onClick={() => pick(st)} className={cn("flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-canvas", st === r.status && "font-semibold text-ink")}>
                 <span className={cn("h-2 w-2 rounded-full", { neutral: "bg-slate-400", brand: "bg-ink", info: "bg-sky-500", warning: "bg-amber-500", success: "bg-emerald-500", danger: "bg-red-400" }[RELEASE_STATUS_META[st].tone] ?? "bg-slate-400")} />

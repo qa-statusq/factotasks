@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
+import { anchorRect } from "@/lib/viewport";
 import { controlClass } from "@/components/ui/field";
 import { Avatar } from "@/components/ui/avatar";
 import { IconCheck, IconChevronDown, IconSearch, IconX } from "@/components/ui/icons";
@@ -94,10 +95,11 @@ export function PeoplePicker({
   useEffect(() => {
     if (!open) return;
     const place = () => {
-      const b = (boxRef.current ?? btnRef.current)?.getBoundingClientRect();
+      const anchor = boxRef.current ?? btnRef.current;
+      const b = anchor ? anchorRect(anchor) : null;
       if (!b) return;
       const menuH = 320;
-      const spaceBelow = window.innerHeight - b.bottom;
+      const spaceBelow = b.vh - b.bottom;
       const up = spaceBelow < menuH + 12 && b.top > spaceBelow;
       setPos({ left: b.left, width: Math.max(b.width, 280), top: up ? b.top - 6 : b.bottom + 6, up });
     };
@@ -165,7 +167,7 @@ export function PeoplePicker({
             selected.map((u) => (
               <span key={u.id} className="inline-flex items-center gap-1.5 rounded-full bg-canvas py-0.5 pl-0.5 pr-1 text-xs font-medium text-ink ring-1 ring-inset ring-line">
                 <Avatar user={u} size="xs" />
-                <span className="max-w-[140px] truncate">{u.name}</span>
+                <span data-nowrap className="max-w-[140px] truncate">{u.name}</span>
                 <button type="button" onClick={() => toggle(u.id)} className="rounded-full p-0.5 text-ink-subtle hover:bg-surface hover:text-ink" aria-label={`Remove ${u.name}`}>
                   <IconX size={12} />
                 </button>

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { cn } from "@/lib/cn";
 import { istToday } from "@/lib/ist";
+import { fmtYmd } from "@/lib/time";
 import { taskRef } from "@/lib/domain";
 import { AvatarStack } from "@/components/ui/avatar";
 import { PlatformBadge, PriorityBadge, TargetChips, ReleaseProgress, SeriesChip, AppTile, StatusBadge, GeneralTile } from "@/components/ui/task-chips";
@@ -20,7 +21,7 @@ export function dueInfo(due: string | null | undefined, status: string): { label
   if (!due) return null;
   const closed = status === "done" || status === "cancelled";
   const diff = Math.round((Date.parse(due) - Date.parse(istToday())) / 86_400_000);
-  const pretty = new Date(due + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+  const pretty = fmtYmd(due);
   if (closed) return { label: pretty, tone: "subtle" };
   if (diff < 0) return { label: `${-diff}d late`, tone: "danger" };
   if (diff === 0) return { label: "Due today", tone: "warning" };
@@ -57,7 +58,7 @@ export const PILL_WIDTH = "sm:min-w-[8.5rem]";
  * context, then two fixed columns — people, and the status pill that changes
  * status in place — so every row's controls sit on the same vertical line.
  */
-export function TaskRow({ task, showApp = true, showDescription = false, trailing, below, canChange = true }: { task: TaskCard; showApp?: boolean; showDescription?: boolean; trailing?: React.ReactNode; below?: React.ReactNode; canChange?: boolean }) {
+export const TaskRow = memo(function TaskRow({ task, showApp = true, showDescription = false, trailing, below, canChange = true }: { task: TaskCard; showApp?: boolean; showDescription?: boolean; trailing?: React.ReactNode; below?: React.ReactNode; canChange?: boolean }) {
   return (
     <li className="cv-card group px-3 py-2.5 transition-colors hover:bg-canvas/60 sm:px-4">
       <div className="flex items-start gap-3">
@@ -105,7 +106,7 @@ export function TaskRow({ task, showApp = true, showDescription = false, trailin
       {below}
     </li>
   );
-}
+});
 
 interface Group {
   key: string;

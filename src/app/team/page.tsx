@@ -38,9 +38,9 @@ export default function TeamPage() {
   const [query, setQuery] = useState("");
   const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState<TeamMember | null>(null);
-  const members = data?.members ?? [];
+  const members = useMemo(() => data?.members ?? [], [data]);
   const q = query.trim().toLowerCase();
-  const filtered = q ? members.filter((m) => `${m.name} ${m.email ?? ""} ${m.title ?? ""} ${DEPARTMENT_META[m.department]?.label ?? ""}`.toLowerCase().includes(q)) : members;
+  const filtered = useMemo(() => (q ? members.filter((m) => `${m.name} ${m.email ?? ""} ${m.title ?? ""} ${DEPARTMENT_META[m.department]?.label ?? ""}`.toLowerCase().includes(q)) : members), [members, q]);
   const groups = useMemo(() => {
     const g = new Map<Department, TeamMember[]>();
     for (const m of filtered) g.set(m.department, [...(g.get(m.department) || []), m]);

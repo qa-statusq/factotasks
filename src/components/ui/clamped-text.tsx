@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { RichText } from "@/components/ui/rich-text";
 import { cn } from "@/lib/cn";
 
@@ -18,19 +18,16 @@ export function ClampedText({ text, lines = 2, rich = false, className, buttonCl
   const [overflows, setOverflows] = useState(false);
   const body = text?.trim() ?? "";
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el || open) return;
-    // Measured after paint (and again on any resize) so the button reflects
-    // the actual wrapped height at this width.
+    // Measured before the first paint (and again on any resize) so the button
+    // is in the first frame and never pushes the content below it down a line later.
     const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
-    const raf = window.requestAnimationFrame(measure);
+    measure();
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
     ro?.observe(el);
-    return () => {
-      window.cancelAnimationFrame(raf);
-      ro?.disconnect();
-    };
+    return () => ro?.disconnect();
   }, [body, lines, open]);
 
   if (!body) return null;

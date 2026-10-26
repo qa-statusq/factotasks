@@ -3,7 +3,7 @@
  * the IST calendar date for every viewer, not the browser's local one (which
  * could show the wrong day near midnight). */
 let istDateFmt: Intl.DateTimeFormat | null = null;
-function istDate(input: string): string {
+export function istDate(input: string): string {
   istDateFmt ??= new Intl.DateTimeFormat("en-IN", {
     day: "numeric",
     month: "short",
@@ -80,3 +80,29 @@ export function relativeTimeLong(input: string | null | undefined): string {
   const yr = Math.round(mon / 12);
   return `${yr} year${yr === 1 ? "" : "s"} ago`;
 }
+
+/**
+ * A calendar day (YYYY-MM-DD, or YYYY-MM for a month) as "24 Oct", "24 Oct 2026",
+ * "Fri 24 Oct 2026", "October 2026" — ONE Intl.DateTimeFormat per shape, cached,
+ * because list rows call this per paint and a formatter per call costs ~0.1–1 ms.
+ */
+const ymdFmts = new Map<string, Intl.DateTimeFormat>();
+export function fmtYmd(ymd: string, opts: { year?: boolean | "2-digit"; weekday?: boolean; month?: "short" | "long" } = {}): string {
+  if (!ymd) return "";
+  const day = ymd.length > 7;
+  const key = `${day ? "d" : ""}|${opts.year === "2-digit" ? "yy" : opts.year ? "y" : ""}|${opts.weekday ? "w" : ""}|${opts.month ?? "short"}`;
+  let f = ymdFmts.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-IN", {
+      ...(opts.weekday ? { weekday: "short" } : {}),
+      ...(day ? { day: "numeric" } : {}),
+      month: opts.month ?? "short",
+      ...(opts.year === "2-digit" ? { year: "2-digit" } : opts.year ? { year: "numeric" } : {}),
+      timeZone: "UTC",
+    });
+    ymdFmts.set(key, f);
+  }
+  const t = Date.parse((day ? ymd : `${ymd}-01`) + "T00:00:00Z");
+  return Number.isNaN(t) ? "" : f.format(new Date(t));
+}
+

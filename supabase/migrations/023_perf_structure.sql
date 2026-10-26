@@ -450,6 +450,21 @@ begin
 end;
 $$;
 
+-- (023) Merge a few preference keys into users.prefs atomically (null removes a key),
+-- so two quick changes from the same person compose instead of overwriting each other.
+create or replace function prefs_merge(p_user uuid, p_patch jsonb)
+returns jsonb
+language sql
+set search_path = public
+as $$
+  update users
+     set prefs = (select coalesce(jsonb_object_agg(k, v), '{}'::jsonb)
+                    from jsonb_each(coalesce(prefs, '{}'::jsonb) || p_patch) as e(k, v)
+                   where jsonb_typeof(v) <> 'null')
+   where id = p_user
+   returning prefs;
+$$;
+
 -- 8. Job lease
 -- (023) A short lease for jobs that must not overlap (two instances, a scheduler
 -- retry): the first caller within p_ttl_sec gets true, the others false.

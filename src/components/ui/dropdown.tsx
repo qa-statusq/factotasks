@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
+import { anchorRect } from "@/lib/viewport";
 import { scrollIntoViewNearest } from "@/lib/compat";
 import { controlClass } from "@/components/ui/field";
 import { IconChevronDown, IconCheck } from "@/components/ui/icons";
@@ -69,10 +70,10 @@ export function Dropdown({
     if (!open) return;
     activeRef.current = value;
     function place() {
-      const b = btnRef.current?.getBoundingClientRect();
+      const b = btnRef.current ? anchorRect(btnRef.current) : null;
       if (!b) return;
       const menuH = Math.min(264, options.length * 40 + 10);
-      const spaceBelow = window.innerHeight - b.bottom;
+      const spaceBelow = b.vh - b.bottom;
       const up = spaceBelow < menuH + 12 && b.top > spaceBelow;
       setPos({ left: b.left, width: b.width, top: up ? b.top - 6 : b.bottom + 6, up });
     }
@@ -179,7 +180,7 @@ export function Dropdown({
         aria-expanded={open}
         className={cn(controlClass, "flex h-10 items-center justify-between gap-2", fit && "w-auto max-w-full", disabled && "cursor-not-allowed opacity-60 hover:border-line")}
       >
-        <span className={cn("truncate", fit && "whitespace-nowrap", selected ? "text-ink" : "text-ink-subtle")}>
+        <span data-nowrap className={cn("truncate", fit && "whitespace-nowrap", selected ? "text-ink" : "text-ink-subtle")}>
           {selected ? selected.label : placeholder}
         </span>
         <IconChevronDown size={16} className={cn("shrink-0 text-ink-subtle transition-transform", open && "rotate-180")} />

@@ -109,7 +109,7 @@ export function DateRangeInput({ value, onChange, placeholder = "Any dates", cla
     <div className={cn("relative inline-flex", className)}>
       <button ref={btnRef} type="button" onClick={() => (open ? close() : openPicker())} aria-haspopup="dialog" aria-expanded={open} className={cn(controlClass, "flex h-10 w-auto max-w-full items-center gap-2 pl-3 pr-3 text-left", allowClear && value && "pr-9")}>
         <IconCalendar size={15} className="shrink-0 text-ink-subtle" />
-        <span className={cn("min-w-0 truncate whitespace-nowrap tabular-nums", value ? "text-ink" : "text-ink-subtle")}>{label}</span>
+        <span data-nowrap className={cn("min-w-0 truncate whitespace-nowrap tabular-nums", value ? "text-ink" : "text-ink-subtle")}>{label}</span>
         {sub && <span className="hidden whitespace-nowrap text-[12px] text-ink-subtle sm:inline">· {sub}</span>}
       </button>
       {allowClear && value && (
@@ -128,7 +128,7 @@ export function DateRangeInput({ value, onChange, placeholder = "Any dates", cla
       {open &&
         pos &&
         createPortal(
-          <div ref={popRef} role="dialog" aria-label="Choose a date range" className="fixed z-[320] flex max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-pop animate-fade-in sm:flex-row" style={{ left: pos.left, top: pos.top, transform: pos.up ? "translateY(-100%)" : undefined }}>
+          <div ref={popRef} role="dialog" aria-label="Choose a date range" className="fixed z-[200] flex max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-pop animate-fade-in sm:flex-row" style={{ left: pos.left, top: pos.top, transform: pos.up ? "translateY(-100%)" : undefined }}>
             {/* Quick ranges */}
             <div className="flex flex-wrap gap-1 border-b border-line/80 p-2 sm:w-[150px] sm:flex-col sm:flex-nowrap sm:gap-0.5 sm:border-b-0 sm:border-r">
               <div className="hidden px-2 pb-1 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-subtle sm:block">Quick ranges</div>
