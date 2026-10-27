@@ -1432,8 +1432,10 @@ as $$
     where r.status = 'released' and r.released_at >= b.from_at and r.released_at < b.to_at
       and (p_user is null or r.app_id = any(visible_app_ids(p_user)))
   ),
+  -- (027) A member counts only the meetings of the series they take part in.
   held as (
     select m.* from meetings m, bounds b where m.held_at >= b.from_at and m.held_at < b.to_at
+      and (p_user is null or m.series_id in (select sm.series_id from meeting_series_members sm where sm.user_id = p_user))
   )
   select jsonb_build_object(
     'range', jsonb_build_object('from', p_from, 'to', p_to, 'bucket', (select bucket from bounds)),
