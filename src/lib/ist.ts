@@ -26,5 +26,8 @@ export const istToday = () => new Date(Date.now() + IST_MS).toISOString().slice(
 /** The IST calendar day (YYYY-MM-DD) an ISO timestamp falls on. */
 export const istDayKey = (iso: string) => new Date(new Date(iso).getTime() + IST_MS).toISOString().slice(0, 10);
 
+/** A calendar day (YYYY-MM-DD) moved by n days. */
+export const shiftYmd = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
 /** UTC instant of IST midnight STARTING the given day (inclusive start). */
 export const istDayStartUtc = (ymd: string) => new Date(Date.parse(`${ymd}T00:00:00Z`) - IST_MS).toISOString();

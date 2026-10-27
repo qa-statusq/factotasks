@@ -140,4 +140,3 @@ export function extFor(mime: string, fileName: string): string {
   return "bin";
 }
 
-export { fmtBytes as formatBytes } from "./format";

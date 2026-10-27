@@ -34,7 +34,7 @@ import { PendingReleaseBanner } from "@/components/release-ui";
 import { same } from "@/lib/use-discard-guard";
 import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
-import { STATUS_META, RELEASE_STATUS_META, formatDuration, taskRef, LIMITS, NOTE_KIND_META } from "@/lib/domain";
+import { STATUS_META, RELEASE_STATUS_META, formatWorkDuration, taskRef, LIMITS, NOTE_KIND_META } from "@/lib/domain";
 import { IconEdit, IconTrash, IconCheck, IconX, IconPresentation, IconSend } from "@/components/ui/icons";
 import type { TaskDetail, TaskComment } from "@/lib/types";
 
@@ -426,22 +426,22 @@ function Details({ task }: { task: TaskDetail }) {
           </Row>
         )}
         <Row label={task.completed_at ? "Lead time" : "Age"}>
-          <span className="tabular-nums" title={`Working time — ${WORK_SCHEDULE_TEXT}`}>{formatDuration(lead)}</span>
+          <span className="tabular-nums" title={`Working time — ${WORK_SCHEDULE_TEXT}`}>{formatWorkDuration(lead)}</span>
         </Row>
         <Row label="Active time">
           <span className="tabular-nums" title={`Working time spent in “In progress” — ${WORK_SCHEDULE_TEXT}`}>
-            {formatDuration(active)}
+            {formatWorkDuration(active)}
             {task.status === "in_progress" && <span className="ml-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500 align-middle" />}
           </span>
         </Row>
         {waited !== null && (
           <Row label={task.approved_at ? "Approval took" : "Waiting"}>
-            <span className="tabular-nums" title={`Working time — ${WORK_SCHEDULE_TEXT}`}>{formatDuration(waited)}</span>
+            <span className="tabular-nums" title={`Working time — ${WORK_SCHEDULE_TEXT}`}>{formatWorkDuration(waited)}</span>
           </Row>
         )}
         {task.estimate_hours != null && (
           <Row label="Estimate">
-            <span className="tabular-nums" title={`Working time — ${WORK_SCHEDULE_TEXT}`}>{formatDuration(task.estimate_hours * 3600)}</span>
+            <span className="tabular-nums" title={`Working time — ${WORK_SCHEDULE_TEXT}`}>{formatWorkDuration(task.estimate_hours * 3600)}</span>
           </Row>
         )}
       </section>

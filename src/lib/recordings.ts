@@ -3,7 +3,6 @@ import { getSupabase } from "@/lib/supabase";
 import { USER_BRIEF_COLS, embedded, embeddedUser } from "@/lib/users";
 import { fail } from "@/lib/api";
 import type { Recording, RecordingShare } from "@/lib/types";
-export { fmtBytes } from "./format";
 
 export const RECORDING_SELECT = `id, meeting_id, name, mime, size_bytes, duration_sec, status, drive_file_id, upload_uri, recorded_by, created_at, updated_at, recorder:users!meeting_recordings_recorded_by_fkey(${USER_BRIEF_COLS}), meeting:meetings(id, title, held_at, status, series:meeting_series(id, name, color))`;
 export const SHARE_SELECT = `id, recording_id, email, permission_id, message, created_at, sharer:users!recording_shares_shared_by_fkey(${USER_BRIEF_COLS})`;

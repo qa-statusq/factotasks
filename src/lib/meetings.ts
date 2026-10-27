@@ -1,6 +1,7 @@
 import { getSupabase } from "./supabase";
 import { USER_BRIEF_COLS, embeddedUser, embedded } from "./users";
 import type { Meeting, MeetingSeries } from "./types";
+import { istDate } from "./time";
 
 export const MEETING_SELECT = `id, title, held_at, notes, status, finalized_at, created_at, series_id, app_ids, auto_close, series:meeting_series(id, name, color), creator:users!meetings_created_by_fkey(${USER_BRIEF_COLS}), meeting_notes(count)`;
 
@@ -32,8 +33,7 @@ export function shapeSeries(r: Record<string, unknown>): MeetingSeries {
 
 /** "Weekly sync · 21 Oct 2026" — the default title for a new meeting. */
 export function defaultTitle(heldAt: Date, seriesName = "Weekly sync"): string {
-  const d = heldAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
-  return `${seriesName} · ${d}`;
+  return `${seriesName} · ${istDate(heldAt.toISOString())}`;
 }
 
 export async function loadMeeting(id: string) {

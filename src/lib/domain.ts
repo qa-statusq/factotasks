@@ -190,7 +190,7 @@ export const taskRef = (n: number | string) => `T-${n}`;
  * A WORKING duration (see lib/work-time): "3d 4h", "2h 15m", "45m", "<1m",
  * where 1d is one 9-hour working day — the way Jira writes logged work.
  */
-export function formatDuration(seconds: number | null | undefined): string {
+export function formatWorkDuration(seconds: number | null | undefined): string {
   const s = Math.max(0, Math.round(Number(seconds) || 0));
   if (s < 60) return s === 0 ? "0m" : "<1m";
   const m = Math.floor(s / 60);

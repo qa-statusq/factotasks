@@ -1,6 +1,6 @@
 "use client";
 
-import { buildAgenda, notesByTask, deckRows, nameLabels, packPeople, ownerText, targetMatrix, SHARED_KEY, type AgendaGroup } from "@/lib/meeting-agenda";
+import { buildAgenda, notesByTask, deckRows, nameLabels, packPeople, ownerText, targetMatrix, SHARED_KEY, type AgendaGroup, meetingWindowText } from "@/lib/meeting-agenda";
 import { istDate, fmtYmd, fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRef, type TaskStatus, type ReleaseStatus } from "@/lib/domain";
@@ -10,7 +10,7 @@ import { nameInitials } from "@/lib/name";
 import { ClampedText } from "@/components/ui/clamped-text";
 import { NoteLink } from "@/components/ui/note-link";
 import { IconAndroid, IconApple, IconCheck } from "@/components/ui/icons";
-import type { MeetingNote, MeetingPack, TaskCard, UserBrief } from "@/lib/types";
+import type { DeckPack, MeetingNote, MeetingPack, TaskCard, UserBrief } from "@/lib/types";
 
 /**
  * The slides of a meeting deck: what each section shows and the parts it is built from
@@ -18,19 +18,15 @@ import type { MeetingNote, MeetingPack, TaskCard, UserBrief } from "@/lib/types"
  * the 16:9 stage width — so proportions never change with the screen. The deck frame (keys,
  * strip, chrome, recording) lives in page.tsx.
  */
-export type Pack = MeetingPack & { workspace_name: string };
 type Release = MeetingPack["releases"][number];
 
-export const fmtDay = istDate;
 /** Cover title as lines: the name, then the date on its own line (no separator dot). */
 function titleParts(title: string, heldAt: string): string[] {
   const i = title.lastIndexOf(" · ");
   if (i > 0) return [title.slice(0, i).trim(), title.slice(i + 3).trim()];
-  const day = fmtDay(heldAt);
+  const day = istDate(heldAt);
   return title.includes(day) ? [title] : [title, day];
 }
-const fmtWhen = fmtDateTime;
-const ymdPretty = (ymd: string) => fmtYmd(ymd);
 const NOTES_SHOWN_PER_TASK = 3;
 
 /* Projector-safe status colours: solid fills, white type, no two alike. */
@@ -69,14 +65,14 @@ export interface Slide {
   jump?: { label: string; icon?: { name: string; color: string; iconUrl: string | null }; sub?: string; short?: string; kind?: "cover" | "general" | "shared" | "approvals" | "minutes" | "next" };
 }
 
-export function buildSlides(p: Pack): Slide[] {
+export function buildSlides(p: DeckPack): Slide[] {
   const slides: Slide[] = [];
   const m = p.meeting;
   const agenda = buildAgenda(p, { dedupe: true });
   const notes = notesByTask(p.notes);
   const labels = nameLabels(packPeople(p));
   const appMeta = new Map(p.apps.map((a) => [a.id, a]));
-  const windowText = p.previous_meeting ? `${fmtDay(p.previous_meeting)} – ${fmtDay(m.held_at)}` : `7 days to ${fmtDay(m.held_at)}`;
+  const windowText = meetingWindowText(p);
   const frame = (n: number, total: number) => ({ meeting: m, workspace: p.workspace_name, n, total });
 
   /* Cover: minimal — the title block, four plain figures, and the agenda as
@@ -97,7 +93,7 @@ export function buildSlides(p: Pack): Slide[] {
             ))}
           </h1>
           <p className="mt-[1cqw] text-[1.3cqw] text-ink-muted">
-            Held {fmtWhen(m.held_at)} IST · covering {windowText} · {(m.scoped ?? !!m.app_ids?.length) ? `${p.apps.length} app${p.apps.length === 1 ? "" : "s"}` : "every app"}{p.people.length > 0 && ` · ${p.people.length} ${p.people.length === 1 ? "person" : "people"}`}
+            Held {fmtDateTime(m.held_at)} IST · covering {windowText} · {(m.scoped ?? !!m.app_ids?.length) ? `${p.apps.length} app${p.apps.length === 1 ? "" : "s"}` : "every app"}{p.people.length > 0 && ` · ${p.people.length} ${p.people.length === 1 ? "person" : "people"}`}
           </p>
           <dl className="mt-[2.2cqw] flex gap-[4cqw] border-y border-line py-[1.4cqw]">
             {[
@@ -275,7 +271,7 @@ function Frame({
   tiles,
   children,
 }: {
-  meeting: Pack["meeting"];
+  meeting: DeckPack["meeting"];
   workspace: string;
   n: number;
   total: number;
@@ -299,7 +295,7 @@ function Frame({
         <span className="inline-flex min-w-0 max-w-[24cqw] items-center gap-[0.8cqw]">
           <Mark className="h-[1.9cqw] w-[1.9cqw] text-white" />
           <span className="truncate font-semibold text-white/90">{meeting.title}</span>
-          {!meeting.title.includes(fmtDay(meeting.held_at)) && <span className="shrink-0">· {fmtDay(meeting.held_at)}</span>}
+          {!meeting.title.includes(istDate(meeting.held_at)) && <span className="shrink-0">· {istDate(meeting.held_at)}</span>}
         </span>
       </div>
 
@@ -578,7 +574,7 @@ function TaskTable({
                 <td className={cn(TD, "text-ink-muted")}>
                   <Owners users={t.assignees} labels={labels} />
                 </td>
-                <td className={cn(TD, "tabular-nums", due?.tone === "danger" ? "font-semibold text-red-600" : due?.tone === "warning" ? "font-semibold text-amber-700" : "text-ink-muted")}>{t.due_date ? ymdPretty(t.due_date) : <span className="text-ink-subtle">—</span>}</td>
+                <td className={cn(TD, "tabular-nums", due?.tone === "danger" ? "font-semibold text-red-600" : due?.tone === "warning" ? "font-semibold text-amber-700" : "text-ink-muted")}>{t.due_date ? fmtYmd(t.due_date) : <span className="text-ink-subtle">—</span>}</td>
                 <td className={cn(TD, "text-right")}>
                   <span className={cn(BADGE, DECK_STATUS[t.status])}>{STATUS_META[t.status].label}</span>
                 </td>
@@ -602,7 +598,7 @@ function ReleaseCards({ releases, labels }: { releases: Release[]; labels: Map<s
     <div className="flex min-h-0 flex-1 flex-col gap-[1.1cqw] overflow-y-auto overscroll-contain pr-[0.3cqw]" data-deck-scroll>
       {releases.map((r) => {
         const released = r.status === "released";
-        const when = released && r.released_at ? `Released ${fmtDay(r.released_at)}` : r.planned_date ? `Release date ${ymdPretty(r.planned_date)}` : "No release date yet";
+        const when = released && r.released_at ? `Released ${istDate(r.released_at)}` : r.planned_date ? `Release date ${fmtYmd(r.planned_date)}` : "No release date yet";
         const count = r.tasks?.length ?? 0;
         return (
           <article key={r.id} className="shrink-0 overflow-hidden rounded-[1cqw] border border-line bg-surface shadow-[0_1px_0_rgba(0,0,0,0.02)]">

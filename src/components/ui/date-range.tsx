@@ -4,7 +4,8 @@ import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { controlClass } from "@/components/ui/field";
-import { MonthGrid, usePopover, addDays, addMonths, daysBetween, istTodayYmd, parseYmd, prettyYmd } from "@/components/ui/date-input";
+import { MonthGrid, usePopover, addMonths, daysBetween, parseYmd, prettyYmd } from "@/components/ui/date-input";
+import { istToday, shiftYmd } from "@/lib/ist";
 import { IconCalendar, IconX, IconCheck } from "@/components/ui/icons";
 
 export interface DateRange {
@@ -18,7 +19,7 @@ interface Preset {
   build: (today: string) => DateRange;
 }
 
-const lastN = (t: string, n: number): DateRange => ({ from: addDays(t, -(n - 1)), to: t });
+const lastN = (t: string, n: number): DateRange => ({ from: shiftYmd(t, -(n - 1)), to: t });
 const monthStart = (t: string) => `${t.slice(0, 7)}-01`;
 const monthEnd = (t: string) => {
   const p = parseYmd(t)!;
@@ -31,7 +32,7 @@ const PRESETS: Preset[] = [
   { id: "last30", label: "Last 30 days", build: (t) => lastN(t, 30) },
   { id: "last90", label: "Last 90 days", build: (t) => lastN(t, 90) },
   { id: "thisMonth", label: "This month", build: (t) => ({ from: monthStart(t), to: monthEnd(t) }) },
-  { id: "lastMonth", label: "Last month", build: (t) => { const prev = addDays(monthStart(t), -1); return { from: monthStart(prev), to: prev }; } },
+  { id: "lastMonth", label: "Last month", build: (t) => { const prev = shiftYmd(monthStart(t), -1); return { from: monthStart(prev), to: prev }; } },
   { id: "thisYear", label: "This year", build: (t) => ({ from: `${t.slice(0, 4)}-01-01`, to: `${t.slice(0, 4)}-12-31` }) },
 ];
 
@@ -60,7 +61,7 @@ export function DateRangeInput({ value, onChange, placeholder = "Any dates", cla
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const wide = useWide();
-  const today = istTodayYmd();
+  const today = istToday();
   const [draft, setDraft] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [focusDay, setFocusDay] = useState<string | null>(null);

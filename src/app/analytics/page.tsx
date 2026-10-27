@@ -9,13 +9,14 @@ import { DateRangeInput, type DateRange } from "@/components/ui/date-range";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { AppTile, GeneralTile, StatusBadge, PriorityBadge } from "@/components/ui/task-chips";
-import { addDays, istTodayYmd, prettyYmd } from "@/components/ui/date-input";
+import { prettyYmd } from "@/components/ui/date-input";
+import { istToday, shiftYmd } from "@/lib/ist";
 import { useCachedFetch } from "@/lib/client-cache";
 import { WORK_SCHEDULE_TEXT } from "@/lib/work-time";
 import { useNameList } from "@/lib/use-name-labels";
 import { cn } from "@/lib/cn";
 import { fmtYmd } from "@/lib/time";
-import { STATUS_META, TYPE_META, PRIORITY_META, RELEASE_STATUS_META, formatDuration, taskRef, type TaskStatus, type TaskType, type Priority, type ReleaseStatus } from "@/lib/domain";
+import { STATUS_META, TYPE_META, PRIORITY_META, RELEASE_STATUS_META, formatWorkDuration, taskRef, type TaskStatus, type TaskType, type Priority, type ReleaseStatus } from "@/lib/domain";
 import { IconAnalytics, IconRocket, IconPresentation, IconClock, IconCheckCircle, IconPlus, IconTasks, IconAlert, IconCalendar, IconPlay } from "@/components/ui/icons";
 import type { AppLite, UserBrief } from "@/lib/types";
 
@@ -85,20 +86,20 @@ interface Pack {
 
 /* -------------------------------- helpers --------------------------------- */
 
-const hours = (h: number | null | undefined) => (h == null ? "—" : formatDuration(h * 3600));
+const hours = (h: number | null | undefined) => (h == null ? "—" : formatWorkDuration(h * 3600));
 const pct = (num: number, den: number) => (den > 0 ? `${Math.round((num / den) * 100)}%` : "—");
 const STATUS_COLORS: Record<TaskStatus, string> = { todo: "#94a3b8", in_progress: "#3b82f6", in_review: "#8b5cf6", on_hold: "#f59e0b", partial: "#14b8a6", done: "#10b981", cancelled: "#f87171" };
 const monthStart = (t: string) => `${t.slice(0, 7)}-01`;
 
 /** Quick ranges; "custom" opens the calendar. */
 const PRESETS: { id: string; label: string; build: (today: string) => DateRange }[] = [
-  { id: "30d", label: "Last 30 days", build: (t) => ({ from: addDays(t, -29), to: t }) },
-  { id: "90d", label: "Last 90 days", build: (t) => ({ from: addDays(t, -89), to: t }) },
+  { id: "30d", label: "Last 30 days", build: (t) => ({ from: shiftYmd(t, -29), to: t }) },
+  { id: "90d", label: "Last 90 days", build: (t) => ({ from: shiftYmd(t, -89), to: t }) },
   { id: "month", label: "This month", build: (t) => ({ from: monthStart(t), to: t }) },
-  { id: "lastMonth", label: "Last month", build: (t) => { const end = addDays(monthStart(t), -1); return { from: monthStart(end), to: end }; } },
+  { id: "lastMonth", label: "Last month", build: (t) => { const end = shiftYmd(monthStart(t), -1); return { from: monthStart(end), to: end }; } },
   { id: "quarter", label: "This quarter", build: (t) => { const m = Number(t.slice(5, 7)); const qm = m - ((m - 1) % 3); return { from: `${t.slice(0, 4)}-${String(qm).padStart(2, "0")}-01`, to: t }; } },
-  { id: "6m", label: "Last 6 months", build: (t) => ({ from: addDays(t, -182), to: t }) },
-  { id: "12m", label: "Last 12 months", build: (t) => ({ from: addDays(t, -364), to: t }) },
+  { id: "6m", label: "Last 6 months", build: (t) => ({ from: shiftYmd(t, -182), to: t }) },
+  { id: "12m", label: "Last 12 months", build: (t) => ({ from: shiftYmd(t, -364), to: t }) },
   { id: "year", label: "This year", build: (t) => ({ from: `${t.slice(0, 4)}-01-01`, to: t }) },
 ];
 
@@ -119,7 +120,7 @@ export default function AnalyticsPage() {
   const [savedPreset, setPreset] = usePref<string>("analytics.range", "6m");
   const preset = PRESETS.some((p) => p.id === savedPreset) ? savedPreset : "6m";
   const [custom, setCustom] = useState<DateRange | null>(null);
-  const today = istTodayYmd();
+  const today = istToday();
   const range = useMemo<DateRange>(() => custom ?? (PRESETS.find((p) => p.id === preset) ?? PRESETS[5]).build(today), [preset, custom, today]);
   const { data, loading, error, refresh } = useCachedFetch<Pack>(`/api/analytics?from=${range.from}&to=${range.to}`);
   const options = [...PRESETS.map((p) => ({ value: p.id, label: p.label })), { value: "custom", label: "Custom dates…" }];
@@ -205,7 +206,7 @@ function AnalyticsView({ data }: { data: Pack }) {
         </Section>
         <Section title="Open work by age" hint="Everything still open, by how long it has been waiting — in working weeks of 5 days">
           {t.open_now ? <Buckets buckets={data.aging} color="#f59e0b" /> : <p className="py-6 text-center text-sm text-ink-subtle">Nothing open right now.</p>}
-          {t.open_now > 0 && <p className="mt-3 text-[12px] text-ink-subtle">Average age of open work: {t.avg_open_age_seconds == null ? "—" : formatDuration(t.avg_open_age_seconds)} of working time.</p>}
+          {t.open_now > 0 && <p className="mt-3 text-[12px] text-ink-subtle">Average age of open work: {t.avg_open_age_seconds == null ? "—" : formatWorkDuration(t.avg_open_age_seconds)} of working time.</p>}
         </Section>
       </div>
 
@@ -318,18 +319,18 @@ function AnalyticsView({ data }: { data: Pack }) {
                     </Link>
                     <p className="text-[11.5px] text-ink-subtle">
                       {x.assignees.length ? names(x.assignees) : "Unassigned"}
-                      {x.due_date && <span className={cn(x.due_date < istTodayYmd() && "text-red-600")}> · due {prettyYmd(x.due_date, { weekday: false, year: false })}</span>}
+                      {x.due_date && <span className={cn(x.due_date < istToday() && "text-red-600")}> · due {prettyYmd(x.due_date, { weekday: false, year: false })}</span>}
                     </p>
                     {/* Phones: age and status sit under the title, so the title keeps the row's width. */}
                     <div className="mt-1 flex items-center gap-2 sm:hidden">
                       <StatusBadge status={x.status} />
                       <span className="inline-flex items-center gap-1 text-[12px] tabular-nums text-ink-muted" title="Working time since it was created">
-                        <IconClock size={12} className="text-ink-subtle" /> {formatDuration(x.age_seconds)}
+                        <IconClock size={12} className="text-ink-subtle" /> {formatWorkDuration(x.age_seconds)}
                       </span>
                     </div>
                   </div>
                   <span className="hidden w-[4.5rem] shrink-0 items-center justify-end gap-1 whitespace-nowrap text-[12px] tabular-nums text-ink-muted sm:inline-flex" title="Working time since it was created">
-                    <IconClock size={12} className="text-ink-subtle" /> {formatDuration(x.age_seconds)}
+                    <IconClock size={12} className="text-ink-subtle" /> {formatWorkDuration(x.age_seconds)}
                   </span>
                   <span className="hidden shrink-0 sm:block">
                     <StatusBadge status={x.status} className="w-[7.5rem] justify-center" />

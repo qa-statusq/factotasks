@@ -1,5 +1,6 @@
 "use client";
 
+import { IST_MS, istToday, shiftYmd } from "@/lib/ist";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { fmtYmd } from "@/lib/time";
 import { anchorRect } from "@/lib/viewport";
@@ -17,10 +18,6 @@ export function parseYmd(v: string): { y: number; m: number; d: number; h: numbe
   if (!m) return null;
   return { y: +m[1], m: +m[2], d: +m[3], h: m[4] ? +m[4] : 10, min: m[5] ? +m[5] : 0 };
 }
-export function addDays(k: string, n: number): string {
-  const p = parseYmd(k)!;
-  return new Date(Date.UTC(p.y, p.m - 1, p.d) + n * 86_400_000).toISOString().slice(0, 10);
-}
 export function addMonths(view: { y: number; m: number }, n: number): { y: number; m: number } {
   const d = new Date(Date.UTC(view.y, view.m - 1 + n, 1));
   return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1 };
@@ -36,12 +33,10 @@ export function prettyYmd(k: string, opts: { weekday?: boolean; year?: boolean }
   if (!p) return "";
   return fmtYmd(k, { weekday: opts.weekday !== false, year: opts.year !== false });
 }
-/** Today in IST as YYYY-MM-DD (for min/max). */
-export const istTodayYmd = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
 /** Now in IST as YYYY-MM-DDTHH:MM (datetime-local value). */
-export const istNowLocal = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 16);
+export const istNowLocal = () => new Date(Date.now() + IST_MS).toISOString().slice(0, 16);
 /** datetime-local (IST wall clock) → ISO instant. */
-export const istLocalToIso = (v: string) => (v ? new Date(Date.parse(`${v}:00Z`) - 5.5 * 3600_000).toISOString() : "");
+export const istLocalToIso = (v: string) => (v ? new Date(Date.parse(`${v}:00Z`) - IST_MS).toISOString() : "");
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 export const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -109,7 +104,7 @@ export function usePopover(open: boolean, close: () => void, anchorRef: React.Re
  * PageUp/PageDown change month.
  */
 export function MonthGrid({ view, onView, selected, range, hover, onHover, focusDay, onFocusDay, min, max, onPick, showNav = true, hideOutside = false }: { view: { y: number; m: number }; onView: (v: { y: number; m: number }) => void; selected?: string | null; range?: { from: string | null; to: string | null }; hover?: string | null; onHover?: (d: string | null) => void; focusDay: string | null; onFocusDay: (d: string) => void; min?: string; max?: string; onPick: (d: string) => void; showNav?: boolean | "left" | "right"; hideOutside?: boolean }) {
-  const today = istTodayYmd();
+  const today = istToday();
   const gridRef = useRef<HTMLDivElement>(null);
   const cells = useMemo(() => {
     const first = new Date(Date.UTC(view.y, view.m - 1, 1));
@@ -140,7 +135,7 @@ export function MonthGrid({ view, onView, selected, range, hover, onHover, focus
     const step: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
     if (e.key in step) {
       e.preventDefault();
-      const next = addDays(cur, step[e.key]);
+      const next = shiftYmd(cur, step[e.key]);
       onFocusDay(next);
       onHover?.(next);
       const [y, m] = next.split("-").map(Number);
@@ -235,7 +230,7 @@ export function DateInput({ value, onChange, min, max, withTime, placeholder, cl
   const popRef = useRef<HTMLDivElement>(null);
   const parsed = useMemo(() => parseYmd(value), [value]);
   const [view, setView] = useState(() => {
-    const p = parseYmd(value) ?? parseYmd(istTodayYmd())!;
+    const p = parseYmd(value) ?? parseYmd(istToday())!;
     return { y: p.y, m: p.m };
   });
   const [focusDay, setFocusDay] = useState<string | null>(null);
@@ -243,7 +238,7 @@ export function DateInput({ value, onChange, min, max, withTime, placeholder, cl
   const pos = usePopover(open, close, btnRef, popRef, withTime ? 400 : 348, 300);
 
   function openPicker() {
-    const p = parseYmd(value) ?? parseYmd(istTodayYmd())!;
+    const p = parseYmd(value) ?? parseYmd(istToday())!;
     setView({ y: p.y, m: p.m });
     setFocusDay(ymd(p.y, p.m, p.d));
     setOpen(true);
@@ -261,7 +256,7 @@ export function DateInput({ value, onChange, min, max, withTime, placeholder, cl
     }
   }
   function setTime(h: number, min: number) {
-    const base = parsed ? ymd(parsed.y, parsed.m, parsed.d) : istTodayYmd();
+    const base = parsed ? ymd(parsed.y, parsed.m, parsed.d) : istToday();
     onChange(`${base}T${pad(h)}:${pad(min)}`);
   }
 
@@ -292,9 +287,9 @@ export function DateInput({ value, onChange, min, max, withTime, placeholder, cl
             {withTime && <TimeRow h={parsed?.h ?? 10} min={parsed?.min ?? 0} onChange={setTime} />}
             <div className="mt-2.5 flex items-center justify-between border-t border-line/70 pt-2.5">
               <div className="flex flex-wrap gap-1">
-                <Quick label="Today" onClick={() => pickDay(istTodayYmd())} />
-                <Quick label="Tomorrow" onClick={() => pickDay(addDays(istTodayYmd(), 1))} />
-                <Quick label="Next week" onClick={() => pickDay(addDays(istTodayYmd(), 7))} />
+                <Quick label="Today" onClick={() => pickDay(istToday())} />
+                <Quick label="Tomorrow" onClick={() => pickDay(shiftYmd(istToday(), 1))} />
+                <Quick label="Next week" onClick={() => pickDay(shiftYmd(istToday(), 7))} />
               </div>
               {withTime && (
                 <button

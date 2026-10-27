@@ -12,7 +12,7 @@ import { useSession } from "@/components/providers/session-provider";
 import { mutate } from "@/lib/client-cache";
 import { deleteJson } from "@/lib/http";
 import { compressImage } from "@/lib/image-compress";
-import { formatBytes } from "@/lib/attachments";
+import { fmtBytes } from "@/lib/format";
 import { LIMITS } from "@/lib/domain";
 import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
@@ -193,7 +193,7 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
                 <img src={`${base}/${a.id}`} alt={a.file_name} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" />
               </button>
               <figcaption className="flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] text-ink-muted">
-                <span className="truncate" title={`${a.file_name} · ${formatBytes(a.size_bytes)}${a.width ? ` · ${a.width}×${a.height}` : ""}`}>
+                <span className="truncate" title={`${a.file_name} · ${fmtBytes(a.size_bytes)}${a.width ? ` · ${a.width}×${a.height}` : ""}`}>
                   {a.file_name}
                 </span>
                 {canRemove(a) && (
@@ -221,7 +221,7 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
                     {a.file_name}
                   </button>
                   <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-ink-subtle">
-                    <span>{formatBytes(a.size_bytes)}</span>
+                    <span>{fmtBytes(a.size_bytes)}</span>
                     <span>· {fileLabel(a)}</span>
                     {a.uploaded_by && (
                       <span className="inline-flex items-center gap-1">
@@ -254,7 +254,7 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
               <div className={cn("flex items-center gap-2", u.phase === "error" ? "text-red-600" : "text-ink-muted")}>
                 {u.phase === "done" ? <span className="text-emerald-600">✓</span> : u.phase === "error" ? <IconX size={12} /> : <Spinner className="h-3 w-3" />}
                 <span className="min-w-0 flex-1 truncate">{u.name}</span>
-                <span className="shrink-0 tabular-nums">{u.phase === "sending" ? `${Math.round(u.progress * 100)}% · ${formatBytes(u.size)}` : u.phase === "saving" ? "Saving…" : u.phase === "done" ? "Attached" : u.error}</span>
+                <span className="shrink-0 tabular-nums">{u.phase === "sending" ? `${Math.round(u.progress * 100)}% · ${fmtBytes(u.size)}` : u.phase === "saving" ? "Saving…" : u.phase === "done" ? "Attached" : u.error}</span>
               </div>
               {(u.phase === "sending" || u.phase === "saving") && (
                 <div className="mt-1 h-1 overflow-hidden rounded-full bg-line/70">
@@ -299,7 +299,7 @@ function AttachmentPreview({ a, base, onClose }: { a: TaskAttachment; base: stri
   return (
     <Sheet
       title={a.file_name}
-      description={`${formatBytes(a.size_bytes)}${a.width ? ` · ${a.width}×${a.height}` : ""} · ${fileLabel(a)}${a.uploaded_by ? ` · ${a.uploaded_by.name}` : ""}`}
+      description={`${fmtBytes(a.size_bytes)}${a.width ? ` · ${a.width}×${a.height}` : ""} · ${fileLabel(a)}${a.uploaded_by ? ` · ${a.uploaded_by.name}` : ""}`}
       onClose={onClose}
       wide={kind !== "other" && kind !== "audio"}
       footer={
@@ -336,7 +336,7 @@ function AttachmentPreview({ a, base, onClose }: { a: TaskAttachment; base: stri
           <p className="text-[13.5px] font-medium text-ink">{a.file_name}</p>
           <p className="max-w-sm text-[12.5px] text-ink-muted">This {fileLabel(a)} can&rsquo;t be shown in the browser. Download it to open it on your computer.</p>
           <a href={`${src}?download=1`} className={buttonClass("primary", "sm")} download={a.file_name}>
-            <IconDownload size={14} /> Download {formatBytes(a.size_bytes)}
+            <IconDownload size={14} /> Download {fmtBytes(a.size_bytes)}
           </a>
         </div>
       )}

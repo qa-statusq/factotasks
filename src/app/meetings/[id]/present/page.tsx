@@ -12,7 +12,9 @@ import { useRecorder, screenRecordingSupported } from "@/lib/use-recorder";
 import { canRecordMeeting } from "@/components/recording-controls";
 import { fmtClock } from "@/lib/recordings";
 import { IconCircleDot, IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconApps, IconUserCheck, IconMessage, IconArrowRight } from "@/components/ui/icons";
-import { buildSlides, Mark, fmtDay, type Pack, type Slide } from "./deck-slides";
+import { buildSlides, Mark, type Slide } from "./deck-slides";
+import { istDate } from "@/lib/time";
+import type { DeckPack } from "@/lib/types";
 import { useDeckKeys, useIdleChrome } from "./use-deck-controls";
 
 /**
@@ -46,7 +48,7 @@ const SlideSection = memo(function SlideSection({ slide, n, total, active }: { s
 });
 
 /** The record / stop control in the title band: the only part of the deck that follows the recorder's clock. */
-function DeckRecordControls({ meetingId, meeting }: { meetingId: string; meeting: Pack["meeting"] }) {
+function DeckRecordControls({ meetingId, meeting }: { meetingId: string; meeting: DeckPack["meeting"] }) {
   const recorder = useRecorder();
   const recPhase = recorder.state.phase;
   const recording = recPhase === "recording";
@@ -68,7 +70,7 @@ function Deck() {
   const router = useRouter();
   const sp = useSearchParams();
   const printMode = sp.get("print") === "1";
-  const { data, loading, error, refresh } = useCachedFetch<Pack>(`/api/meetings/${id}`);
+  const { data, loading, error, refresh } = useCachedFetch<DeckPack>(`/api/meetings/${id}`);
   useDocumentTitle(data ? `${data.meeting.title} · Present · FactoTasks` : "Present · FactoTasks");
   const [rawIndex, setIndex] = useState(0);
   const touchX = useRef<number | null>(null);
@@ -146,7 +148,7 @@ function Deck() {
           <span className="inline-flex min-w-0 items-center gap-[0.8cqw]" style={{ maxWidth: `${titleMax}cqw` }}>
             <Mark className="h-[1.9cqw] w-[1.9cqw] text-white" />
             <span className="truncate font-semibold text-white/90">{data.meeting.title}</span>
-            {!data.meeting.title.includes(fmtDay(data.meeting.held_at)) && <span className="shrink-0">· {fmtDay(data.meeting.held_at)}</span>}
+            {!data.meeting.title.includes(istDate(data.meeting.held_at)) && <span className="shrink-0">· {istDate(data.meeting.held_at)}</span>}
           </span>
         </div>
         {slides.map((s, i) => (

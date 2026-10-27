@@ -5,7 +5,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 
-import { MinutesDoc, type Pack } from "./minutes-doc";
+import { MinutesDoc } from "./minutes-doc";
+import type { DeckPack } from "@/lib/types";
 
 /**
  * Minutes of meeting as a document: A4, black on white, one running header,
@@ -25,7 +26,7 @@ function PrintDoc() {
   const router = useRouter();
   const sp = useSearchParams();
   const auto = sp.get("auto") !== "0";
-  const { data, loading, error, refresh } = useCachedFetch<Pack>(`/api/meetings/${id}`);
+  const { data, loading, error, refresh } = useCachedFetch<DeckPack>(`/api/meetings/${id}`);
   useDocumentTitle(data ? `${data.meeting.title} · Minutes` : "Minutes");
 
   const printed = useRef(false);

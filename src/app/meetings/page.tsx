@@ -18,6 +18,7 @@ import { RecordingBadge } from "@/components/recording-controls";
 import { useRecorder } from "@/lib/use-recorder";
 import { IconPresentation, IconPlus, IconMaximize, IconSettings, IconSearch, IconX, IconCalendar, IconMessage } from "@/components/ui/icons";
 import type { AppOverview, Meeting, MeetingSeries } from "@/lib/types";
+import { istDayKey } from "@/lib/ist";
 
 export default function MeetingsPage() {
   const { isAdmin } = useSession();
@@ -42,7 +43,7 @@ export default function MeetingsPage() {
       .filter((m) => filter === "all" || m.series_id === filter)
       .filter((m) => !needle || m.title.toLowerCase().includes(needle) || (m.series?.name ?? "").toLowerCase().includes(needle))
       .filter((m) => {
-        const day = new Date(Date.parse(m.held_at) + 5.5 * 3600_000).toISOString().slice(0, 10);
+        const day = istDayKey(m.held_at);
         return (!from || day >= from) && (!to || day <= to);
       })
       .sort((a, b) => b.held_at.localeCompare(a.held_at));

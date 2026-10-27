@@ -353,6 +353,9 @@ export interface MeetingPack {
   notes: MeetingNote[];
 }
 
+/** A meeting pack with the workspace name, as the deck and the printed minutes use it. */
+export type DeckPack = MeetingPack & { workspace_name: string };
+
 export interface Notification {
   id: string;
   kind: string;

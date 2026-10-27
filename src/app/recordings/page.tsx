@@ -13,11 +13,11 @@ import { useDocumentTitle } from "@/lib/use-document-title";
 import { usePref } from "@/lib/use-pref";
 import { istDayKey } from "@/lib/ist";
 import { istDate } from "@/lib/time";
-import { fmtBytes, fmtDuration, recordingLabel } from "@/lib/recordings";
+import { fmtDuration, recordingLabel } from "@/lib/recordings";
+import { fmtBytes } from "@/lib/format";
 import { IconPlay, IconSearch, IconPresentation } from "@/components/ui/icons";
 import type { Recording } from "@/lib/types";
 
-const fmtDay = istDate;
 
 /** Every recorded meeting, newest first, grouped by meeting — searchable and filterable by series, person and date. */
 export default function RecordingsPage() {
@@ -115,7 +115,7 @@ export default function RecordingsPage() {
                     <IconPresentation size={15} className="shrink-0" style={g.meeting?.series ? { color: g.meeting.series.color } : undefined} />
                     <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">{g.meeting?.title ?? "Meeting"}</h2>
                     <span className="text-[12px] text-ink-subtle">
-                      {g.meeting && !g.meeting.title.includes(fmtDay(g.meeting.held_at)) ? `${fmtDay(g.meeting.held_at)} · ` : ""}
+                      {g.meeting && !g.meeting.title.includes(istDate(g.meeting.held_at)) ? `${istDate(g.meeting.held_at)} · ` : ""}
                       {g.items.length} recording{g.items.length === 1 ? "" : "s"}
                     </span>
                     {g.items[0].recorder && (

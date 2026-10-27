@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText } from "@/lib/meeting-agenda";
+import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText, meetingWindowText } from "@/lib/meeting-agenda";
 import { istDate, fmtYmd, fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRef } from "@/lib/domain";
@@ -10,25 +10,22 @@ import { Logo } from "@/components/ui/logo";
 import { AppTile, EagerIconsContext } from "@/components/ui/task-chips";
 import { NoteLink } from "@/components/ui/note-link";
 import { IconPrint, IconBack } from "@/components/ui/icons";
-import type { MeetingNote, MeetingPack, TaskCard } from "@/lib/types";
+import type { DeckPack, MeetingNote, TaskCard } from "@/lib/types";
 
 /**
  * The minutes of a meeting as an A4 document: masthead, figures, app by app (releases,
  * open work, what got done), work across apps, approvals, minutes and next steps. Pure
  * markup over a loaded pack — page.tsx loads it and prints once fonts and icons are in.
  */
-export type Pack = MeetingPack & { workspace_name: string };
-const fmtWhen = fmtDateTime;
-const fmtDay = istDate;
 const ymd = (s: string) => fmtYmd(s, { year: true });
 
-export function MinutesDoc({ pack, onBack }: { pack: Pack; onBack: () => void }) {
+export function MinutesDoc({ pack, onBack }: { pack: DeckPack; onBack: () => void }) {
   const agenda = useMemo(() => (pack ? buildAgenda(pack, { dedupe: true }) : []), [pack]);
   const labels = useMemo(() => (pack ? nameLabels(packPeople(pack)) : new Map<string, string>()), [pack]);
   const notes = useMemo(() => (pack ? notesByTask(pack.notes) : new Map<string, MeetingNote[]>()), [pack]);
   const p = pack;
   const m = p.meeting;
-  const windowText = p.previous_meeting ? `${fmtDay(p.previous_meeting)} – ${fmtDay(m.held_at)}` : `7 days to ${fmtDay(m.held_at)}`;
+  const windowText = meetingWindowText(p);
   const minutes = [...p.notes].sort((a, b) => a.created_at.localeCompare(b.created_at));
   // Printed page footer (CSS page box): no quotes or backslashes may reach the CSS string.
   const footerText = `${p.workspace_name} · ${m.title}`.split('"').join("").split("\\").join("");
@@ -64,7 +61,7 @@ export function MinutesDoc({ pack, onBack }: { pack: Pack; onBack: () => void })
           <h1 className="mt-3 text-[21pt] font-bold leading-tight tracking-[-0.02em]">{m.title}</h1>
           {p.series && !m.title.startsWith(p.series.name) && <p className="mt-0.5 text-[9.5pt] text-ink-muted">{p.series.name}</p>}
           <dl className="mt-3 grid grid-cols-3 gap-x-6 text-[9.5pt]">
-            <Fact label="Held">{fmtWhen(m.held_at)} IST</Fact>
+            <Fact label="Held">{fmtDateTime(m.held_at)} IST</Fact>
             <Fact label="Covering">{windowText}</Fact>
             <Fact label="Status">{m.status === "finalized" ? "Closed" : "Open"}</Fact>
           </dl>
@@ -135,7 +132,7 @@ export function MinutesDoc({ pack, onBack }: { pack: Pack; onBack: () => void })
                       </Td>
                       <Td>{PLATFORM_META[r.platform].label}</Td>
                       <Td>{RELEASE_STATUS_META[r.status].label}</Td>
-                      <Td className="tabular-nums">{r.status === "released" && r.released_at ? fmtDay(r.released_at) : r.planned_date ? `${ymd(r.planned_date)} (planned)` : "—"}</Td>
+                      <Td className="tabular-nums">{r.status === "released" && r.released_at ? istDate(r.released_at) : r.planned_date ? `${ymd(r.planned_date)} (planned)` : "—"}</Td>
                       <Td className="text-ink-muted">
                         {r.tasks && r.tasks.length > 0 && (
                           <ul className="mb-1 flex flex-col gap-0.5">
@@ -274,7 +271,7 @@ export function MinutesDoc({ pack, onBack }: { pack: Pack; onBack: () => void })
 
         <footer className="mt-8 flex items-center justify-between border-t border-line pt-2 text-[8pt] text-ink-subtle print:hidden">
           <span>{p.workspace_name} · Minutes of meeting</span>
-          <span>Generated {fmtWhen(new Date().toISOString())} IST · FactoTasks</span>
+          <span>Generated {fmtDateTime(new Date().toISOString())} IST · FactoTasks</span>
         </footer>
       </article>
       </EagerIconsContext.Provider>

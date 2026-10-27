@@ -1,5 +1,6 @@
 import type { MeetingNote, MeetingPack, TaskCard, UserBrief } from "./types";
 import type { TaskStatus } from "./domain";
+import { istDate } from "./time";
 
 export interface AgendaGroup {
   key: string;
@@ -157,4 +158,9 @@ export function notesByTask(notes: MeetingNote[]): Map<string, MeetingNote[]> {
   const m = new Map<string, MeetingNote[]>();
   for (const n of notes) if (n.task_id) m.set(n.task_id, [...(m.get(n.task_id) || []), n]);
   return m;
+}
+
+/** The span a meeting covers, as the deck and the printed minutes write it: "21 Oct 2026 – 28 Oct 2026". */
+export function meetingWindowText(p: Pick<MeetingPack, "previous_meeting" | "meeting">): string {
+  return p.previous_meeting ? `${istDate(p.previous_meeting)} – ${istDate(p.meeting.held_at)}` : `7 days to ${istDate(p.meeting.held_at)}`;
 }

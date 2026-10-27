@@ -21,18 +21,19 @@ import { displayName } from "@/lib/name";
 import { taskRef } from "@/lib/domain";
 import { IconPlus, IconCheckCircle, IconArrowRight, IconTasks, IconPlay, IconCalendar, IconAlert, IconUserCheck } from "@/components/ui/icons";
 import type { DashboardPack, TaskCard } from "@/lib/types";
+import { IST_MS } from "@/lib/ist";
 
 // Hand-formatted (no Intl): server and browser ICU builds punctuate dates
 // differently, which showed up as a hydration mismatch on this one line.
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 function todayLabel(): string {
-  const d = new Date(Date.now() + 5.5 * 3600_000); // IST wall clock as UTC fields
+  const d = new Date(Date.now() + IST_MS); // IST wall clock as UTC fields
   return `${WEEKDAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
 function greeting(): string {
-  const h = Number(new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(11, 13));
+  const h = Number(new Date(Date.now() + IST_MS).toISOString().slice(11, 13));
   return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
