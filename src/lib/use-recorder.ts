@@ -89,6 +89,25 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
   }, []);
   useEffect(() => () => releaseMedia(), [releaseMedia]);
 
+  /**
+   * The upload gave up (or never opened): stop capturing at once. Without this the
+   * screen/microphone stayed captured with no Stop control, the queue kept growing
+   * in memory, and a later "Try again" raced the still-running uploader (R2-1).
+   */
+  const abortCapture = useCallback(() => {
+    stopped.current = true;
+    const r0 = rec.current;
+    if (r0) {
+      r0.onstop = null;
+      r0.onerror = null;
+      r0.ondataavailable = null;
+      if (r0.state !== "inactive") r0.stop();
+    }
+    releaseMedia();
+    queue.current = [];
+    queued.current = 0;
+  }, [releaseMedia]);
+
   // Leaving the tab mid-recording: warn first; if it still goes (reload, close), close the upload
   // with what has already arrived — a beacon survives the unload — and remember it for when the panel is back.
   useEffect(() => {
@@ -208,6 +227,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         const r = await send(body, at, total, seconds);
         if (!r.ok) {
           failed.current = true;
+          abortCapture();
           patch({ phase: "error", error: `Couldn't save the recording: ${r.error}.`, blob: fallbackBlob() });
           return;
         }
@@ -234,6 +254,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
             refreshLists();
           } else if (!close.ok) {
             failed.current = true;
+            abortCapture();
             patch({ phase: "error", error: `Couldn't finish saving: ${close.error}`, blob: fallbackBlob() });
           }
           return;
@@ -242,7 +263,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     } finally {
       pumping.current = false;
     }
-  }, [patch, send, refreshLists, fallbackBlob]);
+  }, [patch, send, refreshLists, fallbackBlob, abortCapture]);
 
   /** Runs when the recorder stops for any reason: Stop here, "Stop sharing" in the browser's bar, or the device vanishing. */
   const finish = useCallback(() => {
@@ -321,13 +342,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         creating.current = postJson<{ recording?: Recording; error?: string }>(`/api/meetings/${meetingId}/recordings`, { mime: mime.current }).then((started) => {
           if (!started.ok || !started.data?.recording) {
             failed.current = true;
-            const r0 = rec.current;
-            if (r0) {
-              r0.onstop = null;
-              r0.onerror = null;
-              if (r0.state !== "inactive") r0.stop();
-            }
-            releaseMedia();
+            abortCapture();
             setState({ ...IDLE, meetingId, title, mode, phase: "error", error: started.data?.error || "Couldn't start saving the recording", blob: fallbackBlob() });
             return null;
           }
@@ -345,16 +360,18 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         starting.current = false;
       }
     },
-    [patch, pump, releaseMedia, finish, keepCopy, fallbackBlob, refreshLists]
+    [patch, pump, releaseMedia, finish, keepCopy, fallbackBlob, refreshLists, abortCapture]
   );
 
   /** After a failure: upload the kept file from scratch as a new recording. */
-  const retry = useCallback(async () => {
-    const blob = state.blob;
-    const m = meeting.current;
-    if (!blob || !m) return;
+  /** Upload a kept file again from the start, as a new recording. */
+  const resend = useCallback(async (blob: Blob, m: { id: string; title: string }) => {
     failed.current = false;
     finishBase.current = 0;
+    recordingId.current = null; // the failed upload is abandoned; nothing may write to it any more
+    queue.current = [];
+    queued.current = 0;
+    offset.current = 0;
     captured.current = blob.size;
     patch({ phase: "finishing", error: null, progress: 0, finishProgress: 0, finishStartedAt: performance.now(), sentBytes: 0, recordedBytes: blob.size });
     const started = await postJson<{ recording?: Recording; error?: string }>(`/api/meetings/${m.id}/recordings`, { mime: blob.type || mime.current, size_bytes: blob.size, duration_sec: state.seconds });
@@ -379,11 +396,28 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         return;
       }
     }
-  }, [patch, send, state.blob, state.seconds, refreshLists]);
+  }, [patch, send, refreshLists, state.seconds]);
+
+  const retrying = useRef(false);
+  const retry = useCallback(async () => {
+    const blob = state.blob;
+    const m = meeting.current;
+    // Never while a capture is still live, and once at a time.
+    if (!blob || !m || rec.current || retrying.current) return;
+    retrying.current = true;
+    try {
+      await resend(blob, m);
+    } finally {
+      retrying.current = false;
+    }
+  }, [state.blob, resend]);
+
 
   const dismiss = useCallback(() => {
+    // Belt and braces: a dismissed error never leaves a capture running.
+    if (failed.current && rec.current) abortCapture();
     setState((s) => (s.phase === "recording" || s.phase === "finishing" || s.phase === "starting" ? s : IDLE));
-  }, []);
+  }, [abortCapture]);
 
   // One value per state change: consumers re-render when the recording moves, never because the provider's parent did.
   const api = useMemo<RecorderApi>(() => ({ state, start, stop, retry, dismiss }), [state, start, stop, retry, dismiss]);
