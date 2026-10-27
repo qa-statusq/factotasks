@@ -17,14 +17,12 @@ export async function GET() {
   if (u instanceof NextResponse) return u;
   const sb = getSupabase();
   if (u.role !== "admin") {
-    // Members get every series by name (to attach a task to one from the task form) and the full
-    // shape of the series they take part in.
-    const mine = new Set(await memberSeriesIds(u.uid));
-    const { data, error } = await sb.from("meeting_series").select(SERIES_SELECT).order("created_at");
+    // Members see only the series they take part in — the ones they can attach a task to.
+    const mine = await memberSeriesIds(u.uid);
+    if (!mine.length) return NextResponse.json({ series: [] });
+    const { data, error } = await sb.from("meeting_series").select(SERIES_SELECT).in("id", mine).order("created_at");
     if (error) return serverError(error);
-    return NextResponse.json({
-      series: (data || []).map((r) => (mine.has(r.id as string) ? { ...shapeSeries(r), member: true } : { id: r.id, name: r.name, color: r.color, app_ids: [], app_order: [] })),
-    });
+    return NextResponse.json({ series: (data || []).map((r) => ({ ...shapeSeries(r), member: true })) });
   }
   const [series, meetings] = await Promise.all([
     sb.from("meeting_series").select(SERIES_SELECT).order("created_at"),

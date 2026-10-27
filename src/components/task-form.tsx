@@ -39,6 +39,8 @@ export interface TaskFormValues {
   estimate_hours: number | null;
   /** Meeting series the task is attached to; null = none. */
   series_id: string | null;
+  /** Its name, so the field can show it even to someone outside that series. */
+  series_name?: string | null;
 }
 
 const TYPE_OPTIONS = TASK_TYPES.map((t) => ({ value: t, label: TYPE_META[t].label }));
@@ -85,7 +87,7 @@ export function TargetPicker({ apps, value, onChange }: { apps: AppOverview[]; v
         className="self-start"
       />
       {mode === "general" ? (
-        <p className="text-[12.5px] text-ink-subtle">Not tied to any app: process work, documentation, store accounts, anything team-wide. It reaches a meeting only when attached to a series below.</p>
+        <p className="text-[12.5px] text-ink-subtle">Not tied to any app: process work, documentation, store accounts, anything team-wide. It reaches a meeting only when attached to a meeting series or added to one by hand.</p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface">
           {/* Summary line: fixed height, so ticking an app never pushes the list down */}
@@ -211,7 +213,14 @@ export function TaskFormSheet({
   const [estimate, setEstimate] = useState(initial?.estimate_hours != null ? String(initial.estimate_hours) : "");
   const [seriesId, setSeriesId] = useState<string>(initial?.series_id ?? "");
   const { data: seriesData } = useCachedFetch<{ series: { id: string; name: string; color: string }[] }>("/api/meeting-series");
-  const seriesOptions = useMemo(() => [{ value: "", label: "Not attached to a series" }, ...(seriesData?.series ?? []).map((s) => ({ value: s.id, label: s.name }))], [seriesData]);
+  const seriesOptions = useMemo(() => {
+    const list = (seriesData?.series ?? []).map((s) => ({ value: s.id, label: s.name }));
+    // A task already attached to a series this person is not part of keeps showing it (unchanged on save).
+    if (initial?.series_id && !list.some((o) => o.value === initial.series_id)) list.push({ value: initial.series_id, label: initial.series_name || "Its current meeting series" });
+    return [{ value: "", label: "Not attached to a series" }, ...list];
+  }, [seriesData, initial?.series_id, initial?.series_name]);
+  // Nothing to choose from: no field at all (admins always see it once a series exists).
+  const showSeries = seriesOptions.length > 1;
   const [busy, setBusy] = useState<false | "primary" | "secondary">(false);
   // Validation and save problems surface as error toasts, not inline text.
   const setError = (m: string) => {
@@ -332,9 +341,11 @@ export function TaskFormSheet({
           {appsData ? <TargetPicker apps={apps} value={targets} onChange={changeTargets} /> : appsErr ? <LoadError title="Couldn't load the apps" onRetry={appsRetry} /> : <div className={cn(controlClass, "flex h-10 items-center gap-2 text-ink-subtle")}><Spinner className="h-3.5 w-3.5" /> Loading apps…</div>}
         </Field>
 
-        <Field label="Meeting" hint={targets.length ? "Optional: app tasks already reach the meetings that cover their app." : "A general task only reaches a meeting when attached here. It then shows on that series' meetings until it's done."}>
-          <Dropdown value={seriesId} onChange={setSeriesId} options={seriesOptions} />
-        </Field>
+        {showSeries && (
+          <Field label="Meeting" hint={targets.length ? "Optional: app tasks already reach the meetings that cover their app." : "A general task only reaches a meeting when attached here. It then shows on that series' meetings until it's done."}>
+            <Dropdown value={seriesId} onChange={setSeriesId} options={seriesOptions} />
+          </Field>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Type">

@@ -258,7 +258,7 @@ function TasksScreen() {
             <FilterCell label="Platform"><Dropdown value={filters.platform || ""} onChange={(v) => set({ platform: v || undefined })} options={platformOptions} /></FilterCell>
             <FilterCell label="Due"><Dropdown value={filters.due || ""} onChange={(v) => set({ due: v || undefined })} options={dueOptions} /></FilterCell>
             <FilterCell label="Kind"><Dropdown value={filters.kind || ""} onChange={(v) => set({ kind: v || undefined, ...(v === "app" ? { series: undefined } : {}) })} options={[{ value: "", label: "App & general" }, { value: "app", label: "App tasks" }, { value: "general", label: "General tasks" }]} /></FilterCell>
-            <FilterCell label="Meeting series" hint={filters.kind === "general" ? "General tasks reach a meeting only when attached" : undefined}><Dropdown value={filters.series || ""} onChange={(v) => set({ series: v || undefined })} options={seriesOptions} /></FilterCell>
+            {(isAdmin || (seriesData?.series.length ?? 0) > 0) && <FilterCell label="Meeting series" hint={filters.kind === "general" ? "General tasks reach a meeting only when attached" : undefined}><Dropdown value={filters.series || ""} onChange={(v) => set({ series: v || undefined })} options={seriesOptions} /></FilterCell>}
             {canMeet && <FilterCell label="Meeting" hint="Everything on that meeting's agenda"><Dropdown value={filters.meeting || ""} onChange={(v) => set({ meeting: v || undefined, ...(v ? { scope: "all" } : {}) })} options={meetingOptions} /></FilterCell>}
           </div>
           {(activeCount > 0 || filters.label) && (

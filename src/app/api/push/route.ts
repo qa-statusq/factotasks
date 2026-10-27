@@ -16,8 +16,7 @@ export async function GET(req: NextRequest) {
     const { data } = await getSupabase().from("push_subscriptions").select("id").eq("user_id", u.uid).eq("endpoint", endpoint).maybeSingle();
     subscribed = !!data;
   }
-  const { count } = await getSupabase().from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", u.uid);
-  return NextResponse.json({ enabled, subscribed, devices: count ?? 0 });
+  return NextResponse.json({ enabled, subscribed });
 }
 
 /** Browser push services only: the server POSTs to these URLs, so an

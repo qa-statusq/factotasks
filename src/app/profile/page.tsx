@@ -117,34 +117,31 @@ function NotificationsCard() {
   const { toast } = useToast();
   const { me } = useSession();
   const [state, setState] = useState<PushState>("checking");
-  const [devices, setDevices] = useState(0);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
 
-  async function probe(): Promise<{ state: PushState; devices: number }> {
-    if (!pushSupported()) return { state: "unsupported", devices: 0 };
+  async function probe(): Promise<PushState> {
+    if (!pushSupported()) return "unsupported";
     // "On" means THIS browser's subscription is registered to THIS account —
     // a subscription left behind by whoever used the browser before is "off".
     const sub = await currentSubscription();
     const data = await fetch(`/api/push${sub ? `?endpoint=${encodeURIComponent(sub.endpoint)}` : ""}`, { credentials: "same-origin" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ enabled: boolean; subscribed: boolean; devices: number }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<{ enabled: boolean; subscribed: boolean }>) : null))
       .catch(() => null);
-    if (!data) return { state: "off", devices: 0 };
-    if (!data.enabled) return { state: "unconfigured", devices: 0 };
-    if (Notification.permission === "denied") return { state: "blocked", devices: data.devices };
-    return { state: sub && data.subscribed ? "on" : "off", devices: data.devices };
+    if (!data) return "off";
+    if (!data.enabled) return "unconfigured";
+    if (Notification.permission === "denied") return "blocked";
+    return sub && data.subscribed ? "on" : "off";
   }
   async function load() {
     const r = await probe();
-    setState(r.state);
-    setDevices(r.devices);
+    setState(r);
   }
   useEffect(() => {
     let alive = true;
     probe().then((r) => {
       if (!alive) return;
-      setState(r.state);
-      setDevices(r.devices);
+      setState(r);
     });
     return () => {
       alive = false;
@@ -200,12 +197,11 @@ function NotificationsCard() {
             <IconBell size={16} className="text-ink-subtle" /> Browser notifications
           </span>
         </CardTitle>
-        {state === "on" && devices > 1 && <Badge tone="neutral">{devices} devices</Badge>}
       </CardHeader>
       <CardBody>
         <div className="flex flex-wrap items-center gap-3">
           <p className="min-w-0 flex-1 text-[13px] text-ink-muted">{copy}</p>
-          {state === "on" && (
+          {state === "on" && me?.role === "admin" && (
             <Button variant="secondary" size="sm" onClick={test} disabled={testing} className="shrink-0">
               {testing ? <Spinner /> : "Send test"}
             </Button>

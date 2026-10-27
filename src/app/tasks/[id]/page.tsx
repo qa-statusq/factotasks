@@ -80,6 +80,7 @@ function initialFrom(task: TaskDetail): TaskFormValues {
     labels: task.labels,
     estimate_hours: task.estimate_hours,
     series_id: task.series?.id ?? null,
+    series_name: task.series?.name ?? null,
   };
 }
 

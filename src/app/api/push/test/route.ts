@@ -8,12 +8,13 @@ export const dynamic = "force-dynamic";
 
 /**
  * Send a test notification to every device of the caller — the Profile
- * screen's "Send test" button. Answers how many devices the push service
+ * screen's "Send test" button (admins). Answers how many devices the push service
  * accepted it for, so a silent device can be told apart from a silent server.
  */
 export async function POST() {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
+  if (u.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   const limited = await rateLimited(u.uid, "push-test", 5, 60);
   if (limited) return limited;
   const { count } = await getSupabase().from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", u.uid);
