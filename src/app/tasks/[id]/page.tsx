@@ -21,19 +21,20 @@ import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { useClock } from "@/components/providers/clock-provider";
+import { workSeconds, WORK_SCHEDULE_TEXT } from "@/lib/work-time";
 import { useNameLabels } from "@/lib/use-name-labels";
 import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { reviewTask, applyTaskCard, refreshTaskViews } from "@/lib/task-actions";
 import { postJson, deleteJson } from "@/lib/http";
 import { closeSystemNotifications } from "@/lib/push-client";
-import { istTime } from "@/lib/time";
+import { fmtDateTime } from "@/lib/time";
 import { AddToMeetingSheet } from "@/components/add-task-sheet";
 import { PendingReleaseBanner } from "@/components/release-ui";
 import { same } from "@/lib/use-discard-guard";
-import { RelTime } from "@/components/ui/live-time";
+import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
-import { STATUS_META, RELEASE_STATUS_META, formatDuration, secondsBetween, taskRef, LIMITS, NOTE_KIND_META } from "@/lib/domain";
+import { STATUS_META, RELEASE_STATUS_META, formatDuration, taskRef, LIMITS, NOTE_KIND_META } from "@/lib/domain";
 import { IconEdit, IconTrash, IconCheck, IconX, IconPresentation, IconSend } from "@/components/ui/icons";
 import type { TaskDetail, TaskComment } from "@/lib/types";
 
@@ -221,7 +222,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
                       </Link>
                       {mm.series && <SeriesBadge series={mm.series} />}
                       <MeetingStatusBadge status={mm.status} />
-                      <span className="ml-auto text-[11.5px] text-ink-subtle">{istTime(mm.held_at).replace(/:\d\d (am|pm)/, " $1")}</span>
+                      <span className="ml-auto text-[11.5px] text-ink-subtle">{fmtDateTime(mm.held_at)}</span>
                     </li>
                   ))}
                 </ul>
@@ -293,7 +294,7 @@ function RequestBanner({ task, isAdmin, iRequested, cacheKey }: { task: TaskDeta
           {task.requested_at && (
             <span className="text-ink-subtle">
               {" "}
-              · <RelTime iso={task.requested_at} />
+              · <When iso={task.requested_at} />
             </span>
           )}
           {task.request_note && <div className="mt-0.5 break-words text-ink-muted">“{task.request_note}”</div>}
@@ -334,9 +335,9 @@ function Details({ task }: { task: TaskDetail }) {
   const label = useNameLabels();
   useClock();
   const now = new Date().toISOString();
-  const active = Number(task.active_seconds) + (task.status === "in_progress" ? secondsBetween(task.status_since, now) : 0);
-  const lead = task.completed_at ? secondsBetween(task.created_at, task.completed_at) : secondsBetween(task.created_at, now);
-  const waited = task.requested_at && !task.completed_at ? secondsBetween(task.requested_at, now) : task.approved_at && task.completed_at ? secondsBetween(task.completed_at, task.approved_at) : null;
+  const active = Number(task.active_seconds) + (task.status === "in_progress" ? workSeconds(task.status_since, now) : 0);
+  const lead = task.completed_at ? workSeconds(task.created_at, task.completed_at) : workSeconds(task.created_at, now);
+  const waited = task.requested_at && !task.completed_at ? workSeconds(task.requested_at, now) : task.approved_at && task.completed_at ? workSeconds(task.completed_at, task.approved_at) : null;
 
   return (
     <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6 lg:self-start">
@@ -355,7 +356,7 @@ function Details({ task }: { task: TaskDetail }) {
                 </Link>
                 <PlatformBadge platform={t.platform} />
                 {t.released_at ? (
-                  <span className="shrink-0 font-medium text-emerald-700" title={istTime(t.released_at)}>
+                  <span className="shrink-0 font-medium text-emerald-700" title={`Released ${fmtDateTime(t.released_at)}`}>
                     {t.release ? `Released · v${t.release.version_name}` : "Released"}
                   </span>
                 ) : t.release ? (
@@ -387,23 +388,17 @@ function Details({ task }: { task: TaskDetail }) {
       </section>
       <section className="rounded-xl border border-line bg-surface px-4 py-2 divide-y divide-line/70">
         <Row label="Created">
-          <span title={istTime(task.created_at)}>
-            <RelTime iso={task.created_at} />
-            {task.created_by && <span className="text-ink-subtle"> by {label(task.created_by)}</span>}
-          </span>
+          <When iso={task.created_at} />
+          {task.created_by && <span className="block text-ink-subtle">by {label(task.created_by)}</span>}
         </Row>
         {task.started_at && (
           <Row label="Started">
-            <span title={istTime(task.started_at)}>
-              <RelTime iso={task.started_at} />
-            </span>
+            <When iso={task.started_at} />
           </Row>
         )}
         {task.completed_at && (
           <Row label="Completed">
-            <span title={istTime(task.completed_at)}>
-              <RelTime iso={task.completed_at} />
-            </span>
+            <When iso={task.completed_at} />
           </Row>
         )}
         {task.approved_by && (
@@ -414,17 +409,17 @@ function Details({ task }: { task: TaskDetail }) {
           </Row>
         )}
         <Row label={task.completed_at ? "Lead time" : "Age"}>
-          <span className="tabular-nums">{formatDuration(lead)}</span>
+          <span className="tabular-nums" title={`Working time — ${WORK_SCHEDULE_TEXT}`}>{formatDuration(lead)}</span>
         </Row>
         <Row label="Active time">
-          <span className="tabular-nums" title="Time spent in “In progress”">
+          <span className="tabular-nums" title={`Working time spent in “In progress” — ${WORK_SCHEDULE_TEXT}`}>
             {formatDuration(active)}
             {task.status === "in_progress" && <span className="ml-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500 align-middle" />}
           </span>
         </Row>
         {waited !== null && (
           <Row label={task.approved_at ? "Approval took" : "Waiting"}>
-            <span className="tabular-nums">{formatDuration(waited)}</span>
+            <span className="tabular-nums" title={`Working time — ${WORK_SCHEDULE_TEXT}`}>{formatDuration(waited)}</span>
           </Row>
         )}
         {task.estimate_hours != null && (
@@ -489,9 +484,7 @@ function Comments({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 text-[11.5px] text-ink-subtle">
                     <span className="text-[13px] font-medium text-ink">{c.author?.name ?? "Former teammate"}</span>
-                    <span title={istTime(c.created_at)}>
-                      <RelTime iso={c.created_at} />
-                    </span>
+                    <When iso={c.created_at} />
                     {c.edited_at && <span>(edited)</span>}
                     {(mine || isAdmin) && !editing && (
                       <span className="ml-auto flex gap-2">
@@ -575,9 +568,9 @@ function Timeline({ task }: { task: TaskDetail }) {
               <span className="font-medium text-ink">{e.actor?.name ?? "Someone"}</span> {KIND_LABEL[e.kind]}{" "}
               {e.to_status && <span className="font-medium text-ink">{STATUS_META[e.to_status].label}</span>}
               {e.note && <span> — “{e.note}”</span>}
-              <span className="text-ink-subtle" title={istTime(e.created_at)}>
+              <span className="text-ink-subtle">
                 {" "}
-                · <RelTime iso={e.created_at} />
+                · <When iso={e.created_at} />
               </span>
             </div>
           </li>

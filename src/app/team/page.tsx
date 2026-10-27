@@ -18,8 +18,8 @@ import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch, mutate } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
-import { istTime } from "@/lib/time";
-import { RelTime } from "@/components/ui/live-time";
+import { istDate } from "@/lib/time";
+import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { NAME_MAX } from "@/lib/name";
 import { DEPARTMENTS, DEPARTMENT_META, LIMITS, type Department } from "@/lib/domain";
@@ -104,9 +104,9 @@ export default function TeamPage() {
                           )}
                           <span className="block [overflow-wrap:anywhere] sm:inline">{isAdmin ? <EmailText email={m.email} /> : DEPARTMENT_META[m.department]?.label ?? ""}</span>
                           {isAdmin && m.last_login_at && (
-                            <span className="block sm:inline" title={istTime(m.last_login_at)}>
+                            <span className="block sm:inline">
                               <span className="hidden sm:inline"> · </span>
-                              active <RelTime iso={m.last_login_at} />
+                              active <When iso={m.last_login_at} />
                             </span>
                           )}
                           {isAdmin && m.must_change_password && (
@@ -364,11 +364,11 @@ function MemberSheet({ member: m, meId, onClose }: { member: TeamMember; meId?: 
           </div>
         </div>
         <p className="text-xs text-ink-subtle">
-          Joined {istTime(m.created_at).replace(/, .*$/, "")}
+          Joined {istDate(m.created_at)}
           {m.last_login_at && (
             <>
               {" "}
-              · last active <RelTime iso={m.last_login_at} />
+              · last active <When iso={m.last_login_at} />
             </>
           )}
         </p>

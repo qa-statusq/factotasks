@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText } from "@/lib/meeting-agenda";
-import { istTime, istDate, fmtYmd } from "@/lib/time";
+import { istDate, fmtYmd, fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRef } from "@/lib/domain";
 import { dueInfo } from "@/components/task-list";
@@ -18,7 +18,7 @@ import type { MeetingNote, MeetingPack, TaskCard } from "@/lib/types";
  * markup over a loaded pack — page.tsx loads it and prints once fonts and icons are in.
  */
 export type Pack = MeetingPack & { workspace_name: string };
-const fmtWhen = (iso: string) => istTime(iso).replace(/:\d\d (am|pm) IST$/, " $1");
+const fmtWhen = fmtDateTime;
 const fmtDay = istDate;
 const ymd = (s: string) => fmtYmd(s, { year: true });
 

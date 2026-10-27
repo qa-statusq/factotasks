@@ -718,6 +718,26 @@ $$;
 -- updated row. p_completed_at lets an APPROVAL back-date completion to when the
 -- member actually finished (their request time) rather than when the admin
 -- clicked approve.
+-- Working seconds between two instants: Mon–Fri, 09:00–13:00 and 13:45–18:45 IST
+-- (lunch left out). Every duration in the panel is measured on this clock; the
+-- panel's own copy is src/lib/work-time.ts — change both together. (025)
+create or replace function work_seconds(p_from timestamptz, p_to timestamptz)
+returns bigint
+language sql
+stable
+parallel safe
+set search_path = public
+as $$
+  select coalesce(sum(greatest(0, extract(epoch from (least(p_to, w.e) - greatest(p_from, w.b))))), 0)::bigint
+  from generate_series((p_from at time zone 'Asia/Kolkata')::date, (p_to at time zone 'Asia/Kolkata')::date, interval '1 day') as g(day)
+  cross join (values (time '09:00', time '13:00'), (time '13:45', time '18:45')) as s(b_t, e_t)
+  cross join lateral (
+    select (g.day::date + s.b_t) at time zone 'Asia/Kolkata' as b,
+           (g.day::date + s.e_t) at time zone 'Asia/Kolkata' as e
+  ) w
+  where p_to > p_from and extract(isodow from g.day) < 6;
+$$;
+
 create or replace function task_apply_status(
   p_task uuid, p_to text, p_actor uuid, p_kind text, p_note text default null, p_completed_at timestamptz default null
 )
@@ -756,9 +776,9 @@ begin
   end if;
 
   if p_to <> old_status then
-    -- Leaving in_progress: bank the stint that just ended.
+    -- Leaving in_progress: bank the WORKING time of the stint that just ended.
     if old_status = 'in_progress' then
-      active := active + greatest(0, extract(epoch from (n - t.status_since)))::bigint;
+      active := active + work_seconds(t.status_since, n);
     end if;
     if p_to = 'in_progress' and started is null then
       started := n;
@@ -1439,7 +1459,7 @@ as $$
   vis as (select t.* from tasks t, va where task_row_visible(t, p_user, va.ids)),
   done as (
     select t.*, (t.completed_at at time zone 'Asia/Kolkata')::date as day,
-           extract(epoch from (t.completed_at - t.created_at)) / 3600 as lead_h,
+           work_seconds(t.created_at, t.completed_at) / 3600.0 as lead_h,
            (t.due_date is not null) as has_due,
            (t.due_date is not null and (t.completed_at at time zone 'Asia/Kolkata')::date <= t.due_date) as on_time
     from vis t, bounds b
@@ -1450,8 +1470,9 @@ as $$
     from vis t, bounds b where t.created_at >= b.from_at and t.created_at < b.to_at
   ),
   openx as (
-    select t.*, (ist_today() - (t.created_at at time zone 'Asia/Kolkata')::date) as age_days
-    from vis t where t.status not in ('done','cancelled')
+    select t.*, w.age_s, round(w.age_s / 32400.0, 1) as age_days
+    from vis t cross join lateral (select work_seconds(t.created_at, now()) as age_s) w
+    where t.status not in ('done','cancelled')
   ),
   rel as (
     select r.*, (r.released_at at time zone 'Asia/Kolkata')::date as day
@@ -1531,26 +1552,28 @@ as $$
       ) y
     ), '{}'::jsonb),
     'cycle_buckets', jsonb_build_array(
-      jsonb_build_object('key', '<1d', 'n', (select count(*) from done where lead_h < 24)),
-      jsonb_build_object('key', '1–3d', 'n', (select count(*) from done where lead_h >= 24 and lead_h < 72)),
-      jsonb_build_object('key', '3–7d', 'n', (select count(*) from done where lead_h >= 72 and lead_h < 168)),
-      jsonb_build_object('key', '1–2w', 'n', (select count(*) from done where lead_h >= 168 and lead_h < 336)),
-      jsonb_build_object('key', '2–4w', 'n', (select count(*) from done where lead_h >= 336 and lead_h < 672)),
-      jsonb_build_object('key', '>4w', 'n', (select count(*) from done where lead_h >= 672))
+      -- Working time: 1d = 9 working hours, 1w = 5 working days (45 h).
+      jsonb_build_object('key', '<1d', 'n', (select count(*) from done where lead_h < 9)),
+      jsonb_build_object('key', '1–3d', 'n', (select count(*) from done where lead_h >= 9 and lead_h < 27)),
+      jsonb_build_object('key', '3–5d', 'n', (select count(*) from done where lead_h >= 27 and lead_h < 45)),
+      jsonb_build_object('key', '1–2w', 'n', (select count(*) from done where lead_h >= 45 and lead_h < 90)),
+      jsonb_build_object('key', '2–4w', 'n', (select count(*) from done where lead_h >= 90 and lead_h < 180)),
+      jsonb_build_object('key', '>4w', 'n', (select count(*) from done where lead_h >= 180))
     ),
     'aging', jsonb_build_array(
-      jsonb_build_object('key', '<7d', 'n', (select count(*) from openx where age_days < 7)),
-      jsonb_build_object('key', '7–14d', 'n', (select count(*) from openx where age_days >= 7 and age_days < 14)),
-      jsonb_build_object('key', '14–30d', 'n', (select count(*) from openx where age_days >= 14 and age_days < 30)),
-      jsonb_build_object('key', '30–60d', 'n', (select count(*) from openx where age_days >= 30 and age_days < 60)),
-      jsonb_build_object('key', '>60d', 'n', (select count(*) from openx where age_days >= 60))
+      -- Working weeks of 5 working days (45 working hours = 162000 s).
+      jsonb_build_object('key', '<1w', 'n', (select count(*) from openx where age_s < 162000)),
+      jsonb_build_object('key', '1–2w', 'n', (select count(*) from openx where age_s >= 162000 and age_s < 324000)),
+      jsonb_build_object('key', '2–4w', 'n', (select count(*) from openx where age_s >= 324000 and age_s < 648000)),
+      jsonb_build_object('key', '4–8w', 'n', (select count(*) from openx where age_s >= 648000 and age_s < 1296000)),
+      jsonb_build_object('key', '>8w', 'n', (select count(*) from openx where age_s >= 1296000))
     ),
     'oldest_open', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', t.id, 'number', t.number, 'title', t.title, 'status', t.status, 'priority', t.priority, 'age_days', t.age_days, 'due_date', t.due_date,
+        'id', t.id, 'number', t.number, 'title', t.title, 'status', t.status, 'priority', t.priority, 'age_days', t.age_days, 'age_seconds', t.age_s, 'due_date', t.due_date,
         'app', (select jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url) from apps a where a.id = t.app_ids[1]),
         'assignees', coalesce((select jsonb_agg(user_brief(u) order by u.first_name) from task_assignees ta join users u on u.id = ta.user_id where ta.task_id = t.id), '[]'::jsonb)
-      ) order by t.age_days desc, t.number)
+      ) order by t.age_s desc, t.number)
       from (select * from openx order by created_at limit 8) t
     ), '[]'::jsonb),
     'releases', jsonb_build_object(
@@ -1584,7 +1607,8 @@ as $$
       'median_lead_hours', (select round((percentile_cont(0.5) within group (order by lead_h))::numeric, 1) from done),
       'p90_lead_hours', (select round((percentile_cont(0.9) within group (order by lead_h))::numeric, 1) from done),
       'avg_active_hours', (select round(avg(active_seconds) / 3600.0, 1) from done),
-      'avg_open_age_days', (select round(avg(age_days)::numeric, 1) from openx)
+      'avg_open_age_days', (select round(avg(age_s) / 32400.0, 1) from openx),
+      'avg_open_age_seconds', (select round(avg(age_s)) from openx)
     )
   );
 $$;

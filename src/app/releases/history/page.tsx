@@ -16,7 +16,7 @@ import { ReleaseViewSheet, prettyDate } from "@/components/release-ui";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useNameLabels } from "@/lib/use-name-labels";
 import { usePref } from "@/lib/use-pref";
-import { istTime, fmtYmd } from "@/lib/time";
+import { fmtYmd, fmtDateTime } from "@/lib/time";
 import { istDayKey } from "@/lib/ist";
 import { releaseDay } from "@/lib/release-day";
 import { cn } from "@/lib/cn";
@@ -28,7 +28,7 @@ import type { ReleaseEvent } from "@/app/api/releases/history/route";
 type Group = "app" | "month" | "date";
 
 const monthLabel = (ym: string) => fmtYmd(ym, { month: "long", year: true });
-const fmtWhen = (iso: string) => istTime(iso).replace(/:\d\d (am|pm)/, " $1");
+const fmtWhen = fmtDateTime;
 /** Separator glued to the word before it, so a wrapped line never opens with "·". */
 const SEP = "\u00a0· ";
 

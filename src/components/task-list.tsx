@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/ui/misc";
 import { useSession } from "@/components/providers/session-provider";
 import { IconMessage, IconPaperclip, IconTasks, IconArrowRight } from "@/components/ui/icons";
 import { Avatar } from "@/components/ui/avatar";
-import { RelTime } from "@/components/ui/live-time";
+import { When } from "@/components/ui/live-time";
 import type { TaskCard } from "@/lib/types";
 
 /** "Due today" / "3d late" / "Fri 24 Oct" with a tone that escalates. */
@@ -223,7 +223,7 @@ export function RequestSummary({ task, className }: { task: TaskCard; className?
         {chip(task.requested_status)}
         {task.requested_at && (
           <span className="text-ink-subtle">
-            · <RelTime iso={task.requested_at} />
+            · <When iso={task.requested_at} />
           </span>
         )}
       </div>

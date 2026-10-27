@@ -14,8 +14,7 @@ import { useSession } from "@/components/providers/session-provider";
 import { useToast } from "@/components/ui/toast";
 import { useCachedFetch } from "@/lib/client-cache";
 import { timeoutSignal } from "@/lib/compat";
-import { istTime } from "@/lib/time";
-import { RelTime } from "@/components/ui/live-time";
+import { When } from "@/components/ui/live-time";
 import { useOnChange } from "@/lib/use-on-change";
 import { IconActivity } from "@/components/ui/icons";
 import type { UserBrief } from "@/lib/types";
@@ -147,14 +146,20 @@ export default function ActivityPage() {
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-subtle">
                     <span className="font-medium text-ink-muted">{e.user_name || e.user_email || "system"}</span>
                     <span>·</span>
-                    <span title={istTime(e.created_at)}>
-                      <RelTime iso={e.created_at} />
-                    </span>
+                    <When iso={e.created_at} />
+                  </div>
+                  {/* Phones: the action code sits under the line, so the text keeps the row's width. */}
+                  <div className="mt-1 sm:hidden">
+                    <Badge tone={toneFor(e.action)} className="font-mono text-[10.5px]">
+                      {e.action}
+                    </Badge>
                   </div>
                 </div>
-                <Badge tone={toneFor(e.action)} className="shrink-0 font-mono text-[10.5px]">
-                  {e.action}
-                </Badge>
+                <span className="hidden shrink-0 sm:block">
+                  <Badge tone={toneFor(e.action)} className="font-mono text-[10.5px]">
+                    {e.action}
+                  </Badge>
+                </span>
               </li>
             ))}
           </ul>

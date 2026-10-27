@@ -15,7 +15,7 @@ import { postJson } from "@/lib/http";
 import { taskRef } from "@/lib/domain";
 import { cn } from "@/lib/cn";
 import { IconSearch, IconCheck } from "@/components/ui/icons";
-import { istTime } from "@/lib/time";
+import { fmtDateTime } from "@/lib/time";
 import type { Meeting, TaskCard } from "@/lib/types";
 
 /**
@@ -176,7 +176,7 @@ export function AddToMeetingSheet({ taskId, taskNumber, already, onClose }: { ta
                       {m.title}
                       {m.series && <SeriesBadge series={m.series} />}
                     </div>
-                    <div className="mt-0.5 text-[11.5px] text-ink-subtle">{istTime(m.held_at).replace(/:\d\d (am|pm)/, " $1")}</div>
+                    <div className="mt-0.5 text-[11.5px] text-ink-subtle">{fmtDateTime(m.held_at)}</div>
                   </div>
                 </button>
               </li>

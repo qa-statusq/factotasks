@@ -15,9 +15,8 @@ import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { mutate } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
-import { istTime } from "@/lib/time";
 import { scrollIntoViewNearest } from "@/lib/compat";
-import { RelTime } from "@/components/ui/live-time";
+import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { LIMITS, NOTE_KINDS, NOTE_KIND_META, taskRef, type NoteKind } from "@/lib/domain";
 import { IconSend, IconX, IconEdit, IconTrash, IconLink } from "@/components/ui/icons";
@@ -254,9 +253,7 @@ function NoteRow({ note: n, cacheKey, compact, canEdit }: { note: MeetingNote; c
                 <Avatar user={n.author} size="xs" /> {n.author.name} ·
               </>
             )}
-            <span title={istTime(n.created_at)}>
-              <RelTime iso={n.created_at} />
-            </span>
+            <When iso={n.created_at} />
             {n.about && <span>· about {n.about.name}</span>}
           </div>
         )}

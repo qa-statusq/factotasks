@@ -13,7 +13,7 @@ import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
-import { istTime } from "@/lib/time";
+import { fmtDateTime } from "@/lib/time";
 import { taskRef } from "@/lib/domain";
 import { prettyDate } from "@/components/release-ui";
 import { IconUserCheck, IconRocket, IconCheck } from "@/components/ui/icons";
@@ -153,7 +153,7 @@ export default function ApprovalsPage() {
                           </div>
                           <p className="mt-0.5 text-[12px] text-ink-muted">
                             Requested by {r.requested_by?.name ?? "a teammate"}
-                            {r.requested_at ? ` · ${istTime(r.requested_at).replace(/:\d\d (am|pm)/, " $1")}` : ""}
+                            {r.requested_at ? ` · ${fmtDateTime(r.requested_at)}` : ""}
                             {r.request_note ? ` · “${r.request_note}”` : ""}
                           </p>
                           {open.length ? (

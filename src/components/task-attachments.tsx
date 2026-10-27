@@ -14,8 +14,7 @@ import { deleteJson } from "@/lib/http";
 import { compressImage } from "@/lib/image-compress";
 import { formatBytes } from "@/lib/attachments";
 import { LIMITS } from "@/lib/domain";
-import { istTime } from "@/lib/time";
-import { RelTime } from "@/components/ui/live-time";
+import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { IconPaperclip, IconUpload, IconFile, IconTrash, IconDownload, IconImage, IconVideo, IconMic, IconX } from "@/components/ui/icons";
 import type { TaskAttachment, TaskDetail } from "@/lib/types";
@@ -229,8 +228,8 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
                         · <Avatar user={a.uploaded_by} size="xs" /> {a.uploaded_by.name}
                       </span>
                     )}
-                    <span title={istTime(a.created_at)}>
-                      · <RelTime iso={a.created_at} />
+                    <span>
+                      · <When iso={a.created_at} />
                     </span>
                   </div>
                 </div>

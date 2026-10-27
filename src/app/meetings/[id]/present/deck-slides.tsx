@@ -1,7 +1,7 @@
 "use client";
 
 import { buildAgenda, notesByTask, deckRows, nameLabels, packPeople, ownerText, targetMatrix, SHARED_KEY, type AgendaGroup } from "@/lib/meeting-agenda";
-import { istTime, istDate, fmtYmd } from "@/lib/time";
+import { istDate, fmtYmd, fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { STATUS_META, NOTE_KIND_META, PLATFORM_META, RELEASE_STATUS_META, taskRef, type TaskStatus, type ReleaseStatus } from "@/lib/domain";
 import { dueInfo } from "@/components/task-list";
@@ -29,7 +29,7 @@ function titleParts(title: string, heldAt: string): string[] {
   const day = fmtDay(heldAt);
   return title.includes(day) ? [title] : [title, day];
 }
-const fmtWhen = (iso: string) => istTime(iso).replace(/:\d\d (am|pm) IST$/, " $1");
+const fmtWhen = fmtDateTime;
 const ymdPretty = (ymd: string) => fmtYmd(ymd);
 const NOTES_SHOWN_PER_TASK = 3;
 

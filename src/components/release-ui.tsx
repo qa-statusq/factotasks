@@ -24,8 +24,8 @@ import { useDiscardGuard, same } from "@/lib/use-discard-guard";
 import { istDayKey } from "@/lib/ist";
 import { useCachedFetch, mutate, mutatePrefix, mutateWhere, revalidatePrefix } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
-import { istTime, fmtYmd } from "@/lib/time";
-import { RelTime } from "@/components/ui/live-time";
+import { fmtYmd, fmtDateTime } from "@/lib/time";
+import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { LIMITS, RELEASE_STATUSES, RELEASE_STATUS_META, PLATFORM_META, taskRef, type ReleaseStatus } from "@/lib/domain";
 import { IconRocket, IconEdit, IconTrash, IconPlus, IconCheck, IconUserCheck, IconChevronDown } from "@/components/ui/icons";
@@ -295,7 +295,8 @@ export function ReleaseRow({ r, showApp = true, onOpen }: { r: Release; showApp?
   // The status pill is its own control, so it sits BESIDE the row button,
   // never inside it (nested buttons are invalid and misroute clicks).
   return (
-    <li className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-canvas/70 sm:px-5">
+    // Phones: the status pill sits under the row, so the version and dates keep the full width.
+    <li className="flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-canvas/70 sm:flex-row sm:items-center sm:gap-3 sm:px-5">
       <button type="button" onClick={() => onOpen(r)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
         {showApp && r.app ? <AppTile name={r.app.name} color={r.app.color} iconUrl={r.app.icon_url} androidIconUrl={r.app.icon_android_url} iosIconUrl={r.app.icon_ios_url} platform={r.platform} className="h-9 w-9 text-sm" /> : <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-canvas ring-1 ring-inset ring-line"><PlatformGlyph platform={r.platform} size={18} /></span>}
         <div className="min-w-0 flex-1">
@@ -312,8 +313,8 @@ export function ReleaseRow({ r, showApp = true, onOpen }: { r: Release; showApp?
           {/* Flows as one sentence; the "·" stays at the end of a line, never opening the next. */}
           <div className="mt-0.5 text-[11px] text-ink-subtle">
             {r.status === "released" && r.released_at ? (
-              <span title={istTime(r.released_at)}>
-                Released {prettyDate(istDayKey(r.released_at))} · <RelTime iso={r.released_at} />
+              <span>
+                Released <When iso={r.released_at} />
               </span>
             ) : r.planned_date ? (
               <span>Release date {prettyDate(r.planned_date)}</span>
@@ -329,7 +330,9 @@ export function ReleaseRow({ r, showApp = true, onOpen }: { r: Release; showApp?
           </div>
         </div>
       </button>
-      <ReleaseStatusMenu release={r} />
+      <div className="pl-12 sm:pl-0">
+        <ReleaseStatusMenu release={r} />
+      </div>
     </li>
   );
 }
@@ -459,7 +462,7 @@ export function ReleaseViewSheet({ release, apps, onClose }: { release: Release;
                 <IconUserCheck size={16} className="mt-0.5 shrink-0 text-amber-700" />
                 <div className="min-w-0 flex-1 text-[13px] text-amber-900">
                   <p className="font-semibold">
-                    {r.requested_by?.name ?? "A teammate"} asked to mark this released{r.requested_at ? ` · ${istTime(r.requested_at).replace(/:\d\d (am|pm)/, " $1")}` : ""}
+                    {r.requested_by?.name ?? "A teammate"} asked to mark this released{r.requested_at ? ` · ${fmtDateTime(r.requested_at)}` : ""}
                   </p>
                   {r.request_note && <p className="mt-0.5 text-amber-800">“{r.request_note}”</p>}
                   <p className="mt-1 text-amber-800">

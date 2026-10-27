@@ -11,8 +11,7 @@ import { useCachedFetch, mutate, mutateWhere } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
 import { closeSystemNotifications } from "@/lib/push-client";
 import { timeoutSignal } from "@/lib/compat";
-import { istTime } from "@/lib/time";
-import { RelTime } from "@/components/ui/live-time";
+import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { IconBell, IconCheck, IconUser, IconUserCheck, IconCheckCircle, IconXCircle, IconMessage, IconRefresh, IconPaperclip, IconTrash, IconClock, IconPresentation, IconRocket } from "@/components/ui/icons";
 import type { Notification } from "@/lib/types";
@@ -149,9 +148,7 @@ export default function InboxPage() {
                           <Avatar user={n.actor} size="xs" /> {n.actor.name}
                         </span>
                       )}
-                      <span title={istTime(n.created_at)}>
-                        <RelTime iso={n.created_at} />
-                      </span>
+                      <When iso={n.created_at} />
                     </div>
                   </div>
                   {isUnread(n) && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-label="Unread" />}

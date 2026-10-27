@@ -28,7 +28,7 @@ import { useCachedFetch, mutate } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText, type AgendaGroup } from "@/lib/meeting-agenda";
 import { postJson, deleteJson } from "@/lib/http";
-import { istTime } from "@/lib/time";
+import { fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { LIMITS, taskRef } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
@@ -36,7 +36,7 @@ import { IconMaximize, IconPrint, IconCheck, IconTrash, IconEdit, IconPresentati
 import type { AppOverview, Meeting, MeetingNote, MeetingPack, MeetingSeries, TaskCard } from "@/lib/types";
 
 type Pack = MeetingPack & { workspace_name: string };
-const fmt = (iso: string) => istTime(iso).replace(/:\d\d (am|pm)/, " $1");
+const fmt = fmtDateTime;
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();

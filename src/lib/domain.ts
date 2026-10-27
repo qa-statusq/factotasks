@@ -5,6 +5,7 @@
  * Every allowed value here MUST match the CHECK constraints in
  * supabase/schema.sql; the database is the final gate, this is the first.
  */
+import { WORK_DAY_SECONDS } from "./work-time";
 
 export type Tone = "neutral" | "brand" | "success" | "warning" | "info" | "danger";
 
@@ -186,7 +187,10 @@ export const LIMITS = {
 /** Human task reference: T-123. */
 export const taskRef = (n: number | string) => `T-${n}`;
 
-/** "3d 4h", "2h 15m", "45m", "<1m" — compact duration for cards and reports. */
+/**
+ * A WORKING duration (see lib/work-time): "3d 4h", "2h 15m", "45m", "<1m",
+ * where 1d is one 9-hour working day — the way Jira writes logged work.
+ */
 export function formatDuration(seconds: number | null | undefined): string {
   const s = Math.max(0, Math.round(Number(seconds) || 0));
   if (s < 60) return s === 0 ? "0m" : "<1m";
@@ -194,17 +198,9 @@ export function formatDuration(seconds: number | null | undefined): string {
   if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
   const mm = m % 60;
-  if (h < 24) return mm ? `${h}h ${mm}m` : `${h}h`;
-  const d = Math.floor(h / 24);
-  const hh = h % 24;
+  const dayH = WORK_DAY_SECONDS / 3600;
+  if (h < dayH) return mm ? `${h}h ${mm}m` : `${h}h`;
+  const d = Math.floor(h / dayH);
+  const hh = h % dayH;
   return hh ? `${d}d ${hh}h` : `${d}d`;
-}
-
-/** Seconds between two ISO instants (0 when either is missing). */
-export function secondsBetween(fromIso: string | null | undefined, toIso: string | null | undefined): number {
-  if (!fromIso || !toIso) return 0;
-  const a = Date.parse(fromIso);
-  const b = Date.parse(toIso);
-  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
-  return Math.max(0, (b - a) / 1000);
 }

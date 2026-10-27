@@ -12,7 +12,7 @@ import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
-import { istTime } from "@/lib/time";
+import { istTime, istDate } from "@/lib/time";
 import { fmtBytes, fmtDuration, recordingLabel } from "@/lib/recordings";
 import { cn } from "@/lib/cn";
 import { IconPlay, IconDownload, IconSend, IconTrash, IconEdit, IconX, IconMic, IconVideo } from "@/components/ui/icons";
@@ -244,7 +244,7 @@ function ShareSheet({ r, cacheKey, onClose }: { r: Recording; cacheKey: string; 
                 <li key={s.id} className="flex items-center gap-2 px-3 py-2 text-[13px]">
                   <span className="min-w-0 flex-1 truncate">{s.email}</span>
                   <span className="text-[11.5px] text-ink-subtle" title={istTime(s.created_at)}>
-                    {istTime(s.created_at).replace(/, \d\d:\d\d(:\d\d)? (am|pm) IST$/, "")}
+                    {istDate(s.created_at)}
                   </span>
                   <button type="button" onClick={() => revoke(s)} className="rounded-md p-1 text-ink-subtle hover:bg-red-50 hover:text-red-600" aria-label={`Remove access for ${s.email}`} title="Remove access">
                     <IconX size={14} />

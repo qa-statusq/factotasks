@@ -1,4 +1,4 @@
-/** IST date-only formatter (e.g. "15 Jun 2026") for the >30-day fallback —
+/** IST date-only formatter (e.g. "15 Jun 2026") —
  * lazily built and cached, and PINNED to Asia/Kolkata so an absolute date is
  * the IST calendar date for every viewer, not the browser's local one (which
  * could show the wrong day near midnight). */
@@ -11,24 +11,6 @@ export function istDate(input: string): string {
     timeZone: "Asia/Kolkata",
   });
   return istDateFmt.format(new Date(input));
-}
-
-/** Human-friendly relative time, e.g. "2h ago", "3d ago". */
-export function relativeTime(input: string | null | undefined): string {
-  if (!input) return "";
-  const then = new Date(input).getTime();
-  if (Number.isNaN(then)) return "";
-  const diff = Date.now() - then;
-  const sec = Math.round(diff / 1000);
-  const min = Math.round(sec / 60);
-  const hr = Math.round(min / 60);
-  const day = Math.round(hr / 24);
-
-  if (sec < 45) return "just now";
-  if (min < 60) return `${min}m ago`;
-  if (hr < 24) return `${hr}h ago`;
-  if (day < 30) return `${day}d ago`;
-  return istDate(input);
 }
 
 /**
@@ -60,25 +42,38 @@ export function istTime(input: string | null | undefined): string {
   return `${istFmt.format(d)} IST`;
 }
 
-/** Long-form relative time, e.g. "just now", "23 minutes ago", "3 days ago". */
-export function relativeTimeLong(input: string | null | undefined): string {
+/**
+ * THE way the panel writes a moment: "27 Oct 2026, 11:05 am" (India time, to the
+ * minute). Built from parts so it reads the same in every browser; the seconds
+ * and the "IST" stay in the hover title (istTime).
+ */
+let dtParts: Intl.DateTimeFormat | null = null;
+export function fmtDateTime(input: string | null | undefined): string {
   if (!input) return "";
-  const then = new Date(input).getTime();
-  if (Number.isNaN(then)) return "";
-  const diff = Date.now() - then;
-  if (diff < 0) return "just now";
-  const sec = Math.round(diff / 1000);
-  if (sec < 45) return "just now";
-  const min = Math.round(sec / 60);
-  if (min < 60) return `${min} minute${min === 1 ? "" : "s"} ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} hour${hr === 1 ? "" : "s"} ago`;
-  const day = Math.round(hr / 24);
-  if (day < 30) return `${day} day${day === 1 ? "" : "s"} ago`;
-  const mon = Math.round(day / 30);
-  if (mon < 12) return `${mon} month${mon === 1 ? "" : "s"} ago`;
-  const yr = Math.round(mon / 12);
-  return `${yr} year${yr === 1 ? "" : "s"} ago`;
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return "";
+  dtParts ??= new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
+  const p: Record<string, string> = {};
+  for (const x of dtParts.formatToParts(d)) p[x.type] = x.value;
+  return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute} ${(p.dayPeriod ?? "").toLowerCase()}`;
+}
+
+/**
+ * The short distance beside a moment — "just now", "5m ago", "3h ago", "2d ago",
+ * or "in 2d" for a time still ahead (a scheduled meeting). Empty beyond 30 days,
+ * when the date says it all.
+ */
+export function ago(input: string | null | undefined): string {
+  if (!input) return "";
+  const t = new Date(input).getTime();
+  if (Number.isNaN(t)) return "";
+  const diff = Date.now() - t;
+  const abs = Math.abs(diff);
+  if (abs >= 30 * 86_400_000) return "";
+  if (abs < 45_000) return "just now";
+  const min = Math.round(abs / 60_000);
+  const span = min < 60 ? `${min}m` : Math.round(min / 60) < 24 ? `${Math.round(min / 60)}h` : `${Math.round(min / 1440)}d`;
+  return diff < 0 ? `in ${span}` : `${span} ago`;
 }
 
 /**

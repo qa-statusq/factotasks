@@ -1,20 +1,31 @@
 "use client";
 
-import { relativeTime, relativeTimeLong } from "@/lib/time";
+import { ago, fmtDateTime, istTime } from "@/lib/time";
 import { useClock } from "@/components/providers/clock-provider";
 
 /**
- * Leaf components that render a live, self-updating relative timestamp. They
- * subscribe to the shared clock so ONLY this tiny node re-renders every 30s —
- * the surrounding card/list/page does not. Use these instead of calling
- * relativeTime()/relativeTimeLong() inline together with a page-level useClock().
+ * A moment, written the one way the panel writes moments:
+ * "27 Oct 2026, 11:05 am · 1d ago" — the exact date and time, then how long ago
+ * (dropped after 30 days). Hover shows it to the second. The two halves never
+ * split inside; on a narrow line the "how long ago" moves to the next line and
+ * the "·" stays at the end of the first, so nothing overflows on any screen.
  */
-export function RelTime({ iso }: { iso: string | null | undefined }) {
+export function When({ iso, className, relative = true }: { iso: string | null | undefined; className?: string; relative?: boolean }) {
   useClock();
-  return <>{relativeTime(iso)}</>;
-}
-
-export function RelTimeLong({ iso }: { iso: string | null | undefined }) {
-  useClock();
-  return <>{relativeTimeLong(iso)}</>;
+  if (!iso) return null;
+  const rel = relative ? ago(iso) : "";
+  return (
+    <time dateTime={iso} title={istTime(iso)} className={className}>
+      <span className="whitespace-nowrap">
+        {fmtDateTime(iso)}
+        {rel && "\u00a0·"}
+      </span>
+      {rel && (
+        <>
+          {" "}
+          <span className="whitespace-nowrap">{rel}</span>
+        </>
+      )}
+    </time>
+  );
 }

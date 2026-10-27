@@ -7,7 +7,7 @@ import { useSyncExternalStore } from "react";
  * a relative timestamp call useClock() to subscribe — only THOSE components
  * re-render each tick, not their parents, so "x minutes ago" / "Synced x ago"
  * keep counting up without any refresh or server call and without reconciling
- * whole pages/lists. Prefer the leaf <RelTime>/<RelTimeLong> components so the
+ * whole pages/lists. Prefer the leaf <When> component (ui/live-time) so the
  * subscription stays at the smallest possible node.
  */
 const listeners = new Set<() => void>();

@@ -11,8 +11,8 @@ import { ListSkeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch } from "@/lib/client-cache";
 import { usePref } from "@/lib/use-pref";
-import { istTime } from "@/lib/time";
-import { RelTime } from "@/components/ui/live-time";
+import { fmtDateTime } from "@/lib/time";
+import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { NewMeetingSheet, ScopeLabel, SeriesBadge, MeetingStatusBadge } from "@/components/meeting-series";
 import { RecordingBadge } from "@/components/recording-controls";
@@ -20,7 +20,7 @@ import { useRecorder } from "@/lib/use-recorder";
 import { IconPresentation, IconPlus, IconMaximize, IconSettings, IconSearch, IconX, IconCalendar, IconMessage } from "@/components/ui/icons";
 import type { AppOverview, Meeting, MeetingSeries } from "@/lib/types";
 
-const fmt = (iso: string) => istTime(iso).replace(/:\d\d (am|pm)/, " $1");
+const fmt = fmtDateTime;
 
 export default function MeetingsPage() {
   const { isAdmin } = useSession();
@@ -139,12 +139,9 @@ function MeetingCard({ m, apps }: { m: Meeting; apps?: AppOverview[] }) {
             {m.title}
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-muted">
-            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-              <IconCalendar size={12} className="text-ink-subtle" />
-              {fmt(m.held_at)}
-            </span>
-            <span className="text-ink-subtle">
-              · <RelTime iso={m.held_at} />
+            <span className="inline-flex items-center gap-1">
+              <IconCalendar size={12} className="shrink-0 text-ink-subtle" />
+              <When iso={m.held_at} />
             </span>
           </div>
         </div>
