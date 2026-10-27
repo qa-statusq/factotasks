@@ -190,7 +190,8 @@ r = await admin.call("POST", "/api/meeting-series", { name: `E2E attach ${stamp}
 const attachSeries = r.data?.series?.id;
 if (attachSeries) created.series.push(attachSeries);
 r = await member.call("GET", "/api/meeting-series");
-check(r.status === 200 && r.data?.series?.some((s) => s.id === attachSeries) && !("meeting_count" in (r.data.series[0] || {})), "members get the series names (no rollups)", r);
+// Members get only the series they take part in (4156eaf); this member is not in the new one.
+check(r.status === 200 && !r.data?.series?.some((s) => s.id === attachSeries) && !("meeting_count" in (r.data.series[0] || {})), "members get only their own series (no rollups)", r);
 r = await admin.call("POST", "/api/tasks", { title: "Attached general task", type: "other", priority: "low", series_id: attachSeries, assignee_ids: [memberId] });
 const attached = r.data?.task;
 if (attached) created.tasks.push(attached.id);
@@ -497,8 +498,7 @@ if (cleanup) {
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const H = { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, "content-type": "application/json" };
     const seq = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/task_sequence_reset`, { method: "POST", headers: H, body: "{}" });
-    if (seq.status === 404) console.log("  (task_sequence_reset missing — run migration 016; sequence left as is)");
-    else check(seq.ok, "task numbers continue from the highest real task (sequence reset)", seq.status);
+    check(seq.ok, "task numbers continue from the highest real task (sequence reset)", seq.status);
     const emails = [adminEmail, memberEmail].map((x) => `"${x}"`).join(",");
     const act = await fetch(`${process.env.SUPABASE_URL}/rest/v1/activity_log?user_email=in.(${emails})`, { method: "DELETE", headers: { ...H, prefer: "return=minimal" } });
     check(act.ok, "activity rows of the sample users removed", act.status);

@@ -620,13 +620,14 @@ as $$
   select coalesce(array_agg(app_id), '{}'::uuid[]) from app_members where user_id = p_user;
 $$;
 
--- (023) The visibility rule on a row, inlinable: p_user null = everything; otherwise
+-- (023) The visibility rule on a row: p_user null = everything; otherwise
 -- an app task on one of p_apps, or a general task the person is on or created.
+-- (026) No SET clause, so the planner can inline it into every list and pack
+-- (a SET blocks inlining); it reads no tables, only the row and operators.
 create or replace function task_row_visible(t tasks, p_user uuid, p_apps uuid[])
 returns boolean
 language sql
 immutable
-set search_path = public
 as $$
   select p_user is null
       or (t.app_ids <> '{}'::uuid[] and t.app_ids && p_apps)

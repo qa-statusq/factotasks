@@ -5,8 +5,8 @@ import { useSyncExternalStore } from "react";
 /**
  * A single shared 30s ticker exposed as an external store. Components that show
  * a relative timestamp call useClock() to subscribe — only THOSE components
- * re-render each tick, not their parents, so "x minutes ago" / "Synced x ago"
- * keep counting up without any refresh or server call and without reconciling
+ * re-render each tick, not their parents, so "5m ago" / "in 2d" (<When>)
+ * keep counting without any refresh or server call and without reconciling
  * whole pages/lists. Prefer the leaf <When> component (ui/live-time) so the
  * subscription stays at the smallest possible node.
  */

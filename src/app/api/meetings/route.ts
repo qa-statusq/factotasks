@@ -34,7 +34,6 @@ export async function POST(req: NextRequest) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
   if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
-  if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   const b = await readJsonObject(req);
   let heldAt: Date;
   if (b.held_at) {

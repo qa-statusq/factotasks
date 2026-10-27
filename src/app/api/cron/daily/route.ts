@@ -3,7 +3,7 @@ import { getSupabase } from "@/lib/supabase";
 import { safeEqual } from "@/lib/password";
 import { purgeOldActivity, logActivity } from "@/lib/activity";
 import { notifyUsers, purgeOldNotifications } from "@/lib/notify";
-import { istToday } from "@/lib/ist";
+import { istDayStartUtc, istToday } from "@/lib/ist";
 import { taskRef } from "@/lib/domain";
 import { closeOverdueMeetings } from "@/lib/series-access";
 
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: "Could not read tasks" }, { status: 500 });
 
   // Skip tasks already reminded today (kind task.due, created today IST).
-  const dayStart = new Date(Date.parse(`${today}T00:00:00Z`) - 5.5 * 3600_000).toISOString();
+  const dayStart = istDayStartUtc(today);
   const { data: already } = await sb.from("notifications").select("task_id").eq("kind", "task.due").gte("created_at", dayStart).limit(5000);
   const done = new Set((already || []).map((r) => r.task_id as string));
 

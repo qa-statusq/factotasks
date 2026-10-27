@@ -572,7 +572,8 @@ function Shell({ children, navHint }: { children: React.ReactNode; navHint?: Nav
   const approvals = counts?.approvals || 0;
   // Teammates' changes show up within a poll interval on whatever is on screen.
   useLiveUpdates();
-  // Pushes refresh the inbox at once, show in-page while the panel is in front, and badge the app icon.
+  // Pushes refresh the inbox at once, show a quiet in-page note when the system one was held back
+  // (this tab is already on that page), and badge the app icon.
   usePushBridge(unread);
 
   // bfcache guard: Safari restores fully-authed page snapshots even against

@@ -42,24 +42,26 @@ counts, per-person durations) are relational queries — Postgres does them in o
 ```
 users ─────────┬── app_members ──── apps ──── releases
   │            │                     │           │
-  │            └── task_assignees ── tasks ──────┘ (release_id)
+  │            └── task_assignees ── tasks ──────┘ (task_targets.release_id)
   │                                   ├── task_status_log   (every change / request / approve / reject)
   │                                   ├── task_comments
   │                                   ├── task_attachments  (object key in private bucket)
   │                                   └── meeting_notes ──── meetings (weekly MOM)
   ├── notifications
-  └── activity_log (audit)            app_settings (approval policy, meeting day, rev counter)
+  └── activity_log (audit)            app_settings (approval policy, workspace name, rev counter)
 ```
 
 **Task lifecycle & time tracking** (all server-side, atomic in `task_apply_status`):
+
+All durations are office working time — `work_seconds()`: Mon–Fri, 09:00–13:00 and 13:45–18:45 IST.
 
 | Field            | Set when                                   | Meaning |
 |------------------|--------------------------------------------|---------|
 | `created_at`     | task created                               | lead-time start |
 | `started_at`     | first time status becomes `in_progress`    | work start |
-| `active_seconds` | every time the task LEAVES `in_progress`   | pure "in progress" time (pauses on hold don't count) |
+| `active_seconds` | every time the task LEAVES `in_progress`   | working time in "in progress" (pauses on hold don't count; an approved stint ends at the request) |
 | `completed_at`   | done (direct) / **request time** if approved later | when the work was actually finished |
-| `approved_at`    | admin approves                             | approval latency = `approved_at − completed_at` |
+| `approved_at`    | admin approves                             | approval wait = working time `completed_at → approved_at` |
 
 **Approval workflow** — a member's change is parked in `requested_status` (+ note); the task
 keeps its current status until an admin **approves** (applied, logged, completion back-dated to

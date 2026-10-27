@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
-import { getSupabase } from "@/lib/supabase";
 import { rateLimited } from "@/lib/rate-limit";
 import { pushToUsers } from "@/lib/push";
 
@@ -17,8 +16,6 @@ export async function POST() {
   if (u.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   const limited = await rateLimited(u.uid, "push-test", 5, 60);
   if (limited) return limited;
-  const { count } = await getSupabase().from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", u.uid);
-  if (!count) return NextResponse.json({ devices: 0, sent: 0, failed: 0, removed: 0 });
   const r = await pushToUsers([u.uid], { title: "FactoTasks", body: "Test notification — this device will be told when something needs you.", url: "/notifications", tag: "push-test", always: true });
-  return NextResponse.json({ devices: count, ...r });
+  return NextResponse.json(r);
 }

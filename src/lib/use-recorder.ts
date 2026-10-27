@@ -144,7 +144,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     const pending = p;
     void postJson<{ done?: boolean; recovered?: boolean; recording?: Recording; error?: string }>(`/api/recordings/${pending.id}/finalize`, { duration_sec: pending.seconds ?? null }).then((r) => {
       if (r.ok && r.data?.recording) {
-        setState({ ...IDLE, meetingId: pending.meetingId ?? null, title: pending.title ?? "", phase: "done", seconds: pending.seconds ?? 0, recordedBytes: r.data.recording.size_bytes, sentBytes: r.data.recording.size_bytes, progress: 1, saved: r.data.recording, note: "the page was reloaded while recording, so it ends there" });
+        setState({ ...IDLE, meetingId: pending.meetingId ?? null, title: pending.title ?? "", phase: "done", seconds: pending.seconds ?? 0, recordedBytes: r.data.recording.size_bytes, saved: r.data.recording, note: "the page was reloaded while recording, so it ends there" });
         mutatePrefix("/api/recordings");
         if (pending.meetingId) mutate(`/api/meetings/${pending.meetingId}/recordings`);
       } else {
@@ -171,7 +171,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
       return sendChunk(id, body, at, total, durationSec, (sent) => {
         const recorded = Math.max(sent, captured.current);
         const left = recorded - finishBase.current;
-        patch({ sentBytes: sent, progress: recorded ? sent / recorded : 0, finishProgress: left > 0 ? Math.min(0.95, (sent - finishBase.current) / left) : 0.95 });
+        patch({ finishProgress: left > 0 ? Math.min(0.95, (sent - finishBase.current) / left) : 0.95 });
       });
     },
     [patch]
@@ -234,9 +234,9 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         offset.current = at + take;
         const recorded = captured.current;
         const left = recorded - finishBase.current;
-        patch({ sentBytes: offset.current, recordedBytes: recorded, progress: recorded ? offset.current / recorded : 0, finishProgress: left > 0 ? Math.min(0.95, (offset.current - finishBase.current) / left) : 0.95 });
+        patch({ recordedBytes: recorded, finishProgress: left > 0 ? Math.min(0.95, (offset.current - finishBase.current) / left) : 0.95 });
         if (r.done) {
-          patch({ phase: "done", progress: 1, sentBytes: recorded, saved: r.recording ?? null, blob: null });
+          patch({ phase: "done", saved: r.recording ?? null, blob: null });
           all.current = [];
           allBytes.current = 0;
           recordingId.current = null;
@@ -247,7 +247,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
           // Everything sent but the storage wants the closing request (the file was an exact multiple of the chunk size).
           const close = await send(new Blob([], { type: mime.current }), offset.current, offset.current, seconds);
           if (close.ok && close.done) {
-            patch({ phase: "done", progress: 1, saved: close.recording ?? null, blob: null });
+            patch({ phase: "done", saved: close.recording ?? null, blob: null });
             all.current = [];
             allBytes.current = 0;
             recordingId.current = null;
@@ -373,7 +373,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     queued.current = 0;
     offset.current = 0;
     captured.current = blob.size;
-    patch({ phase: "finishing", error: null, progress: 0, finishProgress: 0, finishStartedAt: performance.now(), sentBytes: 0, recordedBytes: blob.size });
+    patch({ phase: "finishing", error: null, finishProgress: 0, finishStartedAt: performance.now(), recordedBytes: blob.size });
     const started = await postJson<{ recording?: Recording; error?: string }>(`/api/meetings/${m.id}/recordings`, { mime: blob.type || mime.current, size_bytes: blob.size, duration_sec: state.seconds });
     if (!started.ok || !started.data?.recording) {
       patch({ phase: "error", error: started.data?.error || "Couldn't start saving the recording" });
@@ -389,9 +389,9 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       at = end;
-      patch({ sentBytes: at, progress: at / blob.size, finishProgress: Math.min(0.95, at / blob.size) });
+      patch({ finishProgress: Math.min(0.95, at / blob.size) });
       if (r.done) {
-        patch({ phase: "done", progress: 1, saved: r.recording ?? null, blob: null });
+        patch({ phase: "done", saved: r.recording ?? null, blob: null });
         refreshLists();
         return;
       }

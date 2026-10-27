@@ -22,7 +22,7 @@ export async function GET() {
     if (!mine.length) return NextResponse.json({ series: [] });
     const { data, error } = await sb.from("meeting_series").select(SERIES_SELECT).in("id", mine).order("created_at");
     if (error) return serverError(error);
-    return NextResponse.json({ series: (data || []).map((r) => ({ ...shapeSeries(r), member: true })) });
+    return NextResponse.json({ series: (data || []).map(shapeSeries) });
   }
   const [series, meetings] = await Promise.all([
     sb.from("meeting_series").select(SERIES_SELECT).order("created_at"),

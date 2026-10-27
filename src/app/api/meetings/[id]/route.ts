@@ -34,7 +34,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
   if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
-  if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   const { id } = await params;
   if (!isUuid(id)) return fail("Meeting not found", 404);
   const cur = await loadMeeting(id);
@@ -103,7 +102,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
-  if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   const { id } = await params;
   if (!isUuid(id)) return fail("Meeting not found", 404);

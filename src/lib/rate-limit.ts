@@ -27,7 +27,7 @@ export async function rateLimited(
     const bucket = Math.floor(now / (windowSec * 1000)); // fixed window
     const key = `rl:${action}:${identity}:${bucket}`;
 
-    // ONE round trip (migration 040): atomically increment the counter and get
+    // ONE round trip (throttle_hit RPC): atomically increment the counter and get
     // its new value. `used` = this call's count (post-increment).
     let used: number;
     const { data, error } = await sb.rpc("throttle_hit", { p_key: key });

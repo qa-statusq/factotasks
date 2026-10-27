@@ -8,7 +8,8 @@
 --       admin's click (waiting for review is not work);
 --     - a plain change to the status the task already has raises P0004, so a
 --       double submit never logs or notifies twice.
---  3. dashboard_pack, analytics_pack and tasks_renumber are re-created from
+--  3. task_row_visible loses its SET clause (which blocked inlining), and
+--     dashboard_pack, analytics_pack and tasks_renumber are re-created from
 --     schema.sql. Migration 023 never carried round 1's visibility rewrite
 --     (task_row_visible + materialized app list) for the packs, nor the table
 --     lock for tasks_renumber, and 025 rebuilt analytics_pack from 016.
@@ -154,7 +155,17 @@ as $$
    returning users.prefs;
 $$;
 
--- 3) Packs and renumbering, exactly as in schema.sql
+-- 3) Packs and renumbering, exactly as in schema.sql; the row rule without a SET clause so it inlines
+create or replace function task_row_visible(t tasks, p_user uuid, p_apps uuid[])
+returns boolean
+language sql
+immutable
+as $$
+  select p_user is null
+      or (t.app_ids <> '{}'::uuid[] and t.app_ids && p_apps)
+      or (t.app_ids = '{}'::uuid[] and (p_user = any(t.assignee_ids) or t.created_by = p_user));
+$$;
+
 create or replace function dashboard_pack(p_user uuid, p_admin boolean)
 returns jsonb
 language sql

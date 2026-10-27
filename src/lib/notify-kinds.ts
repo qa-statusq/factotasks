@@ -13,8 +13,6 @@ export const NOTIFY_CATEGORIES = [
   { key: "releases", label: "Releases of my apps", hint: "A version of an app you work on ships", kinds: ["release.released"], urgent: false },
 ] as const;
 
-export type NotifyCategory = (typeof NOTIFY_CATEGORIES)[number]["key"];
-
 const BY_KIND = new Map<string, (typeof NOTIFY_CATEGORIES)[number]>();
 for (const c of NOTIFY_CATEGORIES) for (const k of c.kinds) BY_KIND.set(k, c);
 

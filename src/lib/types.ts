@@ -337,7 +337,6 @@ export interface MeetingPack {
   series: { id: string; name: string; color: string; app_order?: string[] } | null;
   /** Ids of tasks pinned to this meeting. */
   pinned: string[];
-  window: { from: string; to: string };
   previous_meeting: string | null;
   done: TaskCard[];
   pending: TaskCard[];

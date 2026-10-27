@@ -10,11 +10,8 @@ export interface RecorderState {
   phase: RecorderPhase;
   /** Seconds recorded so far. */
   seconds: number;
-  /** Bytes produced by the recorder, and bytes the storage has (plus the part of the current chunk in flight). */
+  /** Bytes produced by the recorder so far (only ever grows while recording). */
   recordedBytes: number;
-  sentBytes: number;
-  /** 0..1 — how much of what was recorded has reached the storage. */
-  progress: number;
   /** 0..1 — after Stop: how much of the part still to send has gone (never reaches 1 before the file is confirmed). */
   finishProgress: number;
   error: string | null;
@@ -27,4 +24,4 @@ export interface RecorderState {
   finishStartedAt: number;
 }
 
-export const IDLE: RecorderState = { meetingId: null, title: "", mode: "screen", phase: "idle", seconds: 0, recordedBytes: 0, sentBytes: 0, progress: 0, finishProgress: 0, error: null, saved: null, blob: null, note: null, finishStartedAt: 0 };
+export const IDLE: RecorderState = { meetingId: null, title: "", mode: "screen", phase: "idle", seconds: 0, recordedBytes: 0, finishProgress: 0, error: null, saved: null, blob: null, note: null, finishStartedAt: 0 };

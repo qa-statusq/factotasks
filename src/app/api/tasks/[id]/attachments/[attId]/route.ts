@@ -13,11 +13,8 @@ const SIGNED_URL_TTL = 600; // seconds
 
 async function load(taskId: string, attId: string) {
   const sb = getSupabase();
-  const full = await sb.from("task_attachments").select("id, task_id, uploaded_by, file_name, mime, size_bytes, storage_path, drive_file_id").eq("id", attId).eq("task_id", taskId).maybeSingle();
-  if (!full.error) return full.data as (Record<string, unknown> & { drive_file_id?: string | null }) | null;
-  // Before migration 020 the drive column does not exist yet.
-  const { data } = await sb.from("task_attachments").select("id, task_id, uploaded_by, file_name, mime, size_bytes, storage_path").eq("id", attId).eq("task_id", taskId).maybeSingle();
-  return data as (Record<string, unknown> & { drive_file_id?: string | null }) | null;
+  const { data, error } = await sb.from("task_attachments").select("id, task_id, uploaded_by, file_name, mime, size_bytes, storage_path, drive_file_id").eq("id", attId).eq("task_id", taskId).maybeSingle();
+  return { att: data as (Record<string, unknown> & { drive_file_id?: string | null }) | null, error };
 }
 
 /** Printable ASCII only — what the plain filename= parameter may carry. */
@@ -41,7 +38,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (u instanceof NextResponse) return u;
   const { id, attId } = await params;
   if (!isUuid(id) || !isUuid(attId)) return fail("Attachment not found", 404);
-  const [att, visible] = await Promise.all([load(id, attId), canSeeTask(u, id)]);
+  const [{ att, error: loadError }, visible] = await Promise.all([load(id, attId), canSeeTask(u, id)]);
+  if (loadError) return serverError(loadError);
   if (!att || !visible) return fail("Attachment not found", 404);
   const sp = new URL(req.url).searchParams;
   // SVG can carry scripts: it is always served as a download, never rendered
@@ -99,7 +97,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (u instanceof NextResponse) return u;
   const { id, attId } = await params;
   if (!isUuid(id) || !isUuid(attId)) return fail("Attachment not found", 404);
-  const [att, visible] = await Promise.all([load(id, attId), canSeeTask(u, id)]);
+  const [{ att, error: loadError }, visible] = await Promise.all([load(id, attId), canSeeTask(u, id)]);
+  if (loadError) return serverError(loadError);
   if (!att || !visible) return fail("Attachment not found", 404);
   if (att.uploaded_by !== u.uid && u.role !== "admin") return fail("You can only remove files you uploaded", 403);
   const sb = getSupabase();

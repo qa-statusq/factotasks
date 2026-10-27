@@ -85,11 +85,11 @@ export async function registerFailure(keys: string[]): Promise<void> {
  * checkThrottle + registerFailure is read-then-write: N parallel guesses all
  * pass the check at fails=0 before any failure lands, so the 5-attempt cap was
  * bypassed by roughly the burst size. Here each key is incremented by the
- * atomic throttle_hit RPC (migration 040, already used by the rl: limiter), so
+ * atomic throttle_hit RPC (also used by the rl: limiter), so
  * the Nth concurrent attempt sees N and the (MAX_FAILS+1)th is refused before
  * any password is verified. A successful sign-in clears the keys as before.
  *
- * Returns null when the RPC is unavailable (pre-040) — the caller then falls
+ * Returns null when the RPC is unavailable — the caller then falls
  * back to the old registerFailure path, so nothing breaks while a migration
  * lags. Counters untouched for FAIL_DECAY_MS are reset first, mirroring the
  * decay registerFailure applied.

@@ -1,7 +1,7 @@
 # FactoTasks — by Version Systems Private Limited
 
 Task tracking for the **mobile app team**: per-app and general tasks, member status updates
-with **admin approval**, exact time tracking, a version-wise **release log** (Android + iOS),
+with **admin approval**, working-time tracking, a version-wise **release log** (Android + iOS),
 attachments, and a weekly-meeting **MOM** that carries pending work forward week to week —
 with a full-screen presentation deck.
 
@@ -15,9 +15,10 @@ architecture, data model, permissions and phase plan.
 - **Approval workflow** — members move tasks; marking *Done* (policy-configurable) parks a
   request that an admin **approves** (applied, completion back-dated to the request) or
   **sends back** with a note. Admins change status directly.
-- **Time tracking** — created / started / completed / approved timestamps; *active time*
-  counts only time spent in *In progress*; lead time and approval wait are shown per task and
-  aggregated in Reports.
+- **Time tracking** — created / started / completed / approved timestamps. Every duration is
+  **office working time** (Mon–Fri, 09:00–13:00 and 13:45–18:45 IST; 1d = 9 working hours):
+  *active time* counts only time in *In progress* (a request waiting for review is not work),
+  lead time and approval wait are shown per task and aggregated in Analytics.
 - **Apps & releases** — apps with platforms and members (developer / designer / QA / lead …);
   releases per platform with status pipeline, planned date, what's in it, internal notes, and
   linked tasks.
@@ -30,7 +31,7 @@ architecture, data model, permissions and phase plan.
 - **Inbox** — in-app notifications (assigned, requested, approved/rejected, comments,
   attachments, releases, due-date reminders).
 - **Reports** — throughput, lead/active time, by day / type / priority / app / person, CSV.
-- **Dashboard**, **Activity** audit log (admin), **Settings** (approval policy, meeting day),
+- **Dashboard**, **Activity** audit log (admin), **Settings** (approval policy),
   **Profile**, offline fallback page, installable PWA.
 
 ## Architecture (all free tiers)
