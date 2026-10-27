@@ -69,13 +69,26 @@ self.addEventListener("push", (event) => {
   }
   const title = data.title || "FactoTasks";
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body: data.body || "",
-      icon: "/brand/icon-192.png",
-      badge: "/brand/icon-192.png",
-      tag: data.tag || undefined,
-      renotify: !!data.tag,
-      data: { url: data.url || "/notifications" },
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      const ours = list.filter((c) => new URL(c.url).origin === self.location.origin);
+      const inFront = ours.filter((c) => c.focused && c.visibilityState === "visible");
+      const presenting = inFront.some((c) => /\/meetings\/[^/]+\/(present|print)/.test(new URL(c.url).pathname));
+      // The panel is in front: it shows the news itself (a quiet in-page note), no system pop-up.
+      // During a presentation nothing is shown at all — the Inbox keeps it.
+      const show = inFront.length === 0;
+      // Every open tab refreshes its inbox badge now instead of at the next poll.
+      for (const c of ours) c.postMessage({ type: "ft-push", shownBySystem: show, quiet: presenting, title, body: data.body || "", url: data.url || "/notifications" });
+      if (!show) return undefined;
+      return self.registration.showNotification(title, {
+        body: data.body || "",
+        icon: "/brand/icon-192.png",
+        // One-colour silhouette for the Android status bar (a full-colour icon shows as a white square).
+        badge: "/brand/badge-96.png",
+        tag: data.tag || undefined,
+        renotify: !!data.tag,
+        timestamp: data.ts || Date.now(),
+        data: { url: data.url || "/notifications" },
+      });
     })
   );
 });

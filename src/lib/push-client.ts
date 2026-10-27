@@ -15,6 +15,14 @@ export function pushSupported(): boolean {
   return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
+/** iPhone/iPad Safari outside the Home Screen: push exists only once the panel is added there. */
+export function needsHomeScreen(): boolean {
+  if (typeof navigator === "undefined" || typeof window === "undefined") return false;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return ios && !standalone;
+}
+
 export function pushConfigured(): boolean {
   return !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 }
@@ -40,6 +48,9 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
 /* ---- per-device, per-account choices (localStorage can throw: always guarded) ---- */
 const OFF_KEY = (uid: string) => `ft_push_off:${uid}`;
 const PROMPT_KEY = (uid: string) => `ft_push_prompt:${uid}`;
+/** "<endpoint>|<ms>": this device was confirmed registered to this account at that time. */
+const OK_KEY = (uid: string) => `ft_push_ok:${uid}`;
+const RECHECK_MS = 24 * 3600_000;
 function lsGet(k: string): string | null {
   try {
     return window.localStorage.getItem(k);
@@ -70,7 +81,7 @@ export function snoozePushPrompt(uid: string): void {
   lsSet(PROMPT_KEY(uid), String(Date.now() + 14 * 86_400_000));
 }
 
-async function subscribeAndRegister(reg: ServiceWorkerRegistration): Promise<string | null> {
+async function subscribeAndRegister(reg: ServiceWorkerRegistration, uid?: string): Promise<string | null> {
   const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!key) return "Notifications aren't configured on the server yet.";
   let sub = await reg.pushManager.getSubscription();
@@ -84,6 +95,7 @@ async function subscribeAndRegister(reg: ServiceWorkerRegistration): Promise<str
   }
   const json = sub.toJSON();
   const { ok, data } = await postJson("/api/push", { endpoint: json.endpoint, keys: json.keys });
+  if (ok && uid) lsSet(OK_KEY(uid), `${sub.endpoint}|${Date.now()}`);
   return ok ? null : data?.error || "Couldn't save the subscription.";
 }
 
@@ -96,41 +108,71 @@ export async function enablePush(uid?: string): Promise<string | null> {
   if (perm !== "granted") return "Notifications were blocked — allow them in the browser's site settings.";
   const reg = await readyWorker();
   if (!reg) return "The browser's background worker isn't available here (private window?).";
-  const err = await subscribeAndRegister(reg);
+  const err = await subscribeAndRegister(reg, uid);
   if (!err && uid) lsSet(OFF_KEY(uid), null);
   return err;
 }
 
 export async function disablePush(uid?: string): Promise<void> {
-  if (uid) lsSet(OFF_KEY(uid), "1");
+  if (uid) {
+    lsSet(OFF_KEY(uid), "1");
+    lsSet(OK_KEY(uid), null);
+  }
   const sub = await currentSubscription();
   if (!sub) return;
   await postJson("/api/push", { endpoint: sub.endpoint }, "DELETE");
   await sub.unsubscribe().catch(() => {});
 }
 
-const synced = new Set<string>();
+const syncing = new Map<string, Promise<void>>();
 /**
  * Make sure this device is registered to this account wherever notifications
  * are already allowed — no prompt, no click. Runs once per account per page
- * load; a no-op when the browser can't, the person said no here, or nothing
- * is allowed yet.
+ * load and is SHARED: every caller (the shell, the Profile card) awaits the same
+ * run, so nobody reads the device state while a registration is half done.
  */
-export async function syncPush(uid: string): Promise<void> {
-  if (synced.has(uid) || !pushSupported() || !pushConfigured()) return;
-  synced.add(uid);
+export function syncPush(uid: string): Promise<void> {
+  let run = syncing.get(uid);
+  if (!run) {
+    run = doSync(uid);
+    syncing.set(uid, run);
+  }
+  return run;
+}
+
+async function doSync(uid: string): Promise<void> {
+  if (!pushSupported() || !pushConfigured()) return;
   if (Notification.permission !== "granted" || pushOptedOut(uid)) return;
   try {
     const reg = await readyWorker();
     if (!reg) return;
     const sub = await reg.pushManager.getSubscription();
     if (sub) {
+      // Confirmed for this account in the last day, on this very subscription: nothing to ask the server.
+      const [endpoint, at] = (lsGet(OK_KEY(uid)) ?? "").split("|");
+      if (endpoint === sub.endpoint && Date.now() - Number(at) < RECHECK_MS) return;
       const r = await fetch(`/api/push?endpoint=${encodeURIComponent(sub.endpoint)}`, { credentials: "same-origin" });
       const data = r.ok ? ((await r.json()) as { subscribed?: boolean }) : null;
-      if (data?.subscribed) return;
+      if (data?.subscribed) {
+        lsSet(OK_KEY(uid), `${sub.endpoint}|${Date.now()}`);
+        return;
+      }
     }
-    await subscribeAndRegister(reg);
+    await subscribeAndRegister(reg, uid);
   } catch {
     /* best-effort: the Profile screen shows the state and a manual switch */
+  }
+}
+
+
+/** Close this device's system notifications — those about one task (`tag`), or all of them. */
+export async function closeSystemNotifications(tag?: string): Promise<void> {
+  if (!pushSupported()) return;
+  try {
+    const reg = await readyWorker(2000);
+    const list = reg ? await reg.getNotifications(tag ? { tag } : undefined) : [];
+    for (const n of list) n.close();
+  } catch {
+    /* nothing to close */
   }
 }

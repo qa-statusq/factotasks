@@ -15,7 +15,10 @@ import { NAME_MAX, displayName } from "@/lib/name";
 import { DEPARTMENT_META, LIMITS } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
 import { IconUser, IconLock, IconEye, IconEyeOff, IconBell } from "@/components/ui/icons";
-import { pushSupported, currentSubscription, enablePush, disablePush } from "@/lib/push-client";
+import { pushSupported, currentSubscription, enablePush, disablePush, needsHomeScreen, syncPush } from "@/lib/push-client";
+import { NOTIFY_CATEGORIES, notifyPrefKey } from "@/lib/notify-kinds";
+import { usePref } from "@/lib/use-pref";
+import { Switch } from "@/components/ui/switch";
 import type { Me } from "@/lib/types";
 
 export default function ProfilePage() {
@@ -111,7 +114,13 @@ function AccountCard() {
   );
 }
 
-type PushState = "checking" | "unsupported" | "off" | "on" | "blocked" | "unconfigured";
+type PushState = "checking" | "unsupported" | "homescreen" | "off" | "on" | "blocked" | "unconfigured";
+
+/** One "notify me about" switch: a per-person choice, saved on the account (applies to every device). */
+function NotifyChoice({ cat }: { cat: (typeof NOTIFY_CATEGORIES)[number] }) {
+  const [on, setOn] = usePref<boolean>(notifyPrefKey(cat.key), true);
+  return <Switch checked={on} onChange={setOn} label={cat.label} description={cat.hint} />;
+}
 
 function NotificationsCard() {
   const { toast } = useToast();
@@ -121,7 +130,10 @@ function NotificationsCard() {
   const [testing, setTesting] = useState(false);
 
   async function probe(): Promise<PushState> {
+    if (needsHomeScreen()) return "homescreen";
     if (!pushSupported()) return "unsupported";
+    // A first visit may be registering this device right now: read the state after that run.
+    if (me?.id) await syncPush(me.id);
     // "On" means THIS browser's subscription is registered to THIS account —
     // a subscription left behind by whoever used the browser before is "off".
     const sub = await currentSubscription();
@@ -146,7 +158,9 @@ function NotificationsCard() {
     return () => {
       alive = false;
     };
-  }, []);
+    // Re-read once the account is known (a cold load can mount this before the session arrives).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.id]);
 
   async function toggle() {
     if (busy) return;
@@ -184,9 +198,10 @@ function NotificationsCard() {
 
   const copy =
     state === "unsupported" ? "This browser can't show push notifications."
+    : state === "homescreen" ? "On iPhone and iPad, notifications work once FactoTasks is on the Home Screen: tap Share → Add to Home Screen, open it from there, then turn notifications on here."
     : state === "unconfigured" ? "Push isn't set up on the server yet — the in-app inbox still works."
     : state === "blocked" ? "Blocked in the browser. Allow notifications for this site in the address-bar site settings, then try again."
-    : state === "on" ? "On for this device. Assignments, approvals, comments and releases reach you even when the tab is closed. Your own actions never notify you."
+    : state === "on" ? "On for this device — even when the panel is closed. While the panel is open in front of you, news shows inside it instead. Your own actions never notify you."
     : "Get a push alert on this device when something needs you — assignments, approval requests, comments, releases.";
 
   return (
@@ -212,6 +227,17 @@ function NotificationsCard() {
             </Button>
           )}
         </div>
+        {state === "on" && (
+          <div className="mt-4 border-t border-line/70 pt-4">
+            <p className="mb-3 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">Notify me about</p>
+            <div className="flex flex-col gap-3.5">
+              {NOTIFY_CATEGORIES.map((c) => (
+                <NotifyChoice key={c.key} cat={c} />
+              ))}
+            </div>
+            <p className="mt-3 text-[12px] text-ink-subtle">Everything still appears in your Inbox; these only decide what reaches your devices.</p>
+          </div>
+        )}
       </CardBody>
     </Card>
   );

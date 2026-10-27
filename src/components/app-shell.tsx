@@ -26,6 +26,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/misc";
 import DocumentTitle from "@/components/document-title";
 import { PushPrompt } from "@/components/push-prompt";
+import { usePushBridge } from "@/lib/use-push-bridge";
 import { ScrollToTop } from "@/components/ui/scroll-to-top";
 import { StickyContextBar } from "@/components/ui/context-bar";
 import { useScrolled } from "@/lib/use-scrolled";
@@ -571,6 +572,8 @@ function Shell({ children, navHint }: { children: React.ReactNode; navHint?: Nav
   const approvals = counts?.approvals || 0;
   // Teammates' changes show up within a poll interval on whatever is on screen.
   useLiveUpdates();
+  // Pushes refresh the inbox at once, show in-page while the panel is in front, and badge the app icon.
+  usePushBridge(unread);
 
   // bfcache guard: Safari restores fully-authed page snapshots even against
   // no-store — after a logout, Back could revive a frozen view of the dead

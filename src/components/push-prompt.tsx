@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/misc";
 import { IconBell, IconX } from "@/components/ui/icons";
@@ -25,6 +26,7 @@ export function PushPrompt() {
   const [hidden, setHidden] = useState(false);
   const [busy, setBusy] = useState(false);
   const uid = me?.id ?? null;
+  const pathname = usePathname();
 
   // Client-only facts, read without a mount effect (server render: hidden).
   const askable = useSyncExternalStore(
@@ -37,7 +39,8 @@ export function PushPrompt() {
     if (uid) void syncPush(uid);
   }, [uid]);
 
-  if (!uid || !askable || hidden) return null;
+  // Profile has its own switch for this; one offer per screen is enough.
+  if (!uid || !askable || hidden || pathname === "/profile") return null;
 
   async function turnOn() {
     if (!uid || busy) return;

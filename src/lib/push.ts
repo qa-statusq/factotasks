@@ -1,5 +1,7 @@
 import webpush from "web-push";
+import { createHash } from "node:crypto";
 import { getSupabase } from "./supabase";
+import { notifyPrefKey } from "./notify-kinds";
 
 /**
  * Browser push (Web Push / VAPID). Zero-cost: the browser vendors' push
@@ -29,8 +31,17 @@ export interface PushPayload {
   body: string;
   /** Where a tap lands (same-origin path). */
   url?: string;
-  /** Collapses repeated notifications about the same thing. */
+  /** Collapses repeated notifications about the same thing (on the device and at the push service). */
   tag?: string;
+  /** The notification kind (task.assigned …) — shown to the service worker, not used for routing. */
+  kind?: string;
+}
+
+export interface PushOptions {
+  /** Preference category (lib/notify-kinds): people who turned it off are skipped. */
+  category?: string;
+  /** Actionable (assignment, approval, comment, reminder) → delivered at once even to a sleeping phone. */
+  urgent?: boolean;
 }
 
 export interface PushResult {
@@ -42,18 +53,32 @@ export interface PushResult {
   removed: number;
 }
 
-/** Send to every subscription of the given users. Subscriptions the push
- * service rejects for good (expired 404/410, or signed for another key 401/403)
- * are removed — the device re-registers itself on its next visit. Successful
- * deliveries stamp last_used. Never throws. */
-export async function pushToUsers(userIds: string[], payload: PushPayload): Promise<PushResult> {
+/** Web Push `Topic`: an undelivered message with the same topic is REPLACED at the push service, so a
+ * phone that was off receives only the latest news about a task, not every step. ≤ 32 URL-safe chars. */
+function topicFor(tag: string): string {
+  return createHash("sha256").update(tag).digest("base64url").slice(0, 32);
+}
+
+/** Send to every subscription of the given users. People who turned the payload's
+ * category off are skipped. Subscriptions the push service rejects for good (expired
+ * 404/410, or signed for another key 401/403) are removed — the device re-registers
+ * itself on its next visit. Successful deliveries stamp last_used. Never throws. */
+export async function pushToUsers(userIds: string[], payload: PushPayload, opts: PushOptions = {}): Promise<PushResult> {
   const result: PushResult = { sent: 0, failed: 0, removed: 0 };
   if (!userIds.length || !ready()) return result;
   try {
     const sb = getSupabase();
-    const { data: subs } = await sb.from("push_subscriptions").select("id, endpoint, p256dh, auth").in("user_id", userIds);
-    if (!subs?.length) return result;
-    const body = JSON.stringify(payload);
+    // Devices and their owner's choices in one read.
+    const { data: rows } = await sb.from("push_subscriptions").select("id, endpoint, p256dh, auth, user:users(prefs)").in("user_id", userIds);
+    const prefKey = opts.category ? notifyPrefKey(opts.category) : null;
+    const subs = (rows ?? []).filter((r) => {
+      if (!prefKey) return true;
+      const owner = (Array.isArray(r.user) ? r.user[0] : r.user) as { prefs?: Record<string, unknown> | null } | null;
+      return owner?.prefs?.[prefKey] !== false;
+    });
+    if (!subs.length) return result;
+    const body = JSON.stringify({ ...payload, ts: Date.now() });
+    const options = { TTL: 60 * 60 * 24, urgency: (opts.urgent === false ? "normal" : "high") as "normal" | "high", ...(payload.tag ? { topic: topicFor(payload.tag) } : {}) };
     const dead: string[] = [];
     const delivered: string[] = [];
     // A few at a time: one instance should never hold hundreds of sockets open.
@@ -61,7 +86,7 @@ export async function pushToUsers(userIds: string[], payload: PushPayload): Prom
     const worker = async () => {
       for (let s = queue.shift(); s; s = queue.shift()) {
         try {
-          await webpush.sendNotification({ endpoint: s.endpoint as string, keys: { p256dh: s.p256dh as string, auth: s.auth as string } }, body, { TTL: 60 * 60 * 24, urgency: "high" });
+          await webpush.sendNotification({ endpoint: s.endpoint as string, keys: { p256dh: s.p256dh as string, auth: s.auth as string } }, body, options);
           delivered.push(s.id as string);
         } catch (e) {
           const code = (e as { statusCode?: number }).statusCode;

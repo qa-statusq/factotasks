@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { reviewTask, applyTaskCard, refreshTaskViews } from "@/lib/task-actions";
 import { postJson, deleteJson } from "@/lib/http";
+import { closeSystemNotifications } from "@/lib/push-client";
 import { istTime } from "@/lib/time";
 import { AddToMeetingSheet } from "@/components/add-task-sheet";
 import { PendingReleaseBanner } from "@/components/release-ui";
@@ -91,6 +92,24 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
   const { me, isAdmin } = useSession();
   // Meetings: admins, and the members who take part in a series.
   const canMeet = isAdmin || (me?.series_ids?.length ?? 0) > 0;
+  // Opening a task reads what was about it: its inbox rows turn read and its system
+  // notifications leave this device's tray (GitHub / Linear behaviour).
+  const { data: badge } = useCachedFetch<{ unread?: number }>("/api/notifications?limit=1");
+  // Keyed on the count: news about this task that arrives while it is open is read at once too.
+  const unreadCount = badge?.unread ?? 0;
+  const readFor = useRef<{ task: string; count: number } | null>(null);
+  useEffect(() => {
+    void closeSystemNotifications(`task-${task.id}`);
+    if (unreadCount === 0) return;
+    // The same count for the same task was already handled: no repeat request after our own refresh.
+    if (readFor.current?.task === task.id && readFor.current.count === unreadCount) return;
+    readFor.current = { task: task.id, count: unreadCount };
+    void postJson("/api/notifications/read", { task_id: task.id }).then((r) => {
+      if (!r.ok) return;
+      mutate("/api/notifications?limit=1");
+      mutatePrefix("/api/notifications?limit=30");
+    });
+  }, [task.id, unreadCount]);
   // The edit sheet's starting point, captured when it opens: the diff base for
   // the save and the form's initial values (a background refresh must not
   // move it under an open form).

@@ -9,6 +9,7 @@ import { ListSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { useCachedFetch, mutate, mutateWhere } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
+import { closeSystemNotifications } from "@/lib/push-client";
 import { timeoutSignal } from "@/lib/compat";
 import { istTime } from "@/lib/time";
 import { RelTime } from "@/components/ui/live-time";
@@ -61,6 +62,7 @@ export default function InboxPage() {
     if (!data || data.unread === 0) return;
     const t = window.setTimeout(async () => {
       await postJson("/api/notifications/read", { all: true });
+      void closeSystemNotifications();
       // Functional update: a poll may have delivered a newer page meanwhile.
       mutateWhere(url, (cur, key) => {
         if (key !== url || !cur) return undefined;
@@ -115,6 +117,7 @@ export default function InboxPage() {
             title={unread === 0 ? "Everything is read" : undefined}
             onClick={async () => {
               await postJson("/api/notifications/read", { all: true });
+              void closeSystemNotifications();
               mutate(url);
               mutate("/api/notifications?limit=1");
             }}

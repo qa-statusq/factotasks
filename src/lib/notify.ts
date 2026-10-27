@@ -1,5 +1,6 @@
 import { getSupabase } from "./supabase";
 import { pushToUsers } from "./push";
+import { categoryOf } from "./notify-kinds";
 
 /**
  * Notifications: an in-app inbox row for every recipient PLUS a browser push
@@ -35,12 +36,18 @@ export async function notifyUsers(input: {
     }
     if (!rows.length) return;
     await getSupabase().from("notifications").insert(rows);
-    await pushToUsers([...seen], {
-      title: input.title ?? TITLE_FOR[input.kind] ?? "FactoTasks",
-      body: input.message.slice(0, 180),
-      url: input.url ?? (input.taskId ? `/tasks/${input.taskId}` : "/notifications"),
-      tag: input.taskId ? `task-${input.taskId}` : input.kind,
-    });
+    const cat = categoryOf(input.kind);
+    await pushToUsers(
+      [...seen],
+      {
+        title: input.title ?? TITLE_FOR[input.kind] ?? "FactoTasks",
+        body: input.message.slice(0, 180),
+        url: input.url ?? (input.taskId ? `/tasks/${input.taskId}` : "/notifications"),
+        tag: input.taskId ? `task-${input.taskId}` : input.kind,
+        kind: input.kind,
+      },
+      { category: cat.key, urgent: cat.urgent }
+    );
   } catch (e) {
     console.error("[notify] failed:", input.kind, e);
   }
