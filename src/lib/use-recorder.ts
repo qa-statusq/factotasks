@@ -60,6 +60,12 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
   const queue = useRef<Blob[]>([]);
   const queued = useRef(0);
   const offset = useRef(0);
+  /**
+   * Every byte the recorder has produced — only ever grows. The size on screen comes from this
+   * alone: "sent + queued" dips by a whole chunk while that chunk is in flight (it has left the
+   * queue but is not yet confirmed), which made the figure step back for a moment.
+   */
+  const captured = useRef(0);
   const recordingId = useRef<string | null>(null);
   const creating = useRef<Promise<string | null> | null>(null);
   const stopped = useRef(false);
@@ -143,8 +149,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     async (body: Blob, at: number, total: number | null, durationSec: number | null): Promise<ChunkOutcome> => {
       const id = recordingId.current;
       if (!id) return { ok: false, error: "No upload in progress" };
-      return sendChunk(id, body, at, total, durationSec, (sent, from, size) => {
-        const recorded = Math.max(sent, offset.current + queued.current + Math.max(0, from + size - offset.current));
+      return sendChunk(id, body, at, total, durationSec, (sent) => {
+        const recorded = Math.max(sent, captured.current);
         const left = recorded - finishBase.current;
         patch({ sentBytes: sent, progress: recorded ? sent / recorded : 0, finishProgress: left > 0 ? Math.min(0.95, (sent - finishBase.current) / left) : 0.95 });
       });
@@ -206,7 +212,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         offset.current = at + take;
-        const recorded = offset.current + queued.current;
+        const recorded = captured.current;
         const left = recorded - finishBase.current;
         patch({ sentBytes: offset.current, recordedBytes: recorded, progress: recorded ? offset.current / recorded : 0, finishProgress: left > 0 ? Math.min(0.95, (offset.current - finishBase.current) / left) : 0.95 });
         if (r.done) {
@@ -276,6 +282,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
       queue.current = [];
       queued.current = 0;
       offset.current = 0;
+      captured.current = 0;
       stopped.current = false;
       failed.current = false;
       recordingId.current = null;
@@ -291,7 +298,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
           keepCopy(e.data);
           queue.current.push(e.data);
           queued.current += e.data.size;
-          patch({ recordedBytes: offset.current + queued.current });
+          captured.current += e.data.size;
+          patch({ recordedBytes: captured.current });
           void pump();
         };
         r.onstop = finish;
@@ -347,6 +355,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     if (!blob || !m) return;
     failed.current = false;
     finishBase.current = 0;
+    captured.current = blob.size;
     patch({ phase: "finishing", error: null, progress: 0, finishProgress: 0, finishStartedAt: performance.now(), sentBytes: 0, recordedBytes: blob.size });
     const started = await postJson<{ recording?: Recording; error?: string }>(`/api/meetings/${m.id}/recordings`, { mime: blob.type || mime.current, size_bytes: blob.size, duration_sec: state.seconds });
     if (!started.ok || !started.data?.recording) {
