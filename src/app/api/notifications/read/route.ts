@@ -1,26 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { ok, serverError, readJsonObject } from "@/lib/api";
-import { isUuid, parseUuidList } from "@/lib/validate";
+import { serverError, readJsonObject } from "@/lib/api";
+import { isUuid } from "@/lib/validate";
 
 export const dynamic = "force-dynamic";
 
-/** Mark notifications read: { ids: [...] }, { task_id } (opening a task reads
- * what was about it) or { all: true }. Always scoped to the caller's own rows. */
+/** Mark notifications read: { task_id } (opening a task reads what was about it)
+ * or { all: true }. Always scoped to the caller's own rows; answers how many changed. */
 export async function POST(req: NextRequest) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
   const b = await readJsonObject(req);
   const now = new Date().toISOString();
   let q = getSupabase().from("notifications").update({ read_at: now }).eq("user_id", u.uid).is("read_at", null);
-  if (b.all !== true && isUuid(b.task_id)) q = q.eq("task_id", String(b.task_id).toLowerCase());
-  else if (b.all !== true) {
-    const ids = parseUuidList(b.ids, 200);
-    if (!ids || !ids.length) return ok();
-    q = q.in("id", ids);
+  if (b.all !== true) {
+    if (!isUuid(b.task_id)) return NextResponse.json({ ok: true, updated: 0 });
+    q = q.eq("task_id", String(b.task_id).toLowerCase());
   }
-  const { error } = await q;
+  const { data, error } = await q.select("id");
   if (error) return serverError(error);
-  return ok();
+  return NextResponse.json({ ok: true, updated: data?.length ?? 0 });
 }

@@ -97,16 +97,27 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
   // notifications leave this device's tray (GitHub / Linear behaviour).
   const { data: badge } = useCachedFetch<{ unread?: number }>("/api/notifications?limit=1");
   // Keyed on the count: news about this task that arrives while it is open is read at once too.
+  // Asks only when the count RISES for this task (new news), never for its own refresh or an
+  // unrelated backlog, and refreshes the badge only when something was actually marked.
   const unreadCount = badge?.unread ?? 0;
   const readFor = useRef<{ task: string; count: number } | null>(null);
   useEffect(() => {
     void closeSystemNotifications(`task-${task.id}`);
-    if (unreadCount === 0) return;
-    // The same count for the same task was already handled: no repeat request after our own refresh.
-    if (readFor.current?.task === task.id && readFor.current.count === unreadCount) return;
+    const seen = readFor.current?.task === task.id ? readFor.current.count : -1;
+    if (unreadCount <= seen) {
+      readFor.current = { task: task.id, count: unreadCount };
+      return;
+    }
+    if (unreadCount === 0) {
+      readFor.current = { task: task.id, count: 0 };
+      return;
+    }
     readFor.current = { task: task.id, count: unreadCount };
-    void postJson("/api/notifications/read", { task_id: task.id }).then((r) => {
-      if (!r.ok) return;
+    void postJson<{ updated?: number }>("/api/notifications/read", { task_id: task.id }).then((r) => {
+      const n = r.ok ? (r.data?.updated ?? 0) : 0;
+      if (!n) return;
+      // Expect the badge to drop by what we marked; its refresh then counts as already handled.
+      readFor.current = { task: task.id, count: Math.max(0, unreadCount - n) };
       mutate("/api/notifications?limit=1");
       mutatePrefix("/api/notifications?limit=30");
     });

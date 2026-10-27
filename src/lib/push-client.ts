@@ -81,10 +81,25 @@ export function snoozePushPrompt(uid: string): void {
   lsSet(PROMPT_KEY(uid), String(Date.now() + 14 * 86_400_000));
 }
 
-async function subscribeAndRegister(reg: ServiceWorkerRegistration, uid?: string): Promise<string | null> {
+/** Was this subscription made with the server's current key? (After a key change, old ones are refused for good.) */
+function madeWithKey(sub: PushSubscription, key: string): boolean {
+  const have = sub.options?.applicationServerKey;
+  if (!have) return true; // the browser does not say: assume it matches
+  const a = new Uint8Array(have);
+  const b = urlB64ToUint8Array(key);
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
+async function subscribeAndRegister(reg: ServiceWorkerRegistration, uid?: string, fresh = false): Promise<string | null> {
   const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!key) return "Notifications aren't configured on the server yet.";
   let sub = await reg.pushManager.getSubscription();
+  // A subscription the push service refused for good (or one made with an old key) is
+  // never re-sent as it is: drop it and make a new one.
+  if (sub && (fresh || !madeWithKey(sub, key))) {
+    await sub.unsubscribe().catch(() => false);
+    sub = null;
+  }
   try {
     if (!sub) {
       // Cast: lib.dom types ArrayBuffer-backed views, which Uint8Array satisfies at runtime.
@@ -155,6 +170,12 @@ async function doSync(uid: string): Promise<void> {
       const data = r.ok ? ((await r.json()) as { subscribed?: boolean }) : null;
       if (data?.subscribed) {
         lsSet(OK_KEY(uid), `${sub.endpoint}|${Date.now()}`);
+        return;
+      }
+      // The server once confirmed this very subscription and has since dropped it: the push
+      // service refused it, so registering it again would only fail again — start fresh.
+      if (data && endpoint === sub.endpoint) {
+        await subscribeAndRegister(reg, uid, true);
         return;
       }
     }

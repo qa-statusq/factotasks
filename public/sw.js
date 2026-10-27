@@ -1,14 +1,16 @@
 /**
- * FactoTasks service worker — deliberately MINIMAL.
+ * FactoTasks service worker — kept small, with two jobs:
  *
- * Its ONLY job is the offline fallback: when a top-level NAVIGATION cannot
- * reach the network, serve the self-contained /offline.html instead of the
- * browser's default error page. Nothing else is intercepted or cached:
- *  - API calls, assets and every non-navigation request go straight to the
- *    network untouched (no respondWith), so online behaviour is byte-identical.
- *  - The cache holds exactly one static file with ZERO user data, so sign-out
- *    hygiene (lib/signout.ts) is unaffected.
- * Bump CACHE to invalidate after changing offline.html.
+ * 1. Offline fallback: when a top-level NAVIGATION cannot reach the network,
+ *    serve the self-contained /offline.html instead of the browser's error page.
+ *    Nothing else is intercepted or cached:
+ *     - API calls, assets and every non-navigation request go straight to the
+ *       network untouched (no respondWith), so online behaviour is byte-identical.
+ *     - The cache holds exactly one static file with ZERO user data, so sign-out
+ *       hygiene (lib/signout.ts) is unaffected.
+ *    Bump CACHE to invalidate after changing offline.html.
+ * 2. Notifications (Web Push): show them, refresh open tabs' inbox badge, and
+ *    route a tap to the right page — see the push handlers below.
  */
 const CACHE = "factotasks-offline-v2";
 const OFFLINE_URL = "/offline.html";
@@ -76,7 +78,8 @@ self.addEventListener("push", (event) => {
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       const ours = list.filter((c) => new URL(c.url).origin === self.location.origin);
       const inFront = ours.filter((c) => c.focused && c.visibilityState === "visible");
-      const presenting = inFront.some((c) => /\/meetings\/[^/]+\/(present|print)/.test(new URL(c.url).pathname));
+      // Presenting = a deck VISIBLE anywhere (on a projector it is rarely the focused window).
+      const presenting = ours.some((c) => c.visibilityState === "visible" && /\/meetings\/[^/]+\/(present|print)/.test(new URL(c.url).pathname));
       const target = new URL(data.url || "/notifications", self.location.origin).pathname;
       const onTarget = inFront.some((c) => new URL(c.url).pathname === target);
       // Presenting: nothing pops up over the shared screen — the Inbox keeps it.

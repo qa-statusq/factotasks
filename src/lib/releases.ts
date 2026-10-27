@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { getSupabase } from "./supabase";
 import type { SessionUser } from "./auth";
 import { cleanLine, cleanText, isUuid, oneOf, parseDate, parseUuidList } from "./validate";
@@ -229,20 +230,26 @@ export async function applyReleased(rel: ReleaseCore, actor: SessionUser, opts: 
   }
   const touched = [...closed, ...partial];
   if (touched.length) {
-    const { data: who } = await sb.from("task_assignees").select("task_id, user_id").in("task_id", touched.map((t) => t.id));
-    const byTask = new Map<string, string[]>();
-    for (const w of who || []) byTask.set(w.task_id as string, [...(byTask.get(w.task_id as string) || []), w.user_id as string]);
-    await Promise.all(
-      touched.map((t) =>
-        notifyUsers({
-          userIds: byTask.get(t.id) || [],
-          kind: "task.status",
-          taskId: t.id,
-          actorId: actor.uid,
-          message: closed.includes(t) ? `${actorName} marked ${taskRef(t.number)} “${t.title}” done — shipped in ${label}` : `${taskRef(t.number)} “${t.title}” shipped in ${label} — other targets still pending`,
-        })
-      )
-    );
+    // After the response, a few at a time: marking a 40-task release done never waits for
+    // (or bursts) one inbox row + push fan-out per task.
+    after(async () => {
+      const { data: who } = await sb.from("task_assignees").select("task_id, user_id").in("task_id", touched.map((t) => t.id));
+      const byTask = new Map<string, string[]>();
+      for (const w of who || []) byTask.set(w.task_id as string, [...(byTask.get(w.task_id as string) || []), w.user_id as string]);
+      const queue = [...touched];
+      const worker = async () => {
+        for (let t = queue.shift(); t; t = queue.shift()) {
+          await notifyUsers({
+            userIds: byTask.get(t.id) || [],
+            kind: "task.status",
+            taskId: t.id,
+            actorId: actor.uid,
+            message: closed.includes(t) ? `${actorName} marked ${taskRef(t.number)} “${t.title}” done — shipped in ${label}` : `${taskRef(t.number)} “${t.title}” shipped in ${label} — other targets still pending`,
+          });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker));
+    });
   }
   return { released_at, closed, partial };
 }
