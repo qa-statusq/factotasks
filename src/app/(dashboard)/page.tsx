@@ -113,7 +113,7 @@ export default function DashboardPage() {
           {data.releases.some((r) => r.status === "released" || r.status === "testing") && (
             <section>
               <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">Releases</h2>
-              <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {/* Shipped and under test only — planned versions wait on the Releases screen. */}
                 {data.releases.filter((r) => r.status === "released" || r.status === "testing").map((r) => (
                   <li key={r.id} className="min-w-0">

@@ -56,7 +56,7 @@ export default function ShortcutsPage() {
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       <PageHeader title="Keyboard shortcuts" description="Shortcuts never fire while you're typing in a field." />
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {GROUPS.map((g) => (
           <Card key={g.title}>
             <CardHeader>

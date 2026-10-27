@@ -196,7 +196,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
       {pending && <RequestBanner task={task} isAdmin={isAdmin} iRequested={iRequested} cacheKey={cacheKey} />}
       <PendingReleaseBanner task={task} />
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="flex min-w-0 flex-col gap-5">
           <section className="rounded-xl border border-line bg-surface p-4 sm:p-5">
             {task.description ? <RichText text={task.description} /> : <p className="text-sm text-ink-subtle">No description.{task.can.edit ? " Click Edit to add one." : ""}</p>}

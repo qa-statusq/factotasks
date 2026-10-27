@@ -176,7 +176,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
         <Stat label="Approvals" value={pack.approvals.length} tone={pack.approvals.length ? "warning" : undefined} />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-4">
           {agenda.length === 0 ? (
             <EmptyState icon={<IconPresentation size={20} />} title="Nothing to discuss yet" description="Tasks created or completed and releases since the last meeting show up here, app by app." />

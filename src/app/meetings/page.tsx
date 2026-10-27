@@ -108,7 +108,7 @@ export default function MeetingsPage() {
       ) : shown.length === 0 ? (
         <EmptyState icon={<IconPresentation size={20} />} title={active ? `No ${active.name} meetings yet` : "No meetings yet"} description={isAdmin ? "Create a meeting: pick its series and the date and time you're meeting — the agenda is built from the series' scope for you." : "Meetings of the series you take part in appear here once an admin creates them."} action={isAdmin ? <Button onClick={() => setCreating(true)}>New meeting</Button> : undefined} />
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {shown.map((m) => (
             <li key={m.id} className="min-w-0">
               <MeetingCard m={m} apps={ad?.apps} />

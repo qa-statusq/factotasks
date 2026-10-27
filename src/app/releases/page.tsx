@@ -90,7 +90,7 @@ export default function ReleasesPage() {
       ) : releases.length === 0 ? (
         <EmptyState icon={<IconRocket size={20} />} title="No releases yet" description={isAdmin ? "Log the versions you're working on from an app's Releases tab, or right here." : "Releases of the apps you belong to show up here."} action={canAdd ? <Button size="sm" onClick={() => setAdding(true)}>New release</Button> : undefined} />
       ) : (
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <Card className="overflow-hidden self-start">
             <CardHeader>
               <CardTitle>

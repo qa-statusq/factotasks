@@ -400,7 +400,7 @@ function SettingsTab({ app, onEdit }: { app: AppOverview; onEdit: () => void }) 
 
   const archived = app.status === "archived";
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       {/* Identity */}
       <Card>
         <CardHeader className="flex items-center justify-between gap-3">
@@ -451,7 +451,7 @@ function SettingsTab({ app, onEdit }: { app: AppOverview; onEdit: () => void }) 
         <CardHeader>
           <CardTitle>Lifecycle</CardTitle>
         </CardHeader>
-        <CardBody className="grid gap-4 md:grid-cols-2">
+        <CardBody className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="flex items-start justify-between gap-4 rounded-xl border border-line p-4">
             <div className="min-w-0">
               <p className="text-[13.5px] font-semibold text-ink">{archived ? "Bring back" : "Archive"}</p>

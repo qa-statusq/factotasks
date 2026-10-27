@@ -79,7 +79,7 @@ function SeriesSettings() {
           <Spinner />
         </div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
           <nav className="flex flex-col gap-1 lg:sticky lg:top-6 lg:self-start" aria-label="Series">
             {list.map((s) => {
               const active = !creating && selected?.id === s.id;

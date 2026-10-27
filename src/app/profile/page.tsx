@@ -94,7 +94,7 @@ function AccountCard() {
           </div>
         </div>
         <form onSubmit={submit} className="flex flex-col gap-4 border-t border-line pt-5">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="First name">
               <Input value={first} onChange={(e) => setFirst(e.target.value)} maxLength={NAME_MAX} autoComplete="given-name" />
             </Field>
@@ -214,17 +214,20 @@ function NotificationsCard() {
         </CardTitle>
       </CardHeader>
       <CardBody>
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="min-w-0 flex-1 text-[13px] text-ink-muted">{copy}</p>
-          {state === "on" && me?.role === "admin" && (
-            <Button variant="secondary" size="sm" onClick={test} disabled={testing} className="shrink-0">
-              {testing ? <Spinner /> : "Send test"}
-            </Button>
-          )}
+        {/* Phones: the sentence takes the full width and the buttons sit under it. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <p className="min-w-0 text-[13px] leading-relaxed text-ink-muted sm:flex-1">{copy}</p>
           {(state === "on" || state === "off") && (
-            <Button variant={state === "on" ? "secondary" : "primary"} size="sm" onClick={toggle} disabled={busy} className="shrink-0">
-              {busy ? <Spinner /> : state === "on" ? "Turn off" : "Turn on"}
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              {state === "on" && me?.role === "admin" && (
+                <Button variant="secondary" size="sm" onClick={test} disabled={testing}>
+                  {testing ? <Spinner /> : "Send test"}
+                </Button>
+              )}
+              <Button variant={state === "on" ? "secondary" : "primary"} size="sm" onClick={toggle} disabled={busy}>
+                {busy ? <Spinner /> : state === "on" ? "Turn off" : "Turn on"}
+              </Button>
+            </div>
           )}
         </div>
         {state === "on" && (

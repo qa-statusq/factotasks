@@ -196,7 +196,7 @@ function AnalyticsView({ data }: { data: Pack }) {
         {periods.length ? <PeriodChart periods={periods} bucket={bucket} /> : <p className="py-6 text-center text-sm text-ink-subtle">No periods in this range.</p>}
       </Section>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Section title="Cycle time" hint="How long completed tasks took, created → done">
           {t.done ? <Buckets buckets={data.cycle_buckets} color="#10b981" /> : <p className="py-6 text-center text-sm text-ink-subtle">Nothing completed in this range.</p>}
         </Section>
@@ -228,7 +228,7 @@ function AnalyticsView({ data }: { data: Pack }) {
         </Section>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* Releases */}
         <Section title="Releases" hint="Cadence and punctuality of versions shipped in this range">
           <div className="grid grid-cols-2 gap-3">
@@ -304,7 +304,7 @@ function AnalyticsView({ data }: { data: Pack }) {
         </Section>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_1.4fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         {/* Meetings */}
         <Section title="Meetings" hint="Held in this range, and what they produced">
           <div className="grid grid-cols-2 gap-3">
@@ -320,7 +320,7 @@ function AnalyticsView({ data }: { data: Pack }) {
           {data.oldest_open.length ? (
             <ul className="divide-y divide-line/60">
               {data.oldest_open.map((x) => (
-                <li key={x.id} className="flex items-center gap-3 py-2">
+                <li key={x.id} className="flex items-start gap-3 py-2 sm:items-center">
                   {x.app ? <AppTile name={x.app.name} color={x.app.color} iconUrl={x.app.icon_url} className="h-7 w-7 rounded-lg text-[11px]" /> : <GeneralTile className="h-7 w-7 rounded-lg text-[11px]" />}
                   <div className="min-w-0 flex-1">
                     <Link href={`/tasks/${x.id}`} className="block break-words text-[13px] font-medium leading-snug text-ink hover:text-brand-700">
@@ -331,11 +331,20 @@ function AnalyticsView({ data }: { data: Pack }) {
                       {x.assignees.length ? names(x.assignees) : "Unassigned"}
                       {x.due_date && <span className={cn(x.due_date < istTodayYmd() && "text-red-600")}> · due {prettyYmd(x.due_date, { weekday: false, year: false })}</span>}
                     </p>
+                    {/* Phones: age and status sit under the title, so the title keeps the row's width. */}
+                    <div className="mt-1 flex items-center gap-2 sm:hidden">
+                      <StatusBadge status={x.status} />
+                      <span className="inline-flex items-center gap-1 text-[12px] tabular-nums text-ink-muted" title="Age since created">
+                        <IconClock size={12} className="text-ink-subtle" /> {x.age_days}d
+                      </span>
+                    </div>
                   </div>
-                  <span className="inline-flex w-12 shrink-0 items-center justify-end gap-1 whitespace-nowrap text-[12px] tabular-nums text-ink-muted" title="Age since created">
+                  <span className="hidden w-12 shrink-0 items-center justify-end gap-1 whitespace-nowrap text-[12px] tabular-nums text-ink-muted sm:inline-flex" title="Age since created">
                     <IconClock size={12} className="text-ink-subtle" /> {x.age_days}d
                   </span>
-                  <StatusBadge status={x.status} className="w-[7.5rem] justify-center" />
+                  <span className="hidden shrink-0 sm:block">
+                    <StatusBadge status={x.status} className="w-[7.5rem] justify-center" />
+                  </span>
                 </li>
               ))}
             </ul>

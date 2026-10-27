@@ -218,7 +218,7 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
         }}
         className="flex flex-col gap-4"
       >
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="First name">
             <Input value={first} onChange={(e) => setFirst(e.target.value)} maxLength={NAME_MAX} autoFocus autoComplete="off" />
           </Field>
@@ -242,7 +242,7 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
             </Button>
           </div>
         </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Department">
             <Dropdown value={department} onChange={setDepartment} options={DEPT_OPTIONS} />
           </Field>
@@ -335,7 +335,7 @@ function MemberSheet({ member: m, meId, onClose }: { member: TeamMember; meId?: 
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="First name">
             <Input value={first} onChange={(e) => setFirst(e.target.value)} maxLength={NAME_MAX} />
           </Field>
