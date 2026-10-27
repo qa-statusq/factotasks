@@ -324,7 +324,9 @@ export function ReleaseRow({ r, showApp = true, onOpen }: { r: Release; showApp?
             {typeof r.task_count === "number" && r.task_count > 0 && (
               <span>
                 {"\u00a0· "}
-                {r.done_count}/{r.task_count} tasks done
+                <span className="whitespace-nowrap">
+                  {r.done_count}/{r.task_count} tasks done
+                </span>
               </span>
             )}
           </div>
