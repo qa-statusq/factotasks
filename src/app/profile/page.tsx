@@ -185,7 +185,7 @@ function NotificationsCard() {
   async function test() {
     if (testing) return;
     setTesting(true);
-    const { ok, data } = await postJson<{ devices?: number; sent?: number; removed?: number; error?: string }>("/api/push/test", {});
+    const { ok, data } = await postJson<{ sent?: number; removed?: number; error?: string }>("/api/push/test", {});
     setTesting(false);
     if (!ok) return toast(data?.error || "Couldn't send a test notification", "error");
     if (!data?.sent) {

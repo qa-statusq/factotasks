@@ -79,7 +79,8 @@ self.addEventListener("push", (event) => {
       const ours = list.filter((c) => new URL(c.url).origin === self.location.origin);
       const inFront = ours.filter((c) => c.focused && c.visibilityState === "visible");
       // Presenting = a deck VISIBLE anywhere (on a projector it is rarely the focused window).
-      const presenting = ours.some((c) => c.visibilityState === "visible" && /\/meetings\/[^/]+\/(present|print)/.test(new URL(c.url).pathname));
+      // A printed-minutes page is not a presentation: it never silences notifications.
+      const presenting = ours.some((c) => c.visibilityState === "visible" && /\/meetings\/[^/]+\/present/.test(new URL(c.url).pathname));
       const target = new URL(data.url || "/notifications", self.location.origin).pathname;
       const onTarget = inFront.some((c) => new URL(c.url).pathname === target);
       // Presenting: nothing pops up over the shared screen — the Inbox keeps it.

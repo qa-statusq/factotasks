@@ -2,6 +2,7 @@ import { getSupabase } from "./supabase";
 import { USER_BRIEF_COLS, embeddedUser, embedded } from "./users";
 import type { Meeting, MeetingSeries } from "./types";
 import { istDate } from "./time";
+import { SHARED_ORDER_ID } from "./meeting-agenda";
 
 export const MEETING_SELECT = `id, title, held_at, notes, status, finalized_at, created_at, series_id, app_ids, auto_close, series:meeting_series(id, name, color), creator:users!meetings_created_by_fkey(${USER_BRIEF_COLS}), meeting_notes(count)`;
 
@@ -49,4 +50,16 @@ export async function ensureDefaultSeries(createdBy: string | null): Promise<Mee
   const { data: made, error } = await sb.from("meeting_series").insert({ name: "Weekly sync", created_by: createdBy }).select(SERIES_SELECT).single();
   if (error || !made) throw error ?? new Error("Couldn't create the default series");
   return shapeSeries(made as Record<string, unknown>);
+}
+
+/**
+ * A member's copy of a meeting's or series' scope: only the apps they may see,
+ * `scoped` saying whether it is limited at all (an empty list alone would read
+ * as "every app"), and the presentation order without other apps (the
+ * "Across apps" marker stays). Admins get rows unchanged.
+ */
+export function scopeForMember<T extends { app_ids: string[]; app_order?: string[] }>(row: T, allowed: string[] | null): T & { scoped?: boolean } {
+  if (allowed === null) return row;
+  const order = row.app_order?.filter((id) => allowed.includes(id) || id === SHARED_ORDER_ID);
+  return { ...row, scoped: row.app_ids.length > 0, app_ids: row.app_ids.filter((id) => allowed.includes(id)), ...(order ? { app_order: order } : {}) };
 }

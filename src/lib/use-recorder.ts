@@ -364,7 +364,6 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
   );
 
   /** After a failure: upload the kept file from scratch as a new recording. */
-  /** Upload a kept file again from the start, as a new recording. */
   const resend = useCallback(async (blob: Blob, m: { id: string; title: string }) => {
     failed.current = false;
     finishBase.current = 0;

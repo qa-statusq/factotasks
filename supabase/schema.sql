@@ -1618,3 +1618,8 @@ alter default privileges in schema public revoke all on sequences from anon, aut
 alter default privileges in schema public revoke all on functions from anon, authenticated;
 alter default privileges in schema public revoke execute on functions from public;
 alter default privileges in schema public grant execute on functions to service_role;
+-- (030) The everyone-may-execute default is GLOBAL per creating role: a per-schema
+-- revoke cannot remove it, so functions made by later migrations (run as postgres)
+-- were still executable by anon. Revoke it for that role itself.
+alter default privileges for role postgres revoke execute on functions from public;
+alter default privileges for role postgres grant execute on functions to service_role;

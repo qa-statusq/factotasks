@@ -5,8 +5,9 @@ import { fail, serverError, readJsonObject, memberJson } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid } from "@/lib/validate";
 import { LIMITS } from "@/lib/domain";
-import { MEETING_SELECT, SERIES_SELECT, shapeMeeting, shapeSeries, defaultTitle, ensureDefaultSeries } from "@/lib/meetings";
+import { MEETING_SELECT, SERIES_SELECT, shapeMeeting, shapeSeries, defaultTitle, ensureDefaultSeries, scopeForMember } from "@/lib/meetings";
 import { memberSeriesIds, closeOverdueMeetings } from "@/lib/series-access";
+import { visibleAppIds } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,9 @@ export async function GET() {
   }
   const { data, error } = await q;
   if (error) return serverError(error);
-  const meetings = ((data as unknown as Record<string, unknown>[]) || []).map(shapeMeeting);
+  // A member's copy names only the apps they may see (the label still knows the meeting is limited).
+  const allowed = await visibleAppIds(u);
+  const meetings = ((data as unknown as Record<string, unknown>[]) || []).map(shapeMeeting).map((m) => scopeForMember({ ...m, app_ids: m.app_ids ?? [] }, allowed));
   return memberJson(u, { meetings });
 }
 

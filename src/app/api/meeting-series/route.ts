@@ -5,9 +5,10 @@ import { fail, serverError, readJsonObject } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUniqueViolation, parseUuidList } from "@/lib/validate";
 import { pickDistinctColor, SERIES_COLORS } from "@/lib/colors";
-import { SERIES_SELECT, shapeSeries, SERIES_NAME_MAX } from "@/lib/meetings";
+import { SERIES_SELECT, shapeSeries, SERIES_NAME_MAX, scopeForMember } from "@/lib/meetings";
 import { memberSeriesIds } from "@/lib/series-access";
 import type { MeetingSeries } from "@/lib/types";
+import { visibleAppIds } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,8 @@ export async function GET() {
     if (!mine.length) return NextResponse.json({ series: [] });
     const { data, error } = await sb.from("meeting_series").select(SERIES_SELECT).in("id", mine).order("created_at");
     if (error) return serverError(error);
-    return NextResponse.json({ series: (data || []).map(shapeSeries) });
+    const allowed = await visibleAppIds(u);
+    return NextResponse.json({ series: (data || []).map((r) => scopeForMember(shapeSeries(r), allowed)) });
   }
   const [series, meetings] = await Promise.all([
     sb.from("meeting_series").select(SERIES_SELECT).order("created_at"),

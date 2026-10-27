@@ -385,6 +385,15 @@ console.log("\n— double submit (026) —");
   await db.query("delete from tasks where id = $1", [t.id]);
 }
 
+console.log("\n— function privileges (026/030) —");
+{
+  // A function created AFTER the lockdown (as a later migration would) must not be executable by anon.
+  await db.exec("create or replace function zz_after_lockdown() returns int language sql as $$ select 1 $$;");
+  const p = await one("select has_function_privilege('anon', 'zz_after_lockdown()', 'execute') as anon, has_function_privilege('service_role', 'zz_after_lockdown()', 'execute') as svc");
+  assert(p.anon === false && p.svc === true, `a function added later is service_role-only (anon ${p.anon}, service_role ${p.svc})`);
+  await db.exec("drop function zz_after_lockdown();");
+}
+
 console.log("\n— migrations match schema.sql —");
 {
   // The newest definition of every function across the migrations must equal schema.sql's,

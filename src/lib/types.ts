@@ -262,6 +262,8 @@ export interface MeetingSeries {
   app_ids: string[];
   /** Presentation order of apps (ids); unlisted apps follow alphabetically. */
   app_order?: string[];
+  /** (members' copy) Limited to some apps — the list then holds only the ones they may see. */
+  scoped?: boolean;
   /** (021) Meetings of the series close by themselves after their day. */
   auto_close?: boolean;
   /** (021) Team members who take part (admins only see this). */

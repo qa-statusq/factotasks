@@ -33,9 +33,8 @@ import { cn } from "@/lib/cn";
 import { LIMITS, taskRef } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
 import { IconMaximize, IconPrint, IconCheck, IconTrash, IconEdit, IconPresentation, IconChevronDown, IconPlus, IconX } from "@/components/ui/icons";
-import type { AppOverview, Meeting, MeetingNote, MeetingPack, MeetingSeries, TaskCard } from "@/lib/types";
+import type { AppOverview, DeckPack, Meeting, MeetingNote, MeetingPack, MeetingSeries, TaskCard } from "@/lib/types";
 
-type Pack = MeetingPack & { workspace_name: string };
 /** Separator glued to the word before it, so a wrapped line never opens with "·". */
 const SEP = "\u00a0· ";
 
@@ -44,7 +43,7 @@ export default function MeetingPage() {
   const router = useRouter();
   const key = `/api/meetings/${id}`;
   const { toast } = useToast();
-  const { data, loading, error, refresh } = useCachedFetch<Pack>(key, {
+  const { data, loading, error, refresh } = useCachedFetch<DeckPack>(key, {
     onError: (e) => {
       if ((e as { status?: number }).status === 404) {
         toast("That meeting no longer exists", "error");
@@ -59,7 +58,7 @@ export default function MeetingPage() {
   return <MeetingScreen pack={data} cacheKey={key} />;
 }
 
-function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
+function MeetingScreen({ pack, cacheKey }: { pack: DeckPack; cacheKey: string }) {
   const router = useRouter();
   const { toast } = useToast();
   const { confirm } = useDialog();

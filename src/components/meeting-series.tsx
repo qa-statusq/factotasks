@@ -47,12 +47,14 @@ export function MeetingStatusBadge({ status, className }: { status: "open" | "fi
 
 export interface Scope {
   app_ids: string[];
+  /** Limited to some apps even when none of them is listed (a member's copy lists only their own). */
+  scoped?: boolean;
 }
 
 /** What a meeting covers: "Everything", or the chosen apps. */
 export function ScopeLabel({ scope, apps, className, size = "sm" }: { scope: Partial<Scope> | undefined; apps: AppOverview[] | undefined; className?: string; size?: "sm" | "md" }) {
   const ids = scope?.app_ids ?? [];
-  if (!ids.length) return <span className={cn("text-ink-subtle", className)}>All apps</span>;
+  if (!ids.length) return <span className={cn("text-ink-subtle", className)}>{scope?.scoped ? "Selected apps" : "All apps"}</span>;
   const chosen = ids.map((id) => apps?.find((a) => a.id === id)).filter((a): a is AppOverview => !!a);
   return (
     <span className={cn("inline-flex flex-wrap items-center gap-1.5", className)}>
