@@ -19,6 +19,6 @@ export async function POST() {
   if (limited) return limited;
   const { count } = await getSupabase().from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", u.uid);
   if (!count) return NextResponse.json({ devices: 0, sent: 0, failed: 0, removed: 0 });
-  const r = await pushToUsers([u.uid], { title: "FactoTasks", body: "Test notification — this device will be told when something needs you.", url: "/notifications", tag: "push-test" });
+  const r = await pushToUsers([u.uid], { title: "FactoTasks", body: "Test notification — this device will be told when something needs you.", url: "/notifications", tag: "push-test", always: true });
   return NextResponse.json({ devices: count, ...r });
 }

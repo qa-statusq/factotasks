@@ -193,7 +193,7 @@ function NotificationsCard() {
       await load();
       return;
     }
-    toast(`Test sent to ${data.sent} device${data.sent === 1 ? "" : "s"}`, "success", "If nothing appears, check that notifications for this browser are allowed in the computer's or phone's own settings, and that Do Not Disturb is off.");
+    toast("Test notification sent", "success", "Nothing appeared? Allow notifications for this browser in the device's own settings (Mac: System Settings → Notifications → your browser) and turn off Do Not Disturb / Focus.");
   }
 
   const copy =
@@ -201,7 +201,7 @@ function NotificationsCard() {
     : state === "homescreen" ? "On iPhone and iPad, notifications work once FactoTasks is on the Home Screen: tap Share → Add to Home Screen, open it from there, then turn notifications on here."
     : state === "unconfigured" ? "Push isn't set up on the server yet — the in-app inbox still works."
     : state === "blocked" ? "Blocked in the browser. Allow notifications for this site in the address-bar site settings, then try again."
-    : state === "on" ? "On for this device — even when the panel is closed. While the panel is open in front of you, news shows inside it instead. Your own actions never notify you."
+    : state === "on" ? "On for this device — whether the panel is open, in the background or closed. Nothing pops up while you present a meeting. Your own actions never notify you."
     : "Get a push alert on this device when something needs you — assignments, approval requests, comments, releases.";
 
   return (

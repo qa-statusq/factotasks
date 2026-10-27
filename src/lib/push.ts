@@ -35,6 +35,8 @@ export interface PushPayload {
   tag?: string;
   /** The notification kind (task.assigned …) — shown to the service worker, not used for routing. */
   kind?: string;
+  /** Show the system notification whatever the person is looking at (the Profile test). */
+  always?: boolean;
 }
 
 export interface PushOptions {

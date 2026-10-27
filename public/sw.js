@@ -58,8 +58,12 @@ self.addEventListener("fetch", (event) => {
 });
 
 /* ---------------- Browser push (Web Push) ----------------
-   The server sends { title, body, url, tag }. A tap focuses an open panel tab
-   (navigating it) or opens a new one. */
+   The server sends { title, body, url, tag, always? }. A tap focuses an open panel
+   tab (navigating it) or opens a new one.
+   Like mail and chat apps: the system notification is shown even while the panel
+   is open, EXCEPT when the person is already looking at the very page it points
+   to (they can see it change), or is presenting a meeting (the screen is shared).
+   A test (`always`) is shown in every case. */
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -73,9 +77,10 @@ self.addEventListener("push", (event) => {
       const ours = list.filter((c) => new URL(c.url).origin === self.location.origin);
       const inFront = ours.filter((c) => c.focused && c.visibilityState === "visible");
       const presenting = inFront.some((c) => /\/meetings\/[^/]+\/(present|print)/.test(new URL(c.url).pathname));
-      // The panel is in front: it shows the news itself (a quiet in-page note), no system pop-up.
-      // During a presentation nothing is shown at all — the Inbox keeps it.
-      const show = inFront.length === 0;
+      const target = new URL(data.url || "/notifications", self.location.origin).pathname;
+      const onTarget = inFront.some((c) => new URL(c.url).pathname === target);
+      // Presenting: nothing pops up over the shared screen — the Inbox keeps it.
+      const show = !!data.always || (!presenting && !onTarget);
       // Every open tab refreshes its inbox badge now instead of at the next poll.
       for (const c of ours) c.postMessage({ type: "ft-push", shownBySystem: show, quiet: presenting, title, body: data.body || "", url: data.url || "/notifications" });
       if (!show) return undefined;

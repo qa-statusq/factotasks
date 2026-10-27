@@ -10,8 +10,9 @@ const BADGE_KEY = "/api/notifications?limit=1";
  * The page side of push, mounted once in the shell:
  *  - a push that lands refreshes the inbox badge in every open tab at once,
  *    instead of at the next 15-second poll;
- *  - while this tab is in front, the service worker shows nothing in the system
- *    tray and the news appears here as a quiet note (never during a presentation);
+ *  - when the system notification was held back because this tab already shows
+ *    the page it points to, the news appears here as a quiet note instead
+ *    (never during a presentation);
  *  - the app icon (installed app) carries the unread count, like any mail or chat app.
  */
 export function usePushBridge(unread: number) {
