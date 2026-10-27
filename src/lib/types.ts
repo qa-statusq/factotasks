@@ -260,8 +260,6 @@ export interface MeetingSeries {
   color: string;
   /** Default scope for new meetings of this series; empty = every app. */
   app_ids: string[];
-  /** With a narrowed scope: also cover tasks that belong to no app. */
-  include_general: boolean;
   /** Presentation order of apps (ids); unlisted apps follow alphabetically. */
   app_order?: string[];
   /** (021) Meetings of the series close by themselves after their day. */
@@ -291,7 +289,6 @@ export interface Meeting {
   auto_close?: boolean | null;
   /** Scope: empty = every app. */
   app_ids?: string[];
-  include_general?: boolean;
 }
 
 export interface MeetingNote {

@@ -23,7 +23,7 @@ export async function GET() {
     const { data, error } = await sb.from("meeting_series").select(SERIES_SELECT).order("created_at");
     if (error) return serverError(error);
     return NextResponse.json({
-      series: (data || []).map((r) => (mine.has(r.id as string) ? { ...shapeSeries(r), member: true } : { id: r.id, name: r.name, color: r.color, app_ids: [], include_general: true, app_order: [] })),
+      series: (data || []).map((r) => (mine.has(r.id as string) ? { ...shapeSeries(r), member: true } : { id: r.id, name: r.name, color: r.color, app_ids: [], app_order: [] })),
     });
   }
   const [series, meetings] = await Promise.all([
@@ -46,7 +46,7 @@ export async function GET() {
   return NextResponse.json({ series: out });
 }
 
-/** Create a series (admin). Body: { name, app_ids?, include_general? }. The colour is assigned automatically. */
+/** Create a series (admin). Body: { name, app_ids?, app_order?, member_ids?, auto_close? }. The colour is assigned automatically. */
 export async function POST(req: NextRequest) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
@@ -56,7 +56,6 @@ export async function POST(req: NextRequest) {
   if (!name) return fail("Give the series a name");
   const app_ids = b.app_ids === undefined ? [] : parseUuidList(b.app_ids, 50);
   if (app_ids === null) return fail("Invalid app list");
-  const include_general = b.include_general === undefined ? true : b.include_general === true;
   const app_order = b.app_order === undefined ? [] : parseUuidList(b.app_order, 60);
   if (app_order === null) return fail("Invalid app order");
   const wanted = b.member_ids === undefined ? [] : parseUuidList(b.member_ids, 100);
@@ -68,7 +67,7 @@ export async function POST(req: NextRequest) {
   const member_ids = (people ?? []).map((x) => x.id as string);
   const { data: existing } = await sb.from("meeting_series").select("color");
   const color = pickDistinctColor((existing || []).map((r) => r.color as string), SERIES_COLORS);
-  const { data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, include_general, app_order, auto_close, created_by: u.uid }).select(SERIES_SELECT).single();
+  const { data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, app_order, auto_close, created_by: u.uid }).select(SERIES_SELECT).single();
   if (error) return isUniqueViolation(error) ? fail("A series with that name already exists", 409) : serverError(error);
   const s = shapeSeries(data as Record<string, unknown>);
   if (member_ids.length) {

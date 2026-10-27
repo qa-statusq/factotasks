@@ -240,8 +240,8 @@ assert(packSame.done.length === 1 && packSame.carried.length === 1, "meeting_pac
 const packOther = await json("select meeting_pack($1)", [other.id]);
 assert(!packOther.pending.some((t) => t.number === 2), "meeting_pack: an attached general task stays in its own series");
 // (017) An open meeting follows its SERIES' scope, so the narrow scope lives on a series of its own.
-const serScoped = await one("insert into meeting_series (name, app_ids, include_general) values ('Scoped review', array[gen_random_uuid()], false) returning id, app_ids");
-const scoped = await one("insert into meetings (title, held_at, series_id, app_ids, include_general, created_by) values ('Scoped', now(), $1, $2, false, $3) returning id", [serScoped.id, serScoped.app_ids, admin.id]);
+const serScoped = await one("insert into meeting_series (name, app_ids) values ('Scoped review', array[gen_random_uuid()]) returning id, app_ids");
+const scoped = await one("insert into meetings (title, held_at, series_id, app_ids, created_by) values ('Scoped', now(), $1, $2, $3) returning id", [serScoped.id, serScoped.app_ids, admin.id]);
 const packScoped = await json("select meeting_pack($1)", [scoped.id]);
 assert(packScoped.pending.length === 0 && packScoped.done.length === 0 && packScoped.apps.length === 0, "meeting_pack: scope filters tasks, done and apps");
 await db.query("insert into meeting_tasks (meeting_id, task_id, added_by) values ($1, $2, $3)", [scoped.id, t2.id, admin.id]);
@@ -250,8 +250,7 @@ assert(packPinned.pending.length === 1 && packPinned.pending[0].pinned === true 
 const gen = await one("insert into tasks (title, type, priority, created_by) values ('Renew Play console billing', 'bug', 'low', $1) returning id", [admin.id]);
 const packNoGen = await json("select meeting_pack($1)", [scoped.id]);
 assert(packNoGen.pending.length === 1, "meeting_pack: a general task is not swept into a meeting by scope");
-await db.query("update meetings set include_general = true where id = $1", [scoped.id]);
-assert((await json("select meeting_pack($1)", [scoped.id])).pending.length === 1, "meeting_pack: include_general no longer pulls general tasks in");
+assert((await db.query("select count(*)::int as n from information_schema.columns where column_name = 'include_general'")).rows[0].n === 0, "include_general columns are gone (024)");
 await db.query("update tasks set series_id = $1 where id = $2", [serScoped.id, gen.id]);
 const packGen = await json("select meeting_pack($1)", [scoped.id]);
 assert(packGen.pending.length === 2 && packGen.pending.some((t) => !t.app && t.series?.id === serScoped.id), "meeting_pack: a general task attached to the series joins its meetings");

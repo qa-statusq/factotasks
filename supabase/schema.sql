@@ -386,7 +386,6 @@ create table if not exists meeting_series (
   name       text not null,
   color      text not null default '#1c1c1a',
   app_ids    uuid[] not null default '{}',   -- default scope for new meetings in this series
-  include_general boolean not null default true, -- tasks that belong to no app
   app_order  uuid[] not null default '{}',   -- presentation order of apps in this series' meetings (013)
   created_by uuid references users(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -411,7 +410,6 @@ create table if not exists meetings (
   held_at      timestamptz not null,
   series_id    uuid references meeting_series(id) on delete set null,
   app_ids      uuid[] not null default '{}',     -- scope: empty = every app
-  include_general boolean not null default true, -- general (no-app) tasks when app_ids is set
   notes        text,                            -- general minutes (free text)
   status       text not null default 'open' check (status in ('open','finalized')),
   finalized_at timestamptz,
@@ -424,8 +422,9 @@ create index if not exists meetings_held_idx on meetings (held_at desc);
 alter table meetings add column if not exists series_id uuid references meeting_series(id) on delete set null;
 alter table meetings add column if not exists auto_close boolean; -- (021) per-meeting override; null = follow the series
 alter table meetings add column if not exists app_ids uuid[] not null default '{}';
-alter table meetings add column if not exists include_general boolean not null default true;
-alter table meeting_series add column if not exists include_general boolean not null default true;
+-- (024) General tasks join a meeting by attachment or by hand only, so the old per-scope switch is gone.
+alter table meetings drop column if exists include_general;
+alter table meeting_series drop column if exists include_general;
 create unique index if not exists meetings_one_open_per_series on meetings (series_id) where status = 'open'; -- (023)
 create index if not exists meetings_series_idx on meetings (series_id, held_at desc);
 insert into meeting_series (name) select 'Weekly sync' where not exists (select 1 from meeting_series);
@@ -1225,7 +1224,7 @@ as $$
   select jsonb_build_object(
     'meeting', (select jsonb_build_object('id', m.id, 'title', m.title, 'held_at', m.held_at, 'notes', m.notes,
                                           'status', m.status, 'finalized_at', m.finalized_at,
-                                          'series_id', m.series_id, 'app_ids', to_jsonb(m.app_ids), 'include_general', m.include_general, 'auto_close', m.auto_close) from m),
+                                          'series_id', m.series_id, 'app_ids', to_jsonb(m.app_ids), 'auto_close', m.auto_close) from m),
     'series', (select jsonb_build_object('id', s.id, 'name', s.name, 'color', s.color, 'app_order', to_jsonb(s.app_order), 'auto_close', s.auto_close) from meeting_series s, m where s.id = m.series_id),
     'window', (select jsonb_build_object('from', from_at, 'to', to_at) from win),
     'previous_meeting', (select held_at from prev),

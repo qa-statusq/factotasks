@@ -47,10 +47,9 @@ export function MeetingStatusBadge({ status, className }: { status: "open" | "fi
 
 export interface Scope {
   app_ids: string[];
-  include_general: boolean;
 }
 
-/** What a meeting covers: "Everything", or the chosen apps (+ general tasks). */
+/** What a meeting covers: "Everything", or the chosen apps. */
 export function ScopeLabel({ scope, apps, className, size = "sm" }: { scope: Partial<Scope> | undefined; apps: AppOverview[] | undefined; className?: string; size?: "sm" | "md" }) {
   const ids = scope?.app_ids ?? [];
   if (!ids.length) return <span className={cn("text-ink-subtle", className)}>All apps</span>;
@@ -78,12 +77,11 @@ export function AppScopePicker({ apps, value, onChange }: { apps: AppOverview[];
   const off = "bg-surface text-ink-muted ring-line hover:text-ink";
   const toggleApp = (id: string) => {
     const app_ids = value.app_ids.includes(id) ? value.app_ids.filter((x) => x !== id) : [...value.app_ids, id];
-    // Back to "Everything" means everything — general tasks included.
-    onChange({ app_ids, include_general: app_ids.length === 0 ? true : value.include_general });
+    onChange({ app_ids });
   };
   return (
     <div className="flex flex-wrap gap-1.5">
-      <button type="button" onClick={() => onChange({ app_ids: [], include_general: true })} className={cn(chip, all ? on : off)} aria-pressed={all}>
+      <button type="button" onClick={() => onChange({ app_ids: [] })} className={cn(chip, all ? on : off)} aria-pressed={all}>
         {all && <IconCheck size={13} />} Everything
       </button>
       {apps
@@ -113,7 +111,7 @@ export function NewMeetingSheet({ onClose, defaultSeriesId }: { onClose: () => v
   const series = sd?.series ?? [];
   const [seriesId, setSeriesId] = useState<string>(defaultSeriesId || "");
   const [newName, setNewName] = useState("");
-  const [newScope, setNewScope] = useState<Scope>({ app_ids: [], include_general: true });
+  const [newScope, setNewScope] = useState<Scope>({ app_ids: [] });
   const [when, setWhen] = useState(istNowLocal());
   const [busy, setBusy] = useState(false);
   // Validation and save problems surface as error toasts, not inline text.
@@ -139,7 +137,7 @@ export function NewMeetingSheet({ onClose, defaultSeriesId }: { onClose: () => v
         setBusy(false);
         return setError("Name the new series.");
       }
-      const r = await postJson<{ series?: MeetingSeries; error?: string }>("/api/meeting-series", { name, app_ids: newScope.app_ids, include_general: newScope.include_general });
+      const r = await postJson<{ series?: MeetingSeries; error?: string }>("/api/meeting-series", { name, app_ids: newScope.app_ids });
       if (!r.ok || !r.data?.series) {
         setBusy(false);
         return setError(r.data?.error || "Couldn't create the series.");

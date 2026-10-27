@@ -51,7 +51,6 @@ export async function POST(req: NextRequest) {
     series = shapeSeries(data as Record<string, unknown>);
   } else series = await ensureDefaultSeries(u.uid);
   const app_ids = series.app_ids;
-  const include_general = series.include_general;
   const title = cleanLine(b.title, LIMITS.meetingTitle) || defaultTitle(heldAt, series.name);
 
   // One open meeting per series keeps "since the last meeting" unambiguous.
@@ -61,7 +60,7 @@ export async function POST(req: NextRequest) {
   }
   const { data, error } = await sb
     .from("meetings")
-    .insert({ title, held_at: heldAt.toISOString(), created_by: u.uid, series_id: series.id, app_ids, include_general })
+    .insert({ title, held_at: heldAt.toISOString(), created_by: u.uid, series_id: series.id, app_ids })
     .select(MEETING_SELECT)
     .single();
   if (error) return serverError(error);

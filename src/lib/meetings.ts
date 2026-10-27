@@ -2,7 +2,7 @@ import { getSupabase } from "./supabase";
 import { USER_BRIEF_COLS, embeddedUser, embedded } from "./users";
 import type { Meeting, MeetingSeries } from "./types";
 
-export const MEETING_SELECT = `id, title, held_at, notes, status, finalized_at, created_at, series_id, app_ids, include_general, auto_close, series:meeting_series(id, name, color), creator:users!meetings_created_by_fkey(${USER_BRIEF_COLS}), meeting_notes(count)`;
+export const MEETING_SELECT = `id, title, held_at, notes, status, finalized_at, created_at, series_id, app_ids, auto_close, series:meeting_series(id, name, color), creator:users!meetings_created_by_fkey(${USER_BRIEF_COLS}), meeting_notes(count)`;
 
 export function shapeMeeting(r: Record<string, unknown>): Meeting {
   const counts = r.meeting_notes as { count: number }[] | undefined;
@@ -20,15 +20,14 @@ export function shapeMeeting(r: Record<string, unknown>): Meeting {
     series_id: (r.series_id as string | null) ?? null,
     series: embedded<{ id: string; name: string; color: string }>(r.series),
     app_ids: (r.app_ids as string[] | null) ?? [],
-    include_general: (r.include_general as boolean | null) ?? true,
   };
 }
 
-export const SERIES_SELECT = "id, name, color, app_ids, include_general, app_order, auto_close, created_at";
+export const SERIES_SELECT = "id, name, color, app_ids, app_order, auto_close, created_at";
 export const SERIES_NAME_MAX = 60;
 
 export function shapeSeries(r: Record<string, unknown>): MeetingSeries {
-  return { id: r.id as string, name: r.name as string, color: r.color as string, app_ids: (r.app_ids as string[] | null) ?? [], include_general: (r.include_general as boolean | null) ?? true, app_order: (r.app_order as string[] | null) ?? [], auto_close: (r.auto_close as boolean | null) ?? true, created_at: r.created_at as string };
+  return { id: r.id as string, name: r.name as string, color: r.color as string, app_ids: (r.app_ids as string[] | null) ?? [], app_order: (r.app_order as string[] | null) ?? [], auto_close: (r.auto_close as boolean | null) ?? true, created_at: r.created_at as string };
 }
 
 /** "Weekly sync · 21 Oct 2026" — the default title for a new meeting. */

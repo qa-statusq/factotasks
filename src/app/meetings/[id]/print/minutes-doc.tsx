@@ -72,7 +72,6 @@ export function MinutesDoc({ pack, onBack }: { pack: Pack; onBack: () => void })
             <p className="mt-2.5 text-[9pt]">
               <span className="mr-2 text-[7.5pt] font-semibold uppercase tracking-[0.14em] text-ink-subtle">Scope</span>
               <span className="font-medium">{m.app_ids?.length ? p.apps.map((a) => a.name).join(", ") : "All apps"}</span>
-              {(!m.app_ids?.length || m.include_general !== false) && <span className="text-ink-muted"> + general tasks</span>}
             </p>
           )}
         </header>

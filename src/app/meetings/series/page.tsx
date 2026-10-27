@@ -23,7 +23,7 @@ import { cn } from "@/lib/cn";
 import { IconPresentation, IconPlus, IconTrash, IconBack, IconUsers, IconApps, IconCheck } from "@/components/ui/icons";
 import type { AppOverview, MeetingSeries, UserBrief } from "@/lib/types";
 
-type Scope = { app_ids: string[]; include_general: boolean };
+type Scope = { app_ids: string[] };
 
 /**
  * Meeting series, one screen: pick a series on the left, set it up on the
@@ -132,7 +132,7 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
   const { toast } = useToast();
   const { confirm } = useDialog();
   const [name, setName] = useState(series?.name ?? "");
-  const [scope, setScope] = useState<Scope>({ app_ids: series?.app_ids ?? [], include_general: series?.include_general ?? true });
+  const [scope, setScope] = useState<Scope>({ app_ids: series?.app_ids ?? [] });
   const [order, setOrder] = useState<string[]>(series?.app_order ?? []);
   const [members, setMembers] = useState<string[]>(series?.member_ids ?? []);
   const [autoClose, setAutoClose] = useState<boolean>(series?.auto_close ?? true);
@@ -155,7 +155,6 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
     !series ||
     name.trim() !== series.name ||
     scope.app_ids.join() !== series.app_ids.join() ||
-    scope.include_general !== (series.include_general ?? true) ||
     order.join() !== (series.app_order ?? []).join() ||
     [...members].sort().join() !== [...(series.member_ids ?? [])].sort().join() ||
     autoClose !== (series.auto_close ?? true);
@@ -163,7 +162,7 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
   async function save() {
     if (busy || !name.trim()) return;
     setBusy(true);
-    const body = { name: name.trim(), app_ids: scope.app_ids, include_general: scope.include_general, app_order: order, member_ids: picked.map((u) => u.id), auto_close: autoClose };
+    const body = { name: name.trim(), app_ids: scope.app_ids, app_order: order, member_ids: picked.map((u) => u.id), auto_close: autoClose };
     const r = series ? await postJson<{ series?: { id: string }; error?: string }>(`/api/meeting-series/${series.id}`, body, "PATCH") : await postJson<{ series?: { id: string }; error?: string }>("/api/meeting-series", body);
     setBusy(false);
     if (r.ok) {

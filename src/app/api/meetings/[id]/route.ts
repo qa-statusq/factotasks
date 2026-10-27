@@ -71,10 +71,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.app_ids = ids;
     changes.push("scope");
   }
-  if ("include_general" in b) {
-    patch.include_general = b.include_general === true;
-    changes.push("scope");
-  }
   if ("auto_close" in b) {
     patch.auto_close = b.auto_close === null ? null : b.auto_close === true;
     changes.push("closing");
@@ -86,11 +82,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Closing freezes the scope the meeting was run with (while open it follows its series).
     const sid = (patch.series_id as string | undefined) ?? (cur as { series_id?: string | null }).series_id ?? null;
     if (sid && !("app_ids" in patch)) {
-      const { data: ser } = await getSupabase().from("meeting_series").select("app_ids, include_general").eq("id", sid).maybeSingle();
-      if (ser) {
-        patch.app_ids = ser.app_ids ?? [];
-        patch.include_general = ser.include_general ?? true;
-      }
+      const { data: ser } = await getSupabase().from("meeting_series").select("app_ids").eq("id", sid).maybeSingle();
+      if (ser) patch.app_ids = ser.app_ids ?? [];
     }
   } else if (b.status === "open" && cur.status !== "open") {
     patch.status = "open";

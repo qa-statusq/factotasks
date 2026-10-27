@@ -358,7 +358,7 @@ r = await member.call("POST", "/api/meetings", {});
 check(r.status === 403, "member cannot create meetings → 403", r);
 r = await admin.call("GET", "/api/meetings");
 check(r.status === 200 && Array.isArray(r.data?.meetings), "admin lists meetings", r);
-r = await admin.call("POST", "/api/meeting-series", { name: `E2E series ${stamp}`, app_ids: [appId], include_general: true });
+r = await admin.call("POST", "/api/meeting-series", { name: `E2E series ${stamp}`, app_ids: [appId] });
 check(r.status === 200 && r.data?.series?.id, "admin creates a meeting series scoped to the app", r);
 const seriesId = r.data?.series?.id;
 if (seriesId) created.series.push(seriesId);

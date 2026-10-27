@@ -42,11 +42,8 @@ export async function finalizeMeeting(id: string, extra: Record<string, unknown>
   if (!cur || cur.status === "finalized") return { error: null };
   const patch: Record<string, unknown> = { ...extra, status: "finalized", finalized_at: new Date().toISOString() };
   if (cur.series_id && !("app_ids" in patch)) {
-    const { data: ser } = await sb.from("meeting_series").select("app_ids, include_general").eq("id", cur.series_id as string).maybeSingle();
-    if (ser) {
-      patch.app_ids = ser.app_ids ?? [];
-      patch.include_general = ser.include_general ?? true;
-    }
+    const { data: ser } = await sb.from("meeting_series").select("app_ids").eq("id", cur.series_id as string).maybeSingle();
+    if (ser) patch.app_ids = ser.app_ids ?? [];
   }
   // Conditional: two instances closing the same meeting leave one close, one audit row.
   const { data, error } = await sb.from("meetings").update(patch).eq("id", id).eq("status", "open").select("id");
