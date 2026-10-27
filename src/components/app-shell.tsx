@@ -25,6 +25,7 @@ import { OFFLINE_FAVICON } from "@/lib/offline-favicon";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/misc";
 import DocumentTitle from "@/components/document-title";
+import { PushPrompt } from "@/components/push-prompt";
 import { ScrollToTop } from "@/components/ui/scroll-to-top";
 import { StickyContextBar } from "@/components/ui/context-bar";
 import { useScrolled } from "@/lib/use-scrolled";
@@ -512,7 +513,16 @@ function MobileDrawer({ onClose, children }: { onClose: () => void; children: Re
 
 /* -------------------------------- shell ----------------------------------- */
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+/** What the server already knows about the signed-in person when it draws the
+ * page (from the session cookie and a small menu hint), so the sidebar is
+ * right in the very first paint instead of growing once the session loads. */
+export interface NavHint {
+  admin: boolean;
+  /** Takes part in at least one meeting series (Meetings + Recordings). */
+  series: boolean;
+}
+
+export default function AppShell({ children, navHint }: { children: React.ReactNode; navHint?: NavHint }) {
   const pathname = usePathname();
   const bare = pathname === "/login" || pathname === "/set-password";
   // The presentation deck is full-screen by design: no sidebar, no header.
@@ -531,7 +541,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <SessionProvider>
           <ClockProvider>
             <RecorderProvider>
-              <TaskComposerProvider>{presenting ? children : <Shell>{children}</Shell>}</TaskComposerProvider>
+              <TaskComposerProvider>{presenting ? children : <Shell navHint={navHint}>{children}</Shell>}</TaskComposerProvider>
               <RecorderOverlay />
             </RecorderProvider>
           </ClockProvider>
@@ -541,9 +551,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, navHint }: { children: React.ReactNode; navHint?: NavHint }) {
   const pathname = usePathname();
   const { me, isAdmin } = useSession();
+  // The menu: the live session once it is here, the server's hint until then (same answer, no shift).
+  const navAdmin = me ? isAdmin : !!navHint?.admin;
+  const navMeetings = me ? isAdmin || (me.series_ids?.length ?? 0) > 0 : !!navHint?.admin || !!navHint?.series;
+  // Keep the hint current for the next page load (who it belongs to + series membership; nothing private).
+  useEffect(() => {
+    if (!me) return;
+    const value = `${me.id.slice(0, 8)}.${(me.series_ids?.length ?? 0) > 0 ? "s" : "-"}`;
+    document.cookie = `ft_nav=${value}; path=/; max-age=31536000; samesite=strict${location.protocol === "https:" ? "; secure" : ""}`;
+  }, [me]);
   const { toast } = useToast();
   const composer = useTaskComposer();
   // One tiny call feeds the inbox badge, the approvals badge and the tab title.
@@ -685,9 +704,9 @@ function Shell({ children }: { children: React.ReactNode }) {
           {item("/tasks", "Tasks", <IconTasks size={18} />, pathname === "/tasks" || pathname.startsWith("/tasks/"), undefined, ["/api/tasks?scope=open", "/api/apps", "/api/users"])}
           {item("/apps", "Apps", <IconApps size={18} />, pathname === "/apps" || pathname.startsWith("/apps/"), undefined, ["/api/apps"])}
           {item("/releases", "Releases", <IconRocket size={18} />, pathname === "/releases", undefined, ["/api/releases", "/api/apps"])}
-          {(isAdmin || (me?.series_ids?.length ?? 0) > 0) && item("/meetings", "Meetings", <IconPresentation size={18} />, pathname === "/meetings" || pathname.startsWith("/meetings/"), undefined, ["/api/meetings"])}
-          {(isAdmin || (me?.series_ids?.length ?? 0) > 0) && item("/recordings", "Recordings", <IconPlay size={18} />, pathname === "/recordings", undefined, ["/api/recordings"])}
-          {isAdmin && item("/approvals", "Approvals", <IconUserCheck size={18} />, pathname === "/approvals", countBadge(approvals), ["/api/tasks?scope=approvals"])}
+          {navMeetings && item("/meetings", "Meetings", <IconPresentation size={18} />, pathname === "/meetings" || pathname.startsWith("/meetings/"), undefined, ["/api/meetings"])}
+          {navMeetings && item("/recordings", "Recordings", <IconPlay size={18} />, pathname === "/recordings", undefined, ["/api/recordings"])}
+          {navAdmin && item("/approvals", "Approvals", <IconUserCheck size={18} />, pathname === "/approvals", countBadge(approvals), ["/api/tasks?scope=approvals"])}
           {item("/analytics", "Analytics", <IconAnalytics size={18} />, pathname === "/analytics", undefined, [])}
         </div>
 
@@ -695,8 +714,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col gap-1 [@media(min-height:54rem)]:gap-1.5">
           {item("/team", "People", <IconUsers size={18} />, pathname === "/team", undefined, ["/api/team"])}
           {item("/notifications", "Inbox", <IconBell size={18} />, pathname === "/notifications", countBadge(unread, "brand"), ["/api/notifications?limit=30"])}
-          {isAdmin && item("/activity", "Activity", <IconActivity size={18} />, pathname === "/activity")}
-          {isAdmin && item("/settings", "Settings", <IconSettings size={18} />, pathname === "/settings", undefined, ["/api/settings"])}
+          {navAdmin && item("/activity", "Activity", <IconActivity size={18} />, pathname === "/activity")}
+          {navAdmin && item("/settings", "Settings", <IconSettings size={18} />, pathname === "/settings", undefined, ["/api/settings"])}
         </div>
       </nav>
 
@@ -755,7 +774,10 @@ function Shell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="flex min-h-screen supports-[min-height:1svh]:min-h-svh min-w-0 flex-col pb-[var(--bottom-bar-h,0px)] lg:pl-64">
-        <div className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-6 sm:py-8 lg:px-10 xl:px-14">{children}</div>
+        <div className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-6 sm:py-8 lg:px-10 xl:px-14">
+          <PushPrompt />
+          {children}
+        </div>
         <footer className="border-t border-line/70 px-4 py-5 sm:px-6 lg:px-10 xl:px-14">
           <div className="mx-auto flex max-w-[1600px] items-center gap-2 text-xs text-ink-subtle">
             <Logo size={16} className="opacity-80" />

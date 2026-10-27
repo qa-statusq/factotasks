@@ -115,9 +115,11 @@ type PushState = "checking" | "unsupported" | "off" | "on" | "blocked" | "unconf
 
 function NotificationsCard() {
   const { toast } = useToast();
+  const { me } = useSession();
   const [state, setState] = useState<PushState>("checking");
   const [devices, setDevices] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   async function probe(): Promise<{ state: PushState; devices: number }> {
     if (!pushSupported()) return { state: "unsupported", devices: 0 };
@@ -154,10 +156,10 @@ function NotificationsCard() {
     setBusy(true);
     try {
       if (state === "on") {
-        await disablePush();
+        await disablePush(me?.id);
         toast("Notifications off on this device");
       } else {
-        const err = await enablePush();
+        const err = await enablePush(me?.id);
         if (err) toast(err, "error");
         else toast("You'll get notifications on this device");
       }
@@ -169,11 +171,25 @@ function NotificationsCard() {
     }
   }
 
+  async function test() {
+    if (testing) return;
+    setTesting(true);
+    const { ok, data } = await postJson<{ devices?: number; sent?: number; removed?: number; error?: string }>("/api/push/test", {});
+    setTesting(false);
+    if (!ok) return toast(data?.error || "Couldn't send a test notification", "error");
+    if (!data?.sent) {
+      toast(data?.removed ? "This device's registration had expired — turn notifications on again" : "No device accepted the test — turn notifications on again", "error");
+      await load();
+      return;
+    }
+    toast(`Test sent to ${data.sent} device${data.sent === 1 ? "" : "s"}`, "success", "If nothing appears, check that notifications for this browser are allowed in the computer's or phone's own settings, and that Do Not Disturb is off.");
+  }
+
   const copy =
     state === "unsupported" ? "This browser can't show push notifications."
     : state === "unconfigured" ? "Push isn't set up on the server yet — the in-app inbox still works."
     : state === "blocked" ? "Blocked in the browser. Allow notifications for this site in the address-bar site settings, then try again."
-    : state === "on" ? "On for this device. Assignments, approvals, comments and releases reach you even when the tab is closed."
+    : state === "on" ? "On for this device. Assignments, approvals, comments and releases reach you even when the tab is closed. Your own actions never notify you."
     : "Get a push alert on this device when something needs you — assignments, approval requests, comments, releases.";
 
   return (
@@ -189,6 +205,11 @@ function NotificationsCard() {
       <CardBody>
         <div className="flex flex-wrap items-center gap-3">
           <p className="min-w-0 flex-1 text-[13px] text-ink-muted">{copy}</p>
+          {state === "on" && (
+            <Button variant="secondary" size="sm" onClick={test} disabled={testing} className="shrink-0">
+              {testing ? <Spinner /> : "Send test"}
+            </Button>
+          )}
           {(state === "on" || state === "off") && (
             <Button variant={state === "on" ? "secondary" : "primary"} size="sm" onClick={toggle} disabled={busy} className="shrink-0">
               {busy ? <Spinner /> : state === "on" ? "Turn off" : "Turn on"}

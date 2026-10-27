@@ -33,32 +33,55 @@ export interface PushPayload {
   tag?: string;
 }
 
-/** Send to every subscription of the given users. Dead subscriptions
- * (410/404 from the push service) are removed. Never throws. */
-export async function pushToUsers(userIds: string[], payload: PushPayload): Promise<void> {
-  if (!userIds.length || !ready()) return;
+export interface PushResult {
+  /** Devices the push service accepted the message for. */
+  sent: number;
+  /** Devices it refused for a passing reason (network, rate limit). */
+  failed: number;
+  /** Subscriptions it said can never work again — removed. */
+  removed: number;
+}
+
+/** Send to every subscription of the given users. Subscriptions the push
+ * service rejects for good (expired 404/410, or signed for another key 401/403)
+ * are removed — the device re-registers itself on its next visit. Successful
+ * deliveries stamp last_used. Never throws. */
+export async function pushToUsers(userIds: string[], payload: PushPayload): Promise<PushResult> {
+  const result: PushResult = { sent: 0, failed: 0, removed: 0 };
+  if (!userIds.length || !ready()) return result;
   try {
     const sb = getSupabase();
     const { data: subs } = await sb.from("push_subscriptions").select("id, endpoint, p256dh, auth").in("user_id", userIds);
-    if (!subs?.length) return;
+    if (!subs?.length) return result;
     const body = JSON.stringify(payload);
     const dead: string[] = [];
+    const delivered: string[] = [];
     // A few at a time: one instance should never hold hundreds of sockets open.
     const queue = [...subs];
     const worker = async () => {
       for (let s = queue.shift(); s; s = queue.shift()) {
         try {
-          await webpush.sendNotification({ endpoint: s.endpoint as string, keys: { p256dh: s.p256dh as string, auth: s.auth as string } }, body, { TTL: 60 * 60 * 24, urgency: "normal" });
+          await webpush.sendNotification({ endpoint: s.endpoint as string, keys: { p256dh: s.p256dh as string, auth: s.auth as string } }, body, { TTL: 60 * 60 * 24, urgency: "high" });
+          delivered.push(s.id as string);
         } catch (e) {
           const code = (e as { statusCode?: number }).statusCode;
-          if (code === 404 || code === 410) dead.push(s.id as string);
-          else console.error("[push] send failed:", code ?? e);
+          if (code === 404 || code === 410 || code === 401 || code === 403) dead.push(s.id as string);
+          else {
+            result.failed++;
+            console.error("[push] send failed:", code ?? e);
+          }
         }
       }
     };
     await Promise.all(Array.from({ length: Math.min(6, queue.length) }, worker));
-    if (dead.length) await sb.from("push_subscriptions").delete().in("id", dead);
+    result.sent = delivered.length;
+    result.removed = dead.length;
+    await Promise.all([
+      dead.length ? sb.from("push_subscriptions").delete().in("id", dead) : null,
+      delivered.length ? sb.from("push_subscriptions").update({ last_used: new Date().toISOString() }).in("id", delivered) : null,
+    ]);
   } catch (e) {
     console.error("[push] fan-out failed:", e);
   }
+  return result;
 }

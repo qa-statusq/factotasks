@@ -1,67 +1,33 @@
 "use client";
 
-import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { postJson, deleteJson } from "@/lib/http";
 import { mutate, mutatePrefix } from "@/lib/client-cache";
 import { tabMemGet, tabMemRemove, tabMemSet } from "@/lib/compat";
 import type { Recording } from "@/lib/types";
+import { IDLE, type RecordMode, type RecorderState } from "@/lib/recorder/types";
+import { openCapture, recorderOptions, screenRecordingSupported, audioRecordingSupported, type Capture } from "@/lib/recorder/capture";
+import { CHUNK, FLUSH_MS, GRAIN, sendChunk, type ChunkOutcome } from "@/lib/recorder/upload";
+
+export type { RecorderPhase, RecordMode, RecorderState } from "@/lib/recorder/types";
+export { screenRecordingSupported, audioRecordingSupported } from "@/lib/recorder/capture";
 
 /**
  * One recorder for the whole panel. It lives above the pages, so a recording
  * started on the meeting page keeps running when the deck opens, and the
  * recording dock follows the presenter to every screen of this tab.
  *
- * Two modes: the whole screen (every tab and window) with system sound and
- * the microphone, or the microphone alone. Either way the file is UPLOADED
- * WHILE RECORDING — every 8 MiB goes to the meeting's Google Drive upload as
- * soon as it exists — so Stop only sends the last few seconds and a meeting
- * of any length is saved within moments. Each chunk reports its own progress,
- * is retried on its own, and a dropped connection resumes where Google stands.
+ * The file is UPLOADED WHILE RECORDING — every chunk goes to the meeting's
+ * upload as soon as it exists — so Stop only sends the last few seconds and a
+ * meeting of any length is saved within moments. What is captured lives in
+ * lib/recorder/capture.ts, how a chunk travels in lib/recorder/upload.ts; this
+ * file is the state that ties them together.
  *
  * Laptop browsers only for screen capture; audio-only works on phones too.
  */
-export type RecorderPhase = "idle" | "starting" | "recording" | "finishing" | "done" | "error";
-export type RecordMode = "screen" | "audio";
-
-export interface RecorderState {
-  meetingId: string | null;
-  title: string;
-  mode: RecordMode;
-  phase: RecorderPhase;
-  /** Seconds recorded so far. */
-  seconds: number;
-  /** Bytes produced by the recorder, and bytes Google has (plus the part of the current chunk in flight). */
-  recordedBytes: number;
-  sentBytes: number;
-  /** 0..1 — how much of what was recorded has reached the storage. */
-  progress: number;
-  /** 0..1 — after Stop: how much of the part still to send has gone (never reaches 1 before the file is confirmed). */
-  finishProgress: number;
-  error: string | null;
-  saved: Recording | null;
-  /** The whole recording as a file when saving failed, so it can still be downloaded. */
-  blob: Blob | null;
-  /** A word on how it ended, e.g. after a reload. */
-  note: string | null;
-  /** When Stop was pressed (ms since page load) — the saving bar paces itself from it. */
-  finishStartedAt: number;
-}
-
-const IDLE: RecorderState = { meetingId: null, title: "", mode: "screen", phase: "idle", seconds: 0, recordedBytes: 0, sentBytes: 0, progress: 0, finishProgress: 0, error: null, saved: null, blob: null, note: null, finishStartedAt: 0 };
 const PENDING_KEY = "ft_rec_pending";
-const VIDEO_MIMES = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
-const AUDIO_MIMES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
-const CHUNK = 2 * 1024 * 1024;
-const FLUSH_MS = 5000; // send what has piled up at least this often, so a closed tab loses a few seconds at most
-const GRAIN = 256 * 1024; // every chunk but the last must be a multiple of this (Google's rule)
 const KEEP_COPY_UP_TO = 1024 * 1024 * 1024; // keep a local copy for the fallback download up to 1 GB
 
-export function screenRecordingSupported(): boolean {
-  return typeof navigator !== "undefined" && !!navigator.mediaDevices?.getDisplayMedia && typeof MediaRecorder !== "undefined";
-}
-export function audioRecordingSupported(): boolean {
-  return typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined";
-}
 interface RecorderApi {
   state: RecorderState;
   start: (meetingId: string, title: string, mode?: RecordMode) => Promise<void>;
@@ -73,42 +39,8 @@ interface RecorderApi {
 
 const Ctx = createContext<RecorderApi>({ state: IDLE, start: async () => undefined, stop: () => undefined, retry: () => undefined, dismiss: () => undefined });
 
-
 export function useRecorder(): RecorderApi {
   return useContext(Ctx);
-}
-
-interface SendResult {
-  ok: boolean;
-  done?: boolean;
-  received?: number;
-  recording?: Recording;
-  error?: string;
-  status: number;
-}
-
-/** PUT one chunk with upload progress (XHR is the only browser API that reports it). */
-function putChunk(url: string, body: Blob, headers: Record<string, string>, onProgress: (loaded: number) => void): Promise<SendResult> {
-  return new Promise((resolve) => {
-    const x = new XMLHttpRequest();
-    x.open("PUT", url);
-    x.withCredentials = true;
-    for (const [k, v] of Object.entries(headers)) x.setRequestHeader(k, v);
-    x.upload.onprogress = (e) => onProgress(e.loaded);
-    x.onload = () => {
-      let j: Partial<SendResult> = {};
-      try {
-        j = JSON.parse(x.responseText || "{}");
-      } catch {
-        /* not json */
-      }
-      resolve({ ...j, ok: x.status >= 200 && x.status < 300, status: x.status });
-    };
-    x.onerror = () => resolve({ ok: false, status: 0 });
-    x.ontimeout = () => resolve({ ok: false, status: 408 });
-    x.timeout = 10 * 60_000;
-    x.send(body);
-  });
 }
 
 export function RecorderProvider({ children }: { children: React.ReactNode }) {
@@ -118,12 +50,11 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
   const starting = useRef(false);
 
   const rec = useRef<MediaRecorder | null>(null);
-  const streams = useRef<MediaStream[]>([]);
-  const audioCtx = useRef<AudioContext | null>(null);
+  const capture = useRef<Capture | null>(null);
   const timer = useRef(0);
   const startedAt = useRef(0);
   const mime = useRef("video/webm");
-  // Upload bookkeeping: everything recorded (fallback download), what is queued, what Google has.
+  // Upload bookkeeping: everything recorded (fallback download), what is queued, what the storage has.
   const all = useRef<Blob[]>([]);
   const allBytes = useRef(0);
   const queue = useRef<Blob[]>([]);
@@ -146,10 +77,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
 
   const releaseMedia = useCallback(() => {
     window.clearInterval(timer.current);
-    for (const s of streams.current) s.getTracks().forEach((t) => t.stop());
-    streams.current = [];
-    void audioCtx.current?.close().catch(() => undefined);
-    audioCtx.current = null;
+    capture.current?.release();
+    capture.current = null;
     rec.current = null;
   }, []);
   useEffect(() => () => releaseMedia(), [releaseMedia]);
@@ -209,49 +138,21 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const fallbackBlob = useCallback(() => (all.current.length && allBytes.current <= KEEP_COPY_UP_TO ? new Blob(all.current, { type: mime.current }) : null), []);
 
-  /** Send one chunk; retries with a status check in between. */
+  /** One chunk to the open upload, with the bars following its bytes. */
   const send = useCallback(
-    async (body: Blob, at: number, total: number | null, durationSec: number | null): Promise<{ ok: true; done: boolean; recording?: Recording } | { ok: false; error: string }> => {
+    async (body: Blob, at: number, total: number | null, durationSec: number | null): Promise<ChunkOutcome> => {
       const id = recordingId.current;
       if (!id) return { ok: false, error: "No upload in progress" };
-      for (let attempt = 1; attempt <= 6; attempt++) {
-        const r = await putChunk(
-          `/api/recordings/${id}/chunk`,
-          body,
-          { "content-type": "application/octet-stream", "x-chunk-offset": String(at), "x-chunk-total": total == null ? "*" : String(total), ...(durationSec != null ? { "x-duration-sec": String(Math.round(durationSec)) } : {}) },
-          (loaded) => {
-            const sent = at + Math.min(loaded, body.size);
-            const recorded = Math.max(sent, offset.current + queued.current + Math.max(0, at + body.size - offset.current));
-            const left = recorded - finishBase.current;
-            patch({ sentBytes: sent, progress: recorded ? sent / recorded : 0, finishProgress: left > 0 ? Math.min(0.95, (sent - finishBase.current) / left) : 0.95 });
-          }
-        );
-        if (r.ok) {
-          if (typeof r.received === "number" && !r.done && r.received !== at + body.size) {
-            const keep = body.slice(Math.max(0, r.received - at));
-            if (!keep.size) return { ok: true, done: false };
-            at = r.received;
-            body = keep;
-            continue;
-          }
-          return { ok: true, done: !!r.done, recording: r.recording };
-        }
-        if (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) return { ok: false, error: r.error || "The upload was refused" };
-        await new Promise((res) => setTimeout(res, 1500 * attempt));
-        const st = await fetch(`/api/recordings/${id}/chunk`, { credentials: "same-origin" }).then((x) => (x.ok ? (x.json() as Promise<{ done?: boolean; received?: number; recording?: Recording | null }>) : null)).catch(() => null);
-        if (st?.done) return { ok: true, done: true, recording: st.recording ?? undefined };
-        if (typeof st?.received === "number" && st.received > at) {
-          body = body.slice(st.received - at);
-          at = st.received;
-          if (!body.size && total == null) return { ok: true, done: false };
-        }
-      }
-      return { ok: false, error: "The connection kept failing" };
+      return sendChunk(id, body, at, total, durationSec, (sent, from, size) => {
+        const recorded = Math.max(sent, offset.current + queued.current + Math.max(0, from + size - offset.current));
+        const left = recorded - finishBase.current;
+        patch({ sentBytes: sent, progress: recorded ? sent / recorded : 0, finishProgress: left > 0 ? Math.min(0.95, (sent - finishBase.current) / left) : 0.95 });
+      });
     },
     [patch]
   );
 
-  /** Push queued bytes to Google: full 8 MiB chunks while recording, everything that is left once stopped. */
+  /** Push queued bytes: full chunks while recording, everything that is left once stopped. */
   const pump = useCallback(async () => {
     if (pumping.current || failed.current) return;
     pumping.current = true;
@@ -273,7 +174,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         // A full chunk, or whatever 256 KiB multiples have piled up after a few seconds — so a tab that
-        // vanishes loses only the last seconds, not the last 8 MiB.
+        // vanishes loses only the last seconds, not the last chunk.
         const due = queued.current >= CHUNK || (queued.current >= GRAIN && performance.now() - lastSend.current > FLUSH_MS);
         if (!final && !due) break;
         const take = final ? queued.current : Math.floor(Math.min(queued.current, CHUNK) / GRAIN) * GRAIN;
@@ -317,7 +218,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         if (final) {
-          // Everything sent but Google wants the closing request (the file was an exact multiple of the chunk size).
+          // Everything sent but the storage wants the closing request (the file was an exact multiple of the chunk size).
           const close = await send(new Blob([], { type: mime.current }), offset.current, offset.current, seconds);
           if (close.ok && close.done) {
             patch({ phase: "done", progress: 1, saved: close.recording ?? null, blob: null });
@@ -337,7 +238,7 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     }
   }, [patch, send, refreshLists, fallbackBlob]);
 
-  /** Runs when the recorder stops for any reason: Stop here, "Stop sharing" in Chrome's bar, or the device vanishing. */
+  /** Runs when the recorder stops for any reason: Stop here, "Stop sharing" in the browser's bar, or the device vanishing. */
   const finish = useCallback(() => {
     stopped.current = true;
     releaseMedia();
@@ -381,40 +282,10 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
       creating.current = null;
       finishBase.current = 0;
       try {
-        const tracks: MediaStreamTrack[] = [];
-        let display: MediaStream | null = null;
-        if (mode === "screen") {
-          // The WHOLE screen by default — every browser tab and every other window — with any sound it makes.
-          display = await navigator.mediaDevices.getDisplayMedia({
-            video: { frameRate: { ideal: 20, max: 30 }, ...({ displaySurface: "monitor" } as object) },
-            audio: true,
-            ...({ selfBrowserSurface: "include", surfaceSwitching: "include", systemAudio: "include", monitorTypeSurfaces: "include" } as object),
-          });
-          streams.current.push(display);
-          tracks.push(...display.getVideoTracks());
-        }
-        let mic: MediaStream | null = null;
-        try {
-          mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-          streams.current.push(mic);
-        } catch (e) {
-          if (mode === "audio") throw e;
-          mic = null;
-        }
-        const audioSources = [display, mic].filter((s): s is MediaStream => !!s && s.getAudioTracks().length > 0);
-        if (audioSources.length === 1) tracks.push(...audioSources[0].getAudioTracks());
-        else if (audioSources.length > 1) {
-          // Mix tab sound and the mic into one track so the file has a single audio stream.
-          const ctx = new AudioContext();
-          audioCtx.current = ctx;
-          const dest = ctx.createMediaStreamDestination();
-          for (const s of audioSources) ctx.createMediaStreamSource(new MediaStream(s.getAudioTracks())).connect(dest);
-          tracks.push(...dest.stream.getAudioTracks());
-        }
-        mime.current = (mode === "audio" ? AUDIO_MIMES : VIDEO_MIMES).find((m) => MediaRecorder.isTypeSupported(m)) ?? (mode === "audio" ? "audio/webm" : "video/webm");
-        const stream = new MediaStream(tracks);
-        // Slides are mostly still: 1.5 Mbit/s keeps a two-hour meeting near 1.3 GB and still crisp.
-        const r = new MediaRecorder(stream, mode === "audio" ? { mimeType: mime.current, audioBitsPerSecond: 96_000 } : { mimeType: mime.current, videoBitsPerSecond: 1_500_000, audioBitsPerSecond: 96_000 });
+        const cap = await openCapture(mode);
+        capture.current = cap;
+        mime.current = cap.mime;
+        const r = new MediaRecorder(cap.stream, recorderOptions(mode, cap.mime));
         r.ondataavailable = (e) => {
           if (!e.data.size) return;
           keepCopy(e.data);
@@ -427,10 +298,10 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         r.onerror = finish;
         rec.current = r;
         // "Stop sharing" in the browser's own bar ends the recorder, which lands in finish() through onstop.
-        display?.getVideoTracks()[0]?.addEventListener("ended", () => {
+        cap.display?.getVideoTracks()[0]?.addEventListener("ended", () => {
           if (rec.current && rec.current.state !== "inactive") rec.current.stop();
         });
-        // Recording starts NOW; the Drive upload is opened alongside and the first chunks wait for it.
+        // Recording starts NOW; the upload is opened alongside and the first chunks wait for it.
         r.start(1000);
         startedAt.current = performance.now();
         lastSend.current = performance.now();
@@ -505,7 +376,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
     setState((s) => (s.phase === "recording" || s.phase === "finishing" || s.phase === "starting" ? s : IDLE));
   }, []);
 
-  const api: RecorderApi = { state, start, stop, retry, dismiss };
+  // One value per state change: consumers re-render when the recording moves, never because the provider's parent did.
+  const api = useMemo<RecorderApi>(() => ({ state, start, stop, retry, dismiss }), [state, start, stop, retry, dismiss]);
   // The handlers read refs when CALLED (events), never during render; the compiler lint cannot see that through the context value.
   // eslint-disable-next-line react-hooks/refs
   return createElement(Ctx.Provider, { value: api }, children);

@@ -79,6 +79,29 @@ self.addEventListener("push", (event) => {
     })
   );
 });
+/* The browser can rotate a subscription (expiry, key refresh). Re-subscribe with
+   the same server key and register the new one right away, so pushes keep
+   arriving; the panel's own sign-in sync covers any case this misses. */
+self.addEventListener("pushsubscriptionchange", (event) => {
+  const old = event.oldSubscription;
+  const key = old && old.options ? old.options.applicationServerKey : null;
+  if (!key) return;
+  event.waitUntil(
+    self.registration.pushManager
+      .subscribe({ userVisibleOnly: true, applicationServerKey: key })
+      .then((sub) => {
+        const json = sub.toJSON();
+        return fetch("/api/push", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+        });
+      })
+      .catch(() => {})
+  );
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin).href;

@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
-import AppShell from "@/components/app-shell";
+import { cookies } from "next/headers";
+import AppShell, { type NavHint } from "@/components/app-shell";
+import { getSessionUser } from "@/lib/auth";
 import SwRegister from "@/components/sw-register";
 
 // Variable font: ONE woff2 covering every weight (no weight array, or next/font
@@ -47,12 +49,22 @@ export const viewport: Viewport = {
 // so there's no static-caching benefit lost.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/** The sidebar for this person, known before any script runs: the role comes from
+ * the verified session cookie (no database read), series membership from the
+ * small `ft_nav` hint the shell keeps current — honoured only for the same person. */
+async function navHint(): Promise<NavHint> {
+  const u = await getSessionUser();
+  if (!u) return { admin: false, series: false };
+  const hint = (await cookies()).get("ft_nav")?.value ?? "";
+  return { admin: u.role === "admin", series: hint === `${u.uid.slice(0, 8)}.s` };
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={manrope.variable}>
       <body>
         <SwRegister />
-        <AppShell>{children}</AppShell>
+        <AppShell navHint={await navHint()}>{children}</AppShell>
       </body>
     </html>
   );
