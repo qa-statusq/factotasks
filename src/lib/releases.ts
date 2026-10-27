@@ -8,7 +8,7 @@ import { notifyUsers } from "./notify";
 import { displayName } from "./name";
 import type { Release, ReleaseTaskLite } from "./types";
 
-export interface ReleasePatch {
+interface ReleasePatch {
   app_id?: string;
   platform?: "android" | "ios";
   version_name?: string;
@@ -136,7 +136,7 @@ export async function openReleaseTasks(releaseId: string): Promise<{ id: string;
 }
 
 /** When "released" happens: the planned date at noon IST if it has passed, else right now. */
-export function releasedAtFor(plannedDate: string | null | undefined, now = new Date()): string {
+function releasedAtFor(plannedDate: string | null | undefined, now = new Date()): string {
   if (plannedDate) {
     const noonIst = new Date(`${plannedDate}T06:30:00.000Z`);
     if (noonIst.getTime() <= now.getTime()) return noonIst.toISOString();
@@ -144,7 +144,7 @@ export function releasedAtFor(plannedDate: string | null | undefined, now = new 
   return now.toISOString();
 }
 
-export interface ReleaseCore {
+interface ReleaseCore {
   id: string;
   app_id: string;
   platform: "android" | "ios";

@@ -7,7 +7,7 @@ import { getAuthenticatedUser, AuthUnavailableError, type SessionUser } from "./
  * fault must never be able to do that. Nothing on the client reacts to a 503,
  * so the stale screens stay painted and the next revalidation recovers.
  */
-export const authUnavailable = () =>
+const authUnavailable = () =>
   NextResponse.json({ error: "Temporarily unavailable. Please try again." }, { status: 503 });
 
 /** Resolve the session, converting a verification OUTAGE into a 503 response

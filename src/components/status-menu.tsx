@@ -141,7 +141,7 @@ export function StatusMenu({ task, size = "sm", className, canChange = true }: {
   );
 }
 
-export function toneClass(status: TaskStatus): string {
+function toneClass(status: TaskStatus): string {
   switch (status) {
     case "in_progress":
       return "bg-blue-50 text-blue-700 ring-blue-200";

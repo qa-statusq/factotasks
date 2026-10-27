@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
+import { useLatest } from "@/lib/use-latest";
 import { When } from "@/components/ui/live-time";
 import { taskRef } from "@/lib/domain";
 import { cn } from "@/lib/cn";
@@ -34,6 +35,38 @@ export default function ApprovalsPage() {
   useEffect(() => {
     if (!sessionLoading && me && !isAdmin) router.replace("/");
   }, [sessionLoading, me, isAdmin, router]);
+  // Stable row renderers: rows re-draw when `busy` changes, not on every live refresh (the TaskRow memo holds).
+  const decideLatest = useLatest(decide);
+  const renderBelow = useCallback(
+    (t: TaskCard) => (
+      <div className="mt-1.5 flex flex-col gap-2 pl-[22px]">
+        <RequestSummary task={t} />
+        <div className="flex items-center gap-2 sm:hidden">
+          <Button size="sm" variant="secondary" onClick={() => decideLatest.current(t, "reject")} disabled={busy === t.id}>
+            Send back
+          </Button>
+          <Button size="sm" onClick={() => decideLatest.current(t, "approve")} disabled={busy === t.id}>
+            {busy === t.id ? <Spinner /> : "Approve"}
+          </Button>
+        </div>
+      </div>
+    ),
+    [busy, decideLatest]
+  );
+  const renderTrailing = useCallback(
+    (t: TaskCard) => (
+      <span className="hidden items-center gap-2 sm:flex">
+        <Button size="sm" variant="secondary" onClick={() => decideLatest.current(t, "reject")} disabled={busy === t.id}>
+          Send back
+        </Button>
+        <Button size="sm" onClick={() => decideLatest.current(t, "approve")} disabled={busy === t.id}>
+          {busy === t.id ? <Spinner /> : "Approve"}
+        </Button>
+      </span>
+    ),
+    [busy, decideLatest]
+  );
+
   if (sessionError) return <LoadError title="Couldn't check who you are" onRetry={sessionRefresh} />;
   if (!sessionLoading && !isAdmin) return null;
 
@@ -213,29 +246,8 @@ export default function ApprovalsPage() {
               )}
               <TaskList
                 tasks={tasks}
-                renderBelow={(t) => (
-                  <div className="mt-1.5 flex flex-col gap-2 pl-[22px]">
-                    <RequestSummary task={t} />
-                    <div className="flex items-center gap-2 sm:hidden">
-                      <Button size="sm" variant="secondary" onClick={() => decide(t, "reject")} disabled={busy === t.id}>
-                        Send back
-                      </Button>
-                      <Button size="sm" onClick={() => decide(t, "approve")} disabled={busy === t.id}>
-                        {busy === t.id ? <Spinner /> : "Approve"}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                renderTrailing={(t) => (
-                  <span className="hidden items-center gap-2 sm:flex">
-                    <Button size="sm" variant="secondary" onClick={() => decide(t, "reject")} disabled={busy === t.id}>
-                      Send back
-                    </Button>
-                    <Button size="sm" onClick={() => decide(t, "approve")} disabled={busy === t.id}>
-                      {busy === t.id ? <Spinner /> : "Approve"}
-                    </Button>
-                  </span>
-                )}
+                renderBelow={renderBelow}
+                renderTrailing={renderTrailing}
               />
             </Card>
           )}

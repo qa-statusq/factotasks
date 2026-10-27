@@ -11,7 +11,7 @@ const FOCUSABLE =
  * readers the page behind is inert, but the browser's own tab order doesn't
  * honour it — without this, tabbing walks out of the dialog into the page.
  */
-export function trapTabKey(panel: HTMLElement, e: KeyboardEvent) {
+function trapTabKey(panel: HTMLElement, e: KeyboardEvent) {
   if (e.key !== "Tab") return;
   const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
     // offsetParent is null for display:none subtrees (collapsed accordions etc.)

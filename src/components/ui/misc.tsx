@@ -149,7 +149,7 @@ export function Spinner({ className }: { className?: string }) {
 }
 
 /** Premium dual-ring brand loader. Use inside PageLoader or standalone. */
-export function Loader({ size = 40, className }: { size?: number; className?: string }) {
+function Loader({ size = 40, className }: { size?: number; className?: string }) {
   return (
     <span className={cn("relative inline-flex", className)} style={{ width: size, height: size }} role="status" aria-label="Loading">
       <span className="absolute inset-0 rounded-full border-[3px] border-brand-100" />

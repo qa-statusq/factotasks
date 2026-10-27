@@ -8,7 +8,7 @@ import { LIMITS, PRIORITIES, TASK_TYPES } from "./domain";
 import type { TaskOwnership } from "./task-access";
 import type { TaskCard } from "./types";
 
-export interface TaskPatch {
+interface TaskPatch {
   title?: string;
   description?: string | null;
   type?: string;

@@ -46,7 +46,7 @@ export function refreshTaskViews() {
   mutate("/api/notifications?limit=1");
 }
 
-export interface StatusResult {
+interface StatusResult {
   ok: boolean;
   /** "applied" | "requested" */
   mode?: string;

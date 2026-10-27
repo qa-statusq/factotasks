@@ -39,7 +39,7 @@ function serviceKey(): ServiceKey | null {
   return keyCache;
 }
 
-export function driveId(): string | null {
+function driveId(): string | null {
   return process.env.GOOGLE_DRIVE_ID?.trim() || null;
 }
 
@@ -52,7 +52,7 @@ let tokenCache: { token: string; exp: number } | null = null;
 const b64 = (o: unknown) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
 
 /** A bearer token for the robot (cached until a minute before it expires). */
-export async function driveToken(): Promise<string> {
+async function driveToken(): Promise<string> {
   const key = serviceKey();
   if (!key) throw new Error("Recording storage is not configured");
   if (tokenCache && tokenCache.exp - 60_000 > Date.now()) return tokenCache.token;
@@ -144,7 +144,7 @@ export async function createUploadSession(name: string, mime: string, totalBytes
   return uri;
 }
 
-export interface ChunkResult {
+interface ChunkResult {
   done: boolean;
   /** Bytes Google has so far (next chunk starts here). */
   received: number;

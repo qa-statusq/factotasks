@@ -17,7 +17,7 @@ async function get(url: string, ms = 6000): Promise<string | null> {
   }
 }
 
-export async function fetchPlayIcon(packageName: string): Promise<string | null> {
+async function fetchPlayIcon(packageName: string): Promise<string | null> {
   if (!/^[a-zA-Z][\w.]*$/.test(packageName)) return null;
   const html = await get(`https://play.google.com/store/apps/details?id=${encodeURIComponent(packageName)}&hl=en&gl=in`);
   if (!html) return null;
@@ -29,7 +29,7 @@ export async function fetchPlayIcon(packageName: string): Promise<string | null>
   return `${url.split("=")[0]}=s256`;
 }
 
-export async function fetchAppStoreIcon(bundleId: string): Promise<string | null> {
+async function fetchAppStoreIcon(bundleId: string): Promise<string | null> {
   if (!/^[a-zA-Z][\w.-]*$/.test(bundleId)) return null;
   const json = await get(`https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(bundleId)}&country=in`);
   if (!json) return null;
@@ -43,7 +43,7 @@ export async function fetchAppStoreIcon(bundleId: string): Promise<string | null
   }
 }
 
-export interface AppIcons {
+interface AppIcons {
   android: string | null;
   ios: string | null;
   /** The app's main tile: the Play icon where the app is on Android, else the App Store artwork. */

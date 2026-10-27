@@ -1,7 +1,7 @@
 import { getSupabase } from "./supabase";
 
 /** Workspace settings (app_settings table), typed. */
-export interface ApprovalPolicy {
+interface ApprovalPolicy {
   /** done_only: only "done"/"cancelled" need an admin's approval (default).
    *  all: every member status change is reviewed. none: members apply directly. */
   mode: "done_only" | "all" | "none";

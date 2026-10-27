@@ -100,7 +100,7 @@ export function RecordButton({ meetingId, title, className }: { meetingId: strin
 }
 
 /** One chip: ● 00:12:34 ■ — soft red on white; the square stops. */
-export function RecordingChip({ seconds, mode, onStop, className }: { seconds: number; mode?: RecordMode; onStop?: () => void; className?: string }) {
+function RecordingChip({ seconds, mode, onStop, className }: { seconds: number; mode?: RecordMode; onStop?: () => void; className?: string }) {
   return (
     <span className={cn("inline-flex h-8 items-center gap-2 rounded-full bg-rose-50 pl-2.5 text-[12.5px] font-semibold tabular-nums text-rose-700 ring-1 ring-inset ring-rose-200", onStop ? "pr-1" : "pr-2.5", className)} role="status" aria-label={`Recording, ${fmtClock(seconds)}`}>
       <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" aria-hidden />

@@ -103,7 +103,7 @@ export function GeneralTile({ className }: { className?: string }) {
 }
 
 /** App identity: tile + name. "General" when the task has no app. */
-export function AppChip({ app, className, size = "sm" }: { app: AppLite | null | undefined; className?: string; size?: "xs" | "sm" }) {
+function AppChip({ app, className, size = "sm" }: { app: AppLite | null | undefined; className?: string; size?: "xs" | "sm" }) {
   const tile = size === "xs" ? "h-4 w-4 rounded-[4px] text-[7px]" : "h-5 w-5 rounded-[5px] text-[8px]";
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-ink-muted", className)} title={app ? app.name : "General task (no app)"}>
@@ -119,7 +119,7 @@ export function AppChip({ app, className, size = "sm" }: { app: AppLite | null |
  * instead of leaving an empty box.
  */
 /** Store artwork goes through the panel's own relay (/api/icon), which the hosting CDN caches. */
-export function iconSrc(url: string): string {
+function iconSrc(url: string): string {
   try {
     const h = new URL(url).hostname;
     if (h === "play-lh.googleusercontent.com" || h.endsWith("mzstatic.com")) return `/api/icon?u=${encodeURIComponent(url)}`;

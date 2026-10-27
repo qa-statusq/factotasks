@@ -26,7 +26,7 @@ export interface AppLite {
   has_ios?: boolean;
 }
 
-export interface ReleaseLite {
+interface ReleaseLite {
   id: string;
   version_name: string;
   platform: "android" | "ios";
@@ -83,7 +83,7 @@ export interface TaskCard {
   pinned?: boolean;
 }
 
-export interface StatusLogEntry {
+interface StatusLogEntry {
   id: string;
   kind: "change" | "request" | "approve" | "reject" | "withdraw";
   from_status: TaskStatus | null;
@@ -112,7 +112,7 @@ export interface TaskAttachment {
   uploaded_by: UserBrief | null;
 }
 
-export interface TaskMeetingLink {
+interface TaskMeetingLink {
   id: string;
   title: string;
   held_at: string;
@@ -120,7 +120,7 @@ export interface TaskMeetingLink {
   series: { name: string; color: string } | null;
 }
 
-export interface TaskMeetingNote {
+interface TaskMeetingNote {
   id: string;
   kind: NoteKind;
   body: string;

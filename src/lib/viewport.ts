@@ -12,7 +12,7 @@ export function zoomFactor(): number {
   return Number.isFinite(z) && z > 0 ? z : 1;
 }
 
-export interface AnchorRect {
+interface AnchorRect {
   left: number;
   top: number;
   right: number;

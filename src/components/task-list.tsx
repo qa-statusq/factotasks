@@ -58,7 +58,7 @@ export const PILL_WIDTH = "sm:min-w-[8.5rem]";
  * context, then two fixed columns — people, and the status pill that changes
  * status in place — so every row's controls sit on the same vertical line.
  */
-export const TaskRow = memo(function TaskRow({ task, showApp = true, showDescription = false, trailing, below, canChange = true }: { task: TaskCard; showApp?: boolean; showDescription?: boolean; trailing?: React.ReactNode; below?: React.ReactNode; canChange?: boolean }) {
+export const TaskRow = memo(function TaskRow({ task, showApp = true, showDescription = false, trailing, below, renderTrailing, renderBelow, canChange = true }: { task: TaskCard; showApp?: boolean; showDescription?: boolean; trailing?: React.ReactNode; below?: React.ReactNode; /** Called inside the row, so a stable function keeps the memo working (an element made by the parent never would). */ renderTrailing?: (t: TaskCard) => React.ReactNode; renderBelow?: (t: TaskCard) => React.ReactNode; canChange?: boolean }) {
   return (
     <li className="cv-card group px-3 py-2.5 transition-colors hover:bg-canvas/60 sm:px-4">
       {/* Phones: title and context take the full width; status and people sit on a line beneath. */}
@@ -102,11 +102,11 @@ export const TaskRow = memo(function TaskRow({ task, showApp = true, showDescrip
           </span>
           <span className="flex items-center gap-2 sm:gap-3">
             <StatusMenu task={task} canChange={canChange} className={PILL_WIDTH} />
-            {trailing}
+            {trailing ?? renderTrailing?.(task)}
           </span>
         </div>
       </div>
-      {below}
+      {below ?? renderBelow?.(task)}
     </li>
   );
 });
@@ -120,7 +120,7 @@ interface Group {
 }
 
 /** Group tasks by app in the Apps screen's order (`appOrder`), General last; keeps the incoming order inside each group. */
-export function groupByApp(tasks: TaskCard[], appOrder: string[] = []): Group[] {
+function groupByApp(tasks: TaskCard[], appOrder: string[] = []): Group[] {
   const map = new Map<string, Group>();
   for (const t of tasks) {
     const key = t.app?.id ?? "general";
@@ -184,7 +184,7 @@ export function TaskList({
             </header>
             <ul className="divide-y divide-line/70">
               {g.tasks.map((t) => (
-                <TaskRow key={t.id} task={t} showApp={false} showDescription={showDescription} canChange={mayChange(t)} trailing={renderTrailing?.(t)} below={renderBelow?.(t)} />
+                <TaskRow key={t.id} task={t} showApp={false} showDescription={showDescription} canChange={mayChange(t)} renderTrailing={renderTrailing} renderBelow={renderBelow} />
               ))}
             </ul>
           </section>
@@ -195,7 +195,7 @@ export function TaskList({
   return (
     <ul className={cn("divide-y divide-line/70", className)}>
       {tasks.map((t) => (
-        <TaskRow key={t.id} task={t} showApp={showApp} showDescription={showDescription} canChange={mayChange(t)} trailing={renderTrailing?.(t)} below={renderBelow?.(t)} />
+        <TaskRow key={t.id} task={t} showApp={showApp} showDescription={showDescription} canChange={mayChange(t)} renderTrailing={renderTrailing} renderBelow={renderBelow} />
       ))}
     </ul>
   );

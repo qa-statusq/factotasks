@@ -53,7 +53,7 @@ const PRIORITY_OPTIONS = PRIORITIES.map((p) => ({ value: p, label: PRIORITY_META
  * removable chips, a search box, "all Android / all iOS" shortcuts, and a
  * scrolling list with an Android and an iOS toggle per app.
  */
-export function TargetPicker({ apps, value, onChange }: { apps: AppOverview[]; value: TargetRef[]; onChange: (v: TargetRef[]) => void }) {
+function TargetPicker({ apps, value, onChange }: { apps: AppOverview[]; value: TargetRef[]; onChange: (v: TargetRef[]) => void }) {
   const [mode, setMode] = useState<"general" | "app">(value.length ? "app" : "general");
   const [q, setQ] = useState("");
   const has = (appId: string, platform: "android" | "ios") => value.some((t) => t.app_id === appId && t.platform === platform);

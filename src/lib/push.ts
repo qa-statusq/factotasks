@@ -26,7 +26,7 @@ function ready(): boolean {
   return configured;
 }
 
-export interface PushPayload {
+interface PushPayload {
   title: string;
   body: string;
   /** Where a tap lands (same-origin path). */
@@ -39,14 +39,14 @@ export interface PushPayload {
   always?: boolean;
 }
 
-export interface PushOptions {
+interface PushOptions {
   /** Preference category (lib/notify-kinds): people who turned it off are skipped. */
   category?: string;
   /** Actionable (assignment, approval, comment, reminder) → delivered at once even to a sleeping phone. */
   urgent?: boolean;
 }
 
-export interface PushResult {
+interface PushResult {
   /** Devices the push service accepted the message for. */
   sent: number;
   /** Devices it refused for a passing reason (network, rate limit). */

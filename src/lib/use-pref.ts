@@ -6,7 +6,7 @@ import { mutate } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
 import type { Me } from "@/lib/types";
 
-export type PrefValue = string | number | boolean;
+type PrefValue = string | number | boolean;
 
 /**
  * A per-person UI preference (layout, sort, range…) that follows them to

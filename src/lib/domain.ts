@@ -57,8 +57,7 @@ export const TYPE_META: Record<TaskType, { label: string }> = {
 
 /* ------------------------------ platforms ------------------------------ */
 
-export const PLATFORMS = ["android", "ios", "both"] as const;
-export type Platform = (typeof PLATFORMS)[number];
+export type Platform = "android" | "ios" | "both";
 export const PLATFORM_META: Record<Platform, { label: string; short: string }> = {
   android: { label: "Android", short: "Android" },
   ios: { label: "iOS", short: "iOS" },

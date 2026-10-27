@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 /** Members never receive teammates' e-mail addresses: every `email` field in
  * a payload (user briefs on cards, assignees, creators, requesters) is
  * blanked before the JSON leaves. Admins get the full payload. */
-export function stripEmails<T>(value: T): T {
+function stripEmails<T>(value: T): T {
   if (Array.isArray(value)) return value.map(stripEmails) as T;
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};

@@ -37,7 +37,7 @@ export const prettyDate = (ymd: string | null | undefined) => (ymd ? fmtYmd(ymd,
 
 /** Paint a fresh release into every cached list/detail immediately (optimistic),
  * then let the lists revalidate in the background. */
-export function applyRelease(rel: Release) {
+function applyRelease(rel: Release) {
   mutateWhere("/api/releases", (data) => {
     const d = data as { releases?: Release[]; release?: Release } | null;
     if (!d) return undefined;
@@ -54,7 +54,7 @@ export function applyRelease(rel: Release) {
 }
 
 /** Invalidate everything a release change can be painted on. */
-export function invalidateReleases(appId?: string) {
+function invalidateReleases(appId?: string) {
   mutatePrefix("/api/releases");
   mutatePrefix("/api/tasks");
   mutate("/api/apps");
@@ -567,7 +567,7 @@ export function ReleaseViewSheet({ release, apps, onClose }: { release: Release;
  * confirmation naming the tasks it closes, or an approval request for a
  * member under the policy.
  */
-export function ReleaseStatusMenu({ release: r, size = "sm", className }: { release: Release; size?: "sm" | "md"; className?: string }) {
+function ReleaseStatusMenu({ release: r, size = "sm", className }: { release: Release; size?: "sm" | "md"; className?: string }) {
   const { toast } = useToast();
   const { confirm } = useDialog();
   const { me, isAdmin } = useSession();

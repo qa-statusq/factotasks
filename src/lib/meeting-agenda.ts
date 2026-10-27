@@ -14,7 +14,7 @@ export interface AgendaGroup {
 }
 
 /** Deck order inside an app: finished work first, then what is moving, then what waits. */
-export const DECK_STATUS_ORDER: TaskStatus[] = ["done", "partial", "in_progress", "in_review", "todo", "on_hold", "cancelled"];
+const DECK_STATUS_ORDER: TaskStatus[] = ["done", "partial", "in_progress", "in_review", "todo", "on_hold", "cancelled"];
 
 type AppLike = { id: string; name: string; color: string; icon_url?: string | null };
 

@@ -10,7 +10,7 @@ import { postJson } from "@/lib/http";
 import type { Platform, Priority, TaskType } from "@/lib/domain";
 import type { TaskCard } from "@/lib/types";
 
-export interface ComposerDefaults {
+interface ComposerDefaults {
   /** Pre-select an app; with `platform` one target, with "both"/none every platform the app has. */
   app_id?: string | null;
   platform?: Platform | null;

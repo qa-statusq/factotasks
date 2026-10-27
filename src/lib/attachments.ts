@@ -38,7 +38,7 @@ const BY_EXT: Record<string, string> = {
 };
 
 /** Sniff the real type from magic bytes. Returns null when unrecognised. */
-export function sniffMime(bytes: Uint8Array): string | null {
+function sniffMime(bytes: Uint8Array): string | null {
   const b = bytes;
   const str = (o: number, n: number) => String.fromCharCode(...b.subarray(o, o + n));
   if (b.length >= 8 && b[0] === 0x89 && str(1, 3) === "PNG") return "image/png";

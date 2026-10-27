@@ -195,9 +195,6 @@ check(r.status === 200 && !r.data?.series?.some((s) => s.id === attachSeries) &&
 r = await admin.call("POST", "/api/tasks", { title: "Attached general task", type: "other", priority: "low", series_id: attachSeries, assignee_ids: [memberId] });
 const attached = r.data?.task;
 if (attached) created.tasks.push(attached.id);
-if (r.status === 400 && /migration 010/.test(r.data?.error || "")) {
-  console.log("  (skipped — migration 010 is not applied on this database yet)");
-} else {
 check(r.status === 200 && attached?.series?.id === attachSeries && attached.app === null, "a general task can be attached to a series", r);
 r = await member.call("GET", "/api/tasks?scope=all&kind=general&series=any&limit=100");
 check(r.status === 200 && r.data?.tasks?.some((t) => t.id === attached?.id) && !r.data.tasks.some((t) => t.id === general.id), "kind=general + series=any lists only attached general tasks", r);
@@ -219,7 +216,6 @@ r = await admin.call("GET", `/api/meetings/${attachMeeting}`);
 check(r.status === 200 && r.data?.pending?.some((t) => t.id === attached?.id) && !r.data.pending.some((t) => t.id === general.id), "meeting_pack: the attached general task is on the agenda, the unattached one is not", r);
 r = await admin.call("PATCH", `/api/tasks/${attached?.id}`, { series_id: null });
 check(r.status === 200 && r.data?.task?.series === null, "detaching clears the series", r);
-}
 
 r = await member.call("GET", `/api/tasks/${task.id}`);
 check(r.status === 200 && r.data?.task?.can?.edit === true && r.data.task.can.approve === false && r.data.task.can.needs_approval === true, "member sees can.edit / !approve / needs_approval", r.data?.task?.can);
@@ -377,28 +373,20 @@ r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "Needs 
 check(r.status === 200 && r.data?.note?.task?.number === task.number, "admin adds an action item on a task", r);
 const noteId = r.data?.note?.id;
 r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "Ship 2.4.0 on Tuesday", kind: "decision", link_url: "https://example.com/plan", link_label: "Release plan" });
-// Until migration 018 is applied the API refuses links with a clear 400; the rest of the flow is unaffected.
-const linksLive = !(r.status === 400 && /018/.test(r.data?.error || ""));
-if (!linksLive) {
-  console.log("  · note links skipped: migration 018 not applied on this database");
-  r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "Ship 2.4.0 on Tuesday", kind: "decision" });
-}
-check(r.status === 200 && r.data?.note?.task === null && (!linksLive || (r.data?.note?.link_url === "https://example.com/plan" && r.data.note.link_label === "Release plan")), linksLive ? "admin adds a general decision with a link" : "admin adds a general decision", r);
+check(r.status === 200 && r.data?.note?.task === null && r.data?.note?.link_url === "https://example.com/plan" && r.data.note.link_label === "Release plan", "admin adds a general decision with a link", r);
 const linkedNoteId = r.data?.note?.id;
 r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "bad link", link_url: "javascript:alert(1)" });
 check(r.status === 400, "a note link must be http(s) → 400", r);
 r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "   " });
 check(r.status === 400, "an empty note with no link → 400", r);
-if (linksLive) {
-  r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "", link_url: "https://example.com/only-a-link", link_label: "Spec" });
-  check(r.status === 200 && r.data?.note?.body === "" && r.data.note.link_url === "https://example.com/only-a-link", "a note can be just a link", r);
-  r = await admin.call("PATCH", `/api/meeting-notes/${r.data?.note?.id}`, { link_url: "" });
-  check(r.status === 400, "a link-only note cannot lose its link → 400", r);
-  r = await admin.call("PATCH", `/api/meeting-notes/${linkedNoteId}`, { link_url: "" });
-  check(r.status === 200, "clearing a note link", r);
-  r = await admin.call("GET", `/api/meetings/${meetingId}`);
-  check(r.status === 200 && r.data?.notes?.find((n) => n.id === linkedNoteId)?.link_url === null, "pack shows the link cleared", r);
-}
+r = await admin.call("POST", `/api/meetings/${meetingId}/notes`, { body: "", link_url: "https://example.com/only-a-link", link_label: "Spec" });
+check(r.status === 200 && r.data?.note?.body === "" && r.data.note.link_url === "https://example.com/only-a-link", "a note can be just a link", r);
+r = await admin.call("PATCH", `/api/meeting-notes/${r.data?.note?.id}`, { link_url: "" });
+check(r.status === 400, "a link-only note cannot lose its link → 400", r);
+r = await admin.call("PATCH", `/api/meeting-notes/${linkedNoteId}`, { link_url: "" });
+check(r.status === 200, "clearing a note link", r);
+r = await admin.call("GET", `/api/meetings/${meetingId}`);
+check(r.status === 200 && r.data?.notes?.find((n) => n.id === linkedNoteId)?.link_url === null, "pack shows the link cleared", r);
 r = await admin.call("PATCH", `/api/meetings/${meetingId}`, { notes: "Agenda: releases, crash spike." });
 check(r.status === 200, "general minutes saved", r);
 r = await admin.call("GET", `/api/tasks/${task.id}`);
@@ -412,7 +400,7 @@ check(r.status === 200, "admin can still amend minutes after closing", r);
 r = await member.call("DELETE", `/api/meeting-notes/${noteId}`);
 check(r.status === 403, "member cannot delete a note → 403", r);
 r = await admin.call("GET", `/api/meetings/${meetingId}`);
-check(r.status === 200 && r.data?.meeting?.status === "finalized" && r.data.notes.length === (linksLive ? 4 : 3), "finalised pack still renders with every note", r);
+check(r.status === 200 && r.data?.meeting?.status === "finalized" && r.data.notes.length === 4, "finalised pack still renders with every note", r);
 
 // ---------- series people (021) ----------
 r = await member.call("GET", "/api/meetings");

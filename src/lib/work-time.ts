@@ -11,7 +11,7 @@ import { IST_MS } from "./ist";
  * The database measures with work_seconds() (migrations 025/026) on the same
  * schedule — change both together.
  */
-export const WORK_SESSIONS: ReadonlyArray<readonly [number, number]> = [
+const WORK_SESSIONS: ReadonlyArray<readonly [number, number]> = [
   [9 * 60, 13 * 60],
   [13 * 60 + 45, 18 * 60 + 45],
 ]; // minutes after midnight, IST
