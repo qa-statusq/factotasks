@@ -287,8 +287,10 @@ export interface Meeting {
   series?: { id: string; name: string; color: string } | null;
   /** (021) null = follow the series' auto_close. */
   auto_close?: boolean | null;
-  /** Scope: empty = every app. */
+  /** Scope: empty = every app. A member's meeting pack lists only the apps they may see (028). */
   app_ids?: string[];
+  /** (028, meeting pack) Limited to some apps — read this, not app_ids.length, to tell "every app" apart. */
+  scoped?: boolean;
 }
 
 export interface MeetingNote {

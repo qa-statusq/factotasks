@@ -1266,11 +1266,24 @@ as $$
   select jsonb_build_object(
     'meeting', (select jsonb_build_object('id', m.id, 'title', m.title, 'held_at', m.held_at, 'notes', m.notes,
                                           'status', m.status, 'finalized_at', m.finalized_at,
-                                          'series_id', m.series_id, 'app_ids', to_jsonb(m.app_ids), 'auto_close', m.auto_close) from m),
-    'series', (select jsonb_build_object('id', s.id, 'name', s.name, 'color', s.color, 'app_order', to_jsonb(s.app_order), 'auto_close', s.auto_close) from meeting_series s, m where s.id = m.series_id),
+                                          'series_id', m.series_id, 'auto_close', m.auto_close,
+                                          -- (028) A member gets only the ids of apps they may see; `scoped` still says
+                                          -- whether the meeting is limited to some apps (an empty list means "every app").
+                                          'scoped', m.app_ids <> '{}'::uuid[],
+                                          'app_ids', case when p_user is null then to_jsonb(m.app_ids)
+                                                          else to_jsonb(array(select x from unnest(m.app_ids) as x, va where x = any(va.ids))) end) from m),
+    'series', (select jsonb_build_object('id', s.id, 'name', s.name, 'color', s.color, 'auto_close', s.auto_close,
+                                         -- (028) Order kept; a member's copy drops apps they may not see (the "Across apps" marker stays).
+                                         'app_order', case when p_user is null then to_jsonb(s.app_order)
+                                                           else to_jsonb(array(select o.x from unnest(s.app_order) with ordinality as o(x, n), va
+                                                                               where o.x = any(va.ids) or not exists (select 1 from apps a where a.id = o.x)
+                                                                               order by o.n)) end)
+               from meeting_series s, m where s.id = m.series_id),
     'window', (select jsonb_build_object('from', from_at, 'to', to_at) from win),
     'previous_meeting', (select held_at from prev),
-    'pinned', coalesce((select jsonb_agg(task_id) from pinned), '[]'::jsonb),
+    -- (028) A member gets only the pinned tasks they may see.
+    'pinned', coalesce((select jsonb_agg(p.task_id) from pinned p join tasks t on t.id = p.task_id, va
+                        where task_row_visible(t, p_user, va.ids)), '[]'::jsonb),
     'done', coalesce((
       select jsonb_agg(d.card || jsonb_build_object('pinned', d.pinned) order by d.completed_at desc)
       from done d
