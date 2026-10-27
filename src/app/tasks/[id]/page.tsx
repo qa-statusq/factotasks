@@ -335,7 +335,8 @@ function Details({ task }: { task: TaskDetail }) {
   const label = useNameLabels();
   useClock();
   const now = new Date().toISOString();
-  const active = Number(task.active_seconds) + (task.status === "in_progress" ? workSeconds(task.status_since, now) : 0);
+  // A request waiting for review stops the clock: review time is not work (matches the database, 026).
+  const active = Number(task.active_seconds) + (task.status === "in_progress" ? workSeconds(task.status_since, task.requested_status && task.requested_at ? task.requested_at : now) : 0);
   const lead = task.completed_at ? workSeconds(task.created_at, task.completed_at) : workSeconds(task.created_at, now);
   const waited = task.requested_at && !task.completed_at ? workSeconds(task.requested_at, now) : task.approved_at && task.completed_at ? workSeconds(task.completed_at, task.approved_at) : null;
 

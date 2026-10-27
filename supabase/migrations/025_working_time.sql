@@ -9,7 +9,8 @@
 -- Also recalculates every task's banked active time from task_status_log (the
 -- full record of status changes; checked on 2026-10-27 to reproduce the stored
 -- clock-time totals exactly for all 24 live tasks before this change).
--- Safe to run more than once.
+-- Safe to run more than once. Superseded in part by 026 (faster work_seconds,
+-- approvals bank to the request time, functions re-synced with schema.sql).
 
 -- 1) Working seconds between two instants.
 create or replace function work_seconds(p_from timestamptz, p_to timestamptz)
@@ -302,7 +303,7 @@ from (
            coalesce(lag(l.created_at) over w, tk2.created_at) as since
     from task_status_log l
     join tasks tk2 on tk2.id = l.task_id
-    where l.kind <> 'request' and l.from_status is distinct from l.to_status
+    where l.kind in ('change', 'approve') and l.from_status is distinct from l.to_status
     window w as (partition by l.task_id order by l.created_at, l.id)
   ) s on s.task_id = tk.id
   group by tk.id

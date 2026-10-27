@@ -8,7 +8,7 @@ import { IST_MS } from "./ist";
  * left out): 9 working hours a day. A task created at 6:30 pm and finished at
  * 10:00 am the next morning took 1h 15m, not 15½ hours.
  *
- * The database measures with work_seconds() (migration 025) on the same
+ * The database measures with work_seconds() (migrations 025/026) on the same
  * schedule — change both together.
  */
 export const WORK_SESSIONS: ReadonlyArray<readonly [number, number]> = [
@@ -37,5 +37,6 @@ export function workSeconds(from: string | number | null | undefined, to: string
       if (hi > lo) total += hi - lo;
     }
   }
-  return total / 1000;
+  // Whole seconds, rounded like the database's bigint cast, so both clocks agree exactly.
+  return Math.round(total / 1000);
 }

@@ -726,16 +726,23 @@ returns bigint
 language sql
 stable
 parallel safe
-set search_path = public
 as $$
-  select coalesce(sum(greatest(0, extract(epoch from (least(p_to, w.e) - greatest(p_from, w.b))))), 0)::bigint
-  from generate_series((p_from at time zone 'Asia/Kolkata')::date, (p_to at time zone 'Asia/Kolkata')::date, interval '1 day') as g(day)
-  cross join (values (time '09:00', time '13:00'), (time '13:45', time '18:45')) as s(b_t, e_t)
-  cross join lateral (
-    select (g.day::date + s.b_t) at time zone 'Asia/Kolkata' as b,
-           (g.day::date + s.e_t) at time zone 'Asia/Kolkata' as e
-  ) w
-  where p_to > p_from and extract(isodow from g.day) < 6;
+  -- W(t) = working seconds from Monday 1970-01-05 00:00 IST to t (IST has no
+  -- DST, so whole weeks are exactly 5 x 9 h); the span is W(to) - W(from).
+  -- One expression with no FROM and no SET clause, so the planner inlines it
+  -- into analytics queries (026: ~10x faster than walking the days).
+  select case when p_to > p_from then (
+    ( ((p_to   at time zone 'Asia/Kolkata')::date - date '1970-01-05')::bigint / 7 * 162000
+    + least(((p_to   at time zone 'Asia/Kolkata')::date - date '1970-01-05') % 7, 5) * 32400
+    + case when ((p_to   at time zone 'Asia/Kolkata')::date - date '1970-01-05') % 7 < 5 then
+          least(greatest(extract(epoch from (p_to   at time zone 'Asia/Kolkata')::time) - 32400, 0), 14400)
+        + least(greatest(extract(epoch from (p_to   at time zone 'Asia/Kolkata')::time) - 49500, 0), 18000) else 0 end)
+  - ( ((p_from at time zone 'Asia/Kolkata')::date - date '1970-01-05')::bigint / 7 * 162000
+    + least(((p_from at time zone 'Asia/Kolkata')::date - date '1970-01-05') % 7, 5) * 32400
+    + case when ((p_from at time zone 'Asia/Kolkata')::date - date '1970-01-05') % 7 < 5 then
+          least(greatest(extract(epoch from (p_from at time zone 'Asia/Kolkata')::time) - 32400, 0), 14400)
+        + least(greatest(extract(epoch from (p_from at time zone 'Asia/Kolkata')::time) - 49500, 0), 18000) else 0 end)
+  )::bigint else 0 end
 $$;
 
 create or replace function task_apply_status(
@@ -774,11 +781,19 @@ begin
   if p_kind = 'approve' and p_completed_at is null then
     p_completed_at := t.requested_at;
   end if;
+  -- (026) A plain change to the status it already has is a double submit:
+  -- refuse it so it never logs or notifies twice (the route answers "Already …").
+  if p_kind = 'change' and p_to = old_status and t.requested_status is null then
+    raise exception 'no change' using errcode = 'P0004';
+  end if;
 
   if p_to <> old_status then
     -- Leaving in_progress: bank the WORKING time of the stint that just ended.
+    -- (026) An approval ends it when the member asked, not when the admin clicked:
+    -- waiting for review is not time spent working.
     if old_status = 'in_progress' then
-      active := active + work_seconds(t.status_since, n);
+      active := active + work_seconds(t.status_since,
+        case when p_kind = 'approve' and t.requested_at is not null then greatest(t.status_since, t.requested_at) else n end);
     end if;
     if p_to = 'in_progress' and started is null then
       started := n;
@@ -1355,76 +1370,6 @@ as $$
          or t.requested_status is not null);
 $$;
 
--- Reports: throughput + durations over a date range (IST calendar days).
-drop function if exists report_pack(date, date);
-create or replace function report_pack(p_from date, p_to date, p_user uuid default null)
-returns jsonb
-language sql
-stable
-set search_path = public
-as $$
-  with bounds as (
-    select (p_from::timestamp at time zone 'Asia/Kolkata') as from_at,
-           ((p_to + 1)::timestamp at time zone 'Asia/Kolkata') as to_at
-  ),
-  -- p_user null = the whole team (admins); otherwise only what that member may see.
-  va as materialized (select case when p_user is null then '{}'::uuid[] else visible_app_ids(p_user) end as ids),
-  vis as (select t.* from tasks t, va where task_row_visible(t, p_user, va.ids)),
-  done as (
-    select t.* from vis t, bounds b where t.status = 'done' and t.completed_at >= b.from_at and t.completed_at < b.to_at
-  ),
-  created as (
-    select t.* from vis t, bounds b where t.created_at >= b.from_at and t.created_at < b.to_at
-  )
-  select jsonb_build_object(
-    'range', jsonb_build_object('from', p_from, 'to', p_to),
-    'totals', jsonb_build_object(
-      'created', (select count(*) from created),
-      'done', (select count(*) from done),
-      'open_now', (select count(*) from vis where status not in ('done','cancelled')),
-      'avg_lead_hours', (select round(avg(extract(epoch from (completed_at - created_at)) / 3600)::numeric, 1) from done),
-      'avg_active_hours', (select round(avg(active_seconds) / 3600.0, 1) from done),
-      'median_lead_hours', (select round((percentile_cont(0.5) within group (order by extract(epoch from (completed_at - created_at)) / 3600))::numeric, 1) from done),
-      'avg_approval_hours', (select round(avg(extract(epoch from (approved_at - completed_at)) / 3600)::numeric, 1) from done where approved_at is not null and completed_at is not null)
-    ),
-    'by_type', coalesce((select jsonb_object_agg(type, c) from (select type, count(*) c from done group by type) x), '{}'::jsonb),
-    'by_priority', coalesce((select jsonb_object_agg(priority, c) from (select priority, count(*) c from done group by priority) x), '{}'::jsonb),
-    'by_day', coalesce((
-      select jsonb_agg(jsonb_build_object('date', d, 'done', dn, 'created', cr) order by d)
-      from (
-        -- generate_series over dates yields TIMESTAMPS; cast back so the JSON
-        -- carries plain YYYY-MM-DD days (the client formats them as such).
-        select g.d::date as d,
-               (select count(*) from done where (completed_at at time zone 'Asia/Kolkata')::date = g.d::date) dn,
-               (select count(*) from created where (created_at at time zone 'Asia/Kolkata')::date = g.d::date) cr
-        from generate_series(p_from, p_to, interval '1 day') g(d)
-      ) s
-    ), '[]'::jsonb),
-    'people', coalesce((
-      select jsonb_agg(user_brief(u) || jsonb_build_object(
-        'done', (select count(*) from task_assignees ta join done d on d.id = ta.task_id where ta.user_id = u.id),
-        'created', (select count(*) from created c where c.created_by = u.id),
-        'open', (select count(*) from task_assignees ta join tasks t on t.id = ta.task_id where ta.user_id = u.id and t.status not in ('done','cancelled')),
-        'avg_lead_hours', (select round(avg(extract(epoch from (d.completed_at - d.created_at)) / 3600)::numeric, 1)
-                             from task_assignees ta join done d on d.id = ta.task_id where ta.user_id = u.id),
-        'avg_active_hours', (select round(avg(d.active_seconds) / 3600.0, 1)
-                               from task_assignees ta join done d on d.id = ta.task_id where ta.user_id = u.id)
-      ) order by u.department, u.first_name, u.email)
-      from users u where u.is_active and p_user is null
-    ), '[]'::jsonb),
-    'apps', coalesce((
-      select jsonb_agg(jsonb_build_object(
-        'id', a.id, 'name', a.name, 'color', a.color,
-        'done', (select count(*) from done d where a.id = any(d.app_ids)),
-        'created', (select count(*) from created c where a.id = any(c.app_ids)),
-        'open', (select count(*) from vis t where a.id = any(t.app_ids) and t.status not in ('done','cancelled')),
-        'releases', (select count(*) from releases r, bounds b where r.app_id = a.id and r.released_at >= b.from_at and r.released_at < b.to_at)
-      ) order by a.name)
-      from apps a where a.status <> 'archived' and (p_user is null or a.id = any(visible_app_ids(p_user)))
-    ), '[]'::jsonb)
-  );
-$$;
-
 -- Analytics: month-wise throughput, per app and per person, plus the live
 -- status mix. p_months = how many months back (incl. the current one).
 drop function if exists analytics_pack(int);
@@ -1524,7 +1469,8 @@ as $$
       'releases', 0,
       'periods', coalesce((select jsonb_object_agg(pe.key, (select count(*) from done d where d.app_ids = '{}'::uuid[] and d.day >= pe.p_start and d.day < pe.p_end)) from periods pe), '{}'::jsonb)
     ),
-    'by_person', coalesce((
+    -- (026) Per-person throughput is the team view; a member's pack skips it.
+    'by_person', case when p_user is null then coalesce((
       select jsonb_agg(user_brief(u) || jsonb_build_object(
         'done', (select count(*) from done d where u.id = any(d.assignee_ids)),
         'created', (select count(*) from created c where c.created_by = u.id),
@@ -1537,7 +1483,7 @@ as $$
         'periods', coalesce((select jsonb_object_agg(pe.key, (select count(*) from done d where u.id = any(d.assignee_ids) and d.day >= pe.p_start and d.day < pe.p_end)) from periods pe), '{}'::jsonb)
       ) order by u.department, u.first_name, u.email)
       from users u where u.is_active
-    ), '[]'::jsonb),
+    ), '[]'::jsonb) end,
     'status_now', coalesce((select jsonb_object_agg(status, c) from (select status, count(*) c from vis group by status) x), '{}'::jsonb),
     'type_mix', coalesce((
       select jsonb_object_agg(k, v) from (
@@ -1642,6 +1588,12 @@ alter table meeting_series_members enable row level security;
 revoke all on all tables    in schema public from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 revoke all on all functions in schema public from anon, authenticated;
+-- (026) PUBLIC holds EXECUTE on every function by default (anon inherits it): take
+-- it away, and give it back only to the server's role.
+revoke execute on all functions in schema public from public;
+grant execute on all functions in schema public to service_role;
 alter default privileges in schema public revoke all on tables    from anon, authenticated;
 alter default privileges in schema public revoke all on sequences from anon, authenticated;
 alter default privileges in schema public revoke all on functions from anon, authenticated;
+alter default privileges in schema public revoke execute on functions from public;
+alter default privileges in schema public grant execute on functions to service_role;

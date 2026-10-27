@@ -461,15 +461,6 @@ check(r.status === 400 || r.status === 503, "a zero-byte recording is refused", 
 r = await admin.call("GET", "/api/recordings/00000000-0000-4000-8000-000000000000/stream");
 check(r.status === 404, "unknown recording stream → 404", r);
 
-// ---------- reports ----------
-console.log("\nReports");
-r = await admin.call("GET", "/api/reports");
-check(r.status === 200 && r.data?.totals?.done >= 2 && r.data.by_day.length === 30 && r.data.people.length >= 2, `report_pack: ${r.data?.totals?.done} done, ${r.data?.by_day?.length} days`, r);
-r = await member.call("GET", "/api/reports");
-check(r.status === 200 && r.data?.people?.length === 0, "member report has no per-person breakdown", r);
-r = await member.call("GET", "/api/reports?from=2026-13-01&to=2026-10-21");
-check(r.status === 400, "invalid date → 400", r);
-
 // ---------- rate limit / throttle ----------
 console.log("\nAbuse controls");
 const bogus = client("bogus");

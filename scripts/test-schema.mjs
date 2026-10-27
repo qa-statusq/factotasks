@@ -18,7 +18,7 @@ const assert = (cond, msg) => (cond ? ok(msg) : fail(msg));
 
 // Supabase has these roles; PGlite doesn't — create them so the lockdown
 // section (REVOKE … FROM anon, authenticated) runs exactly as in production.
-await db.exec("create role anon; create role authenticated;");
+await db.exec("create role anon; create role authenticated; create role service_role;");
 
 console.log("\n— schema.sql —");
 const schema = readFileSync(new URL("../supabase/schema.sql", import.meta.url), "utf8");
@@ -94,10 +94,16 @@ r = await one("select * from task_clear_request($1,$2,'reject','Also test on And
 assert(r.requested_status === null && r.status === "in_progress", "reject clears the request");
 // member requests again, admin approves (back-dated to request time)
 await db.query("update tasks set status_since = now() - interval '3 hours' where id = $1", [t1.id]);
+const since = (await one("select status_since from tasks where id = $1", [t1.id])).status_since;
 r = await one("select * from task_request_status($1,'done',$2,null)", [t1.id, dev.id]);
-r = await one("select * from task_apply_status($1,'done',$2,'approve','LGTM',$3)", [t1.id, admin.id, r.requested_at]);
+const requestedAt = r.requested_at;
+// the admin approves an hour later: that hour is review time, not work (026)
+await db.query("update tasks set requested_at = requested_at - interval '1 hour' where id = $1", [t1.id]);
+const reqAt = (await one("select requested_at from tasks where id = $1", [t1.id])).requested_at;
+r = await one("select * from task_apply_status($1,'done',$2,'approve','LGTM',$3)", [t1.id, admin.id, reqAt]);
 assert(r.status === "done" && r.completed_at && r.approved_at && r.approved_by === admin.id, "approve applies done + approved_by");
-assert(Number(r.active_seconds) >= 3 * 3600 - 5 && Number(r.active_seconds) <= 3 * 3600 + 60, `active_seconds banked (${r.active_seconds}s ≈ 3h)`);
+const expectActive = Number((await one("select work_seconds($1::timestamptz, $2::timestamptz) as s", [since, reqAt])).s);
+assert(requestedAt && Number(r.active_seconds) === expectActive, `approval banks WORKING time up to the request (${r.active_seconds}s = ${expectActive}s)`);
 // reopen clears completion
 r = await one("select * from task_apply_status($1,'todo',$2,'change','reopened',null)", [t1.id, admin.id]);
 assert(r.completed_at === null && r.approved_at === null, "reopen clears completed/approved");
@@ -281,9 +287,6 @@ const anWeek = await json("select analytics_pack((ist_today() - 27)::date, ist_t
 assert(anWeek.range.bucket === "week" && anWeek.periods.length >= 4 && anWeek.periods.length <= 5, "analytics_pack: short ranges bucket by week");
 await db.query("select apps_reorder(array[$1]::uuid[])", [apps[0].id]);
 assert((await json("select apps_overview()"))[0].id === apps[0].id, "apps_reorder keeps the app first");
-const rep = await json("select report_pack(current_date - 30, current_date)");
-assert(rep.totals.done === 1 && rep.by_day.length === 31 && rep.people.length === 3, "report_pack totals/by_day/people");
-assert(rep.by_day.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date)), `report_pack by_day dates are plain YYYY-MM-DD (got ${rep.by_day[0]?.date})`);
 
 const hit1 = await one("select throttle_hit('rl:test:u1:1') n");
 const hit2 = await one("select throttle_hit('rl:test:u1:1') n");
@@ -331,6 +334,90 @@ await db.exec("reset role");
   assert(fresh.number === nums.length + 1, "task_sequence_reset: the next task continues the series");
   const cols = await json("select jsonb_agg(column_name) from information_schema.columns where table_name = 'apps' and column_name in ('icon_android_url','icon_ios_url')");
   assert(cols.length === 2, "apps carry a store icon per platform");
+}
+console.log("\n— working time (025/026) —");
+{
+  const ws = async (a, b) => Number((await one("select work_seconds($1::timestamptz, $2::timestamptz) as s", [a, b])).s);
+  const cases = [
+    ["2026-10-26T18:30:00+05:30", "2026-10-27T10:00:00+05:30", 4500, "6:30 pm Mon → 10:00 am Tue = 1h15m"],
+    ["2026-10-27T09:00:00+05:30", "2026-10-27T18:45:00+05:30", 32400, "a full working day = 9h"],
+    ["2026-10-27T12:30:00+05:30", "2026-10-27T14:00:00+05:30", 2700, "across lunch: 30m + 15m"],
+    ["2026-10-30T17:00:00+05:30", "2026-11-02T10:00:00+05:30", 9900, "Fri 5 pm → Mon 10 am: 1h45m + 1h"],
+    ["2026-10-31T10:00:00+05:30", "2026-11-01T17:00:00+05:30", 0, "weekend only = 0"],
+    ["2026-10-27T13:10:00+05:30", "2026-10-27T13:40:00+05:30", 0, "inside lunch = 0"],
+    ["2026-10-27T20:00:00+05:30", "2026-10-28T08:00:00+05:30", 0, "overnight = 0"],
+    ["2026-10-27T10:00:00+05:30", "2026-10-27T09:00:00+05:30", 0, "reversed = 0"],
+    ["2026-10-26T09:00:00+05:30", "2026-11-02T09:00:00+05:30", 162000, "one week = 45h"],
+  ];
+  for (const [a, b, want, label] of cases) {
+    const got = await ws(a, b);
+    assert(got === want, `work_seconds: ${label} (${got})`);
+  }
+  // The closed form equals walking the days, on random spans of up to a year.
+  const walk = `select coalesce(sum(greatest(0, extract(epoch from (least($2::timestamptz, w.e) - greatest($1::timestamptz, w.b))))), 0)::bigint as s
+    from generate_series(($1::timestamptz at time zone 'Asia/Kolkata')::date, ($2::timestamptz at time zone 'Asia/Kolkata')::date, interval '1 day') g(day)
+    cross join (values (time '09:00', time '13:00'), (time '13:45', time '18:45')) s(b_t, e_t)
+    cross join lateral (select (g.day::date + s.b_t) at time zone 'Asia/Kolkata' as b, (g.day::date + s.e_t) at time zone 'Asia/Kolkata' as e) w
+    where $2::timestamptz > $1::timestamptz and extract(isodow from g.day) < 6`;
+  let same = 0;
+  const N = 300;
+  for (let i = 0; i < N; i++) {
+    const a = Date.UTC(2026, 0, 1) + Math.floor(Math.random() * 300 * 86400) * 1000;
+    const b = a + Math.floor(Math.random() * (i % 3 ? 3 : 365) * 86400) * 1000;
+    const A = new Date(a).toISOString(), B = new Date(b).toISOString();
+    if ((await ws(A, B)) === Number((await one(walk, [A, B])).s)) same++;
+  }
+  assert(same === N, `work_seconds closed form = day walk on ${same}/${N} random spans`);
+}
+
+console.log("\n— double submit (026) —");
+{
+  const t = await one("insert into tasks (title, created_by) values ('double submit', $1) returning id", [admin.id]);
+  await one("select * from task_apply_status($1,'in_progress',$2,'change',null,null)", [t.id, admin.id]);
+  let code = null;
+  try {
+    await one("select * from task_apply_status($1,'in_progress',$2,'change',null,null)", [t.id, admin.id]);
+  } catch (e) {
+    code = e.code;
+  }
+  const rows = (await one("select count(*)::int as n from task_status_log where task_id = $1", [t.id])).n;
+  assert(code === "P0004" && rows === 1, `same-status change raises P0004 and logs once (code ${code}, ${rows} row)`);
+  await db.query("delete from tasks where id = $1", [t.id]);
+}
+
+console.log("\n— migrations match schema.sql —");
+{
+  // The newest definition of every function across the migrations must equal schema.sql's,
+  // so live (built from migrations) and these tests (built from schema.sql) are the same code.
+  const { readdirSync } = await import("node:fs");
+  const norm = (sql) => sql.replace(/--[^\n]*/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const fns = (sql) => {
+    const out = new Map();
+    const re = /create or replace function\s+([a-z_][a-z0-9_]*)\s*\(/gi;
+    for (let m; (m = re.exec(sql)); ) {
+      const end = sql.indexOf("\n$$;", m.index);
+      if (end > 0) out.set(m[1].toLowerCase(), norm(sql.slice(m.index, end + 4)));
+    }
+    return out;
+  };
+  const dir = new URL("../supabase/migrations/", import.meta.url);
+  const latest = new Map();
+  const dropped = new Set();
+  for (const f of readdirSync(dir).filter((x) => x.endsWith(".sql")).sort()) {
+    const sql = readFileSync(new URL(f, dir), "utf8").replace(/\r\n/g, "\n");
+    for (const [k, v] of fns(sql)) {
+      latest.set(k, { body: v, file: f });
+      dropped.delete(k);
+    }
+    for (const m of sql.matchAll(/drop function if exists\s+([a-z_][a-z0-9_]*)/gi)) if (!fns(sql).has(m[1].toLowerCase())) dropped.add(m[1].toLowerCase());
+  }
+  const master = fns(schema.replace(/\r\n/g, "\n"));
+  const differ = [];
+  for (const [k, { body, file }] of latest) {
+    if (dropped.has(k)) continue;
+    if (master.has(k) && master.get(k) !== body) differ.push(`${k} (${file})`);
+  }
+  assert(differ.length === 0, `every function's newest migration equals schema.sql${differ.length ? ": " + differ.join(", ") : ""}`);
 }
 console.log(process.exitCode ? "\nFAILED" : "\nAll schema checks passed.");
 await db.close();

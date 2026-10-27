@@ -60,8 +60,8 @@ interface OldTask {
   status: TaskStatus;
   priority: Priority;
   age_days: number;
-  /** Working seconds since it was created (025); older servers send only age_days. */
-  age_seconds?: number;
+  /** Working seconds since it was created. */
+  age_seconds: number;
   due_date: string | null;
   app: AppLite | null;
   assignees: UserBrief[];
@@ -80,7 +80,7 @@ interface Pack {
   oldest_open: OldTask[];
   releases: { released: number; android: number; ios: number; with_plan: number; on_time: number; avg_slip_days: number | null; apps: number; pipeline: Record<string, number>; periods: Record<string, number> };
   meetings: { held: number; notes: number; decisions: number; actions: number; blockers: number };
-  totals: { done: number; created: number; cancelled: number; open_now: number; wip_now: number; blocked_now: number; overdue_now: number; with_due: number; on_time: number; median_lead_hours: number | null; p90_lead_hours: number | null; avg_active_hours: number | null; avg_open_age_days: number | null; avg_open_age_seconds?: number | null };
+  totals: { done: number; created: number; cancelled: number; open_now: number; wip_now: number; blocked_now: number; overdue_now: number; with_due: number; on_time: number; median_lead_hours: number | null; p90_lead_hours: number | null; avg_active_hours: number | null; avg_open_age_days: number | null; avg_open_age_seconds: number | null };
 }
 
 /* -------------------------------- helpers --------------------------------- */
@@ -205,7 +205,7 @@ function AnalyticsView({ data }: { data: Pack }) {
         </Section>
         <Section title="Open work by age" hint="Everything still open, by how long it has been waiting — in working weeks of 5 days">
           {t.open_now ? <Buckets buckets={data.aging} color="#f59e0b" /> : <p className="py-6 text-center text-sm text-ink-subtle">Nothing open right now.</p>}
-          {t.open_now > 0 && <p className="mt-3 text-[12px] text-ink-subtle">Average age of open work: {t.avg_open_age_seconds != null ? formatDuration(t.avg_open_age_seconds) : t.avg_open_age_days == null ? "—" : `${t.avg_open_age_days}d`} of working time.</p>}
+          {t.open_now > 0 && <p className="mt-3 text-[12px] text-ink-subtle">Average age of open work: {t.avg_open_age_seconds == null ? "—" : formatDuration(t.avg_open_age_seconds)} of working time.</p>}
         </Section>
       </div>
 
@@ -338,12 +338,12 @@ function AnalyticsView({ data }: { data: Pack }) {
                     <div className="mt-1 flex items-center gap-2 sm:hidden">
                       <StatusBadge status={x.status} />
                       <span className="inline-flex items-center gap-1 text-[12px] tabular-nums text-ink-muted" title="Working time since it was created">
-                        <IconClock size={12} className="text-ink-subtle" /> {x.age_seconds != null ? formatDuration(x.age_seconds) : `${x.age_days}d`}
+                        <IconClock size={12} className="text-ink-subtle" /> {formatDuration(x.age_seconds)}
                       </span>
                     </div>
                   </div>
                   <span className="hidden w-[4.5rem] shrink-0 items-center justify-end gap-1 whitespace-nowrap text-[12px] tabular-nums text-ink-muted sm:inline-flex" title="Working time since it was created">
-                    <IconClock size={12} className="text-ink-subtle" /> {x.age_seconds != null ? formatDuration(x.age_seconds) : `${x.age_days}d`}
+                    <IconClock size={12} className="text-ink-subtle" /> {formatDuration(x.age_seconds)}
                   </span>
                   <span className="hidden shrink-0 sm:block">
                     <StatusBadge status={x.status} className="w-[7.5rem] justify-center" />
