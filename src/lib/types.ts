@@ -335,7 +335,8 @@ export interface RecordingShare {
 }
 
 export interface MeetingPack {
-  meeting: Meeting;
+  /** Exactly the meeting fields meeting_pack sends (no created_at / series / note_count). */
+  meeting: Pick<Meeting, "id" | "title" | "held_at" | "notes" | "status" | "finalized_at" | "series_id" | "auto_close" | "app_ids" | "scoped">;
   series: { id: string; name: string; color: string; app_order?: string[] } | null;
   /** Ids of tasks pinned to this meeting. */
   pinned: string[];

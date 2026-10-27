@@ -1435,7 +1435,7 @@ as $$
     from vis t, bounds b where t.created_at >= b.from_at and t.created_at < b.to_at
   ),
   openx as (
-    select t.*, w.age_s, round(w.age_s / 32400.0, 1) as age_days
+    select t.*, w.age_s
     from vis t cross join lateral (select work_seconds(t.created_at, now()) as age_s) w
     where t.status not in ('done','cancelled')
   ),
@@ -1538,7 +1538,7 @@ as $$
     ),
     'oldest_open', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', t.id, 'number', t.number, 'title', t.title, 'status', t.status, 'priority', t.priority, 'age_days', t.age_days, 'age_seconds', t.age_s, 'due_date', t.due_date,
+        'id', t.id, 'number', t.number, 'title', t.title, 'status', t.status, 'priority', t.priority, 'age_seconds', t.age_s, 'due_date', t.due_date,
         'app', (select jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url) from apps a where a.id = t.app_ids[1]),
         'assignees', coalesce((select jsonb_agg(user_brief(u) order by u.first_name) from task_assignees ta join users u on u.id = ta.user_id where ta.task_id = t.id), '[]'::jsonb)
       ) order by t.age_s desc, t.number)
@@ -1575,7 +1575,6 @@ as $$
       'median_lead_hours', (select round((percentile_cont(0.5) within group (order by lead_h))::numeric, 1) from done),
       'p90_lead_hours', (select round((percentile_cont(0.9) within group (order by lead_h))::numeric, 1) from done),
       'avg_active_hours', (select round(avg(active_seconds) / 3600.0, 1) from done),
-      'avg_open_age_days', (select round(avg(age_s) / 32400.0, 1) from openx),
       'avg_open_age_seconds', (select round(avg(age_s)) from openx)
     )
   );

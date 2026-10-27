@@ -665,23 +665,11 @@ function ReleaseStatusMenu({ release: r, size = "sm", className }: { release: Re
  */
 export function UnreleasedWorkBanner({ className, compact = false }: { className?: string; compact?: boolean }) {
   const { me, isAdmin } = useSession();
-  const { data: tasksData } = useCachedFetch<{ tasks: TaskCard[] }>("/api/tasks?status=in_progress,in_review,partial&scope=all&limit=200&sort=updated");
+  const { data: unreleased } = useCachedFetch<{ groups: { app_id: string; platform: "android" | "ios"; tasks: { id: string; number: number }[] }[] }>("/api/releases/unreleased");
   const { data: appsData } = useCachedFetch<{ apps: AppOverview[] }>("/api/apps");
   const [form, setForm] = useState<{ app: AppOverview; platform: "android" | "ios"; task_ids: string[] } | null>(null);
   const apps = appsData?.apps ?? [];
-  const groups = useMemo(() => {
-    const m = new Map<string, { appId: string; platform: "android" | "ios"; tasks: TaskCard[] }>();
-    for (const t of tasksData?.tasks ?? []) {
-      for (const x of t.targets ?? []) {
-        if (x.release || x.released_at) continue;
-        const k = `${x.app.id}:${x.platform}`;
-        const g = m.get(k) ?? { appId: x.app.id, platform: x.platform, tasks: [] };
-        if (!g.tasks.some((y) => y.id === t.id)) g.tasks.push(t);
-        m.set(k, g);
-      }
-    }
-    return [...m.values()].sort((a, b) => b.tasks.length - a.tasks.length);
-  }, [tasksData]);
+  const groups = useMemo(() => (unreleased?.groups ?? []).map((g) => ({ appId: g.app_id, platform: g.platform, tasks: g.tasks })), [unreleased]);
   const canManage = (app: AppOverview) => isAdmin || app.members.some((mm) => mm.user.id === me?.id);
   const visible = groups.map((g) => ({ ...g, app: apps.find((a) => a.id === g.appId) })).filter((g): g is typeof g & { app: AppOverview } => !!g.app && g.app.status !== "archived" && canManage(g.app));
   if (!visible.length) return null;

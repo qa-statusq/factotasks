@@ -60,7 +60,6 @@ interface OldTask {
   title: string;
   status: TaskStatus;
   priority: Priority;
-  age_days: number;
   /** Working seconds since it was created. */
   age_seconds: number;
   due_date: string | null;
@@ -81,7 +80,7 @@ interface Pack {
   oldest_open: OldTask[];
   releases: { released: number; android: number; ios: number; with_plan: number; on_time: number; avg_slip_days: number | null; apps: number; pipeline: Record<string, number>; periods: Record<string, number> };
   meetings: { held: number; notes: number; decisions: number; actions: number; blockers: number };
-  totals: { done: number; created: number; cancelled: number; open_now: number; wip_now: number; blocked_now: number; overdue_now: number; with_due: number; on_time: number; median_lead_hours: number | null; p90_lead_hours: number | null; avg_active_hours: number | null; avg_open_age_days: number | null; avg_open_age_seconds: number | null };
+  totals: { done: number; created: number; cancelled: number; open_now: number; wip_now: number; blocked_now: number; overdue_now: number; with_due: number; on_time: number; median_lead_hours: number | null; p90_lead_hours: number | null; avg_active_hours: number | null; avg_open_age_seconds: number | null };
 }
 
 /* -------------------------------- helpers --------------------------------- */
