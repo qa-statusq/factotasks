@@ -142,7 +142,7 @@ export default function LoginPage() {
               whole mobile team.
             </h2>
             <p className="mt-5 text-[15px] leading-relaxed text-brand-100/80">
-              Plan, build, test and ship — with every status change reviewed and every week&rsquo;s pending work carried forward
+              Plan, build, test and ship — with every status change reviewed and every week&rsquo;s open work carried forward
               automatically.
             </p>
             <ul className="mt-12 flex flex-col gap-4">

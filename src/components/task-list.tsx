@@ -43,7 +43,7 @@ export function DueChip({ task, className }: { task: TaskCard; className?: strin
         info.tone === "subtle" && "text-ink-subtle",
         className
       )}
-      title={`Due ${task.due_date}`}
+      title={`Due ${fmtYmd(task.due_date ?? "", { weekday: true, year: true })}`}
     >
       {info.label}
     </span>

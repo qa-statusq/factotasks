@@ -20,6 +20,9 @@ interface MenuPos {
   top: number;
   width: number;
   up: boolean;
+  /** Viewport size in CSS px (as anchorRect measures it), never raw innerWidth/innerHeight. */
+  vw: number;
+  vh: number;
 }
 
 export function Dropdown({
@@ -75,7 +78,7 @@ export function Dropdown({
       const menuH = Math.min(264, options.length * 40 + 10);
       const spaceBelow = b.vh - b.bottom;
       const up = spaceBelow < menuH + 12 && b.top > spaceBelow;
-      setPos({ left: b.left, width: b.width, top: up ? b.top - 6 : b.bottom + 6, up });
+      setPos({ left: b.left, width: b.width, top: up ? b.top - 6 : b.bottom + 6, up, vw: b.vw, vh: b.vh });
     }
     place();
     function onDoc(e: MouseEvent) {
@@ -197,8 +200,8 @@ export function Dropdown({
               // At least as wide as the trigger; wider when a label needs it,
               // so no option is ever cut to "Mobile Apps Weekl…".
               minWidth: pos.width,
-              maxWidth: Math.max(pos.width, Math.min(440, window.innerWidth - pos.left - 8)),
-              ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }),
+              maxWidth: Math.max(pos.width, Math.min(440, pos.vw - pos.left - 8)),
+              ...(pos.up ? { bottom: pos.vh - pos.top } : { top: pos.top }),
             }}
             role="listbox"
             className="z-[200] max-h-64 animate-scale-in overflow-auto overscroll-contain rounded-xl border border-line/80 bg-surface p-1.5 shadow-pop ring-1 ring-ink/5"

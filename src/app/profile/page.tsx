@@ -25,7 +25,7 @@ export default function ProfilePage() {
   const { loading } = useSession();
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      <PageHeader title="Profile" description="How you appear to the team, and your password." />
+      <PageHeader title="Profile" description="How you appear to the team, your notifications and your password." />
       {loading ? (
         <PageLoader />
       ) : (
@@ -202,14 +202,14 @@ function NotificationsCard() {
     : state === "unconfigured" ? "Push isn't set up on the server yet — the in-app inbox still works."
     : state === "blocked" ? "Blocked in the browser. Allow notifications for this site in the address-bar site settings, then try again."
     : state === "on" ? "On for this device — whether the panel is open, in the background or closed. Nothing pops up while you present a meeting. Your own actions never notify you."
-    : "Get a push alert on this device when something needs you — assignments, approval requests, comments, releases.";
+    : "Get a notification on this device when something needs you — assignments, approvals, comments, due dates, status changes and releases. It arrives whether the panel is open, in the background or closed.";
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>
           <span className="inline-flex items-center gap-2">
-            <IconBell size={16} className="text-ink-subtle" /> Browser notifications
+            <IconBell size={16} className="text-ink-subtle" /> Notifications on this device
           </span>
         </CardTitle>
       </CardHeader>
@@ -293,9 +293,12 @@ function ChangePasswordCard() {
           <Field label="New password">
             <div className="relative">
               <Input type={show ? "text" : "password"} value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" placeholder="At least 8 characters" className="pr-10" />
-              <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-subtle hover:text-ink" aria-label={show ? "Hide password" : "Show password"}>
-                {show ? <IconEyeOff size={18} /> : <IconEye size={18} />}
-              </button>
+              {/* The wrapper is positioned, so .tap (position: relative) can grow the button's hit area. */}
+              <span className="absolute right-2.5 top-1/2 flex -translate-y-1/2">
+                <button type="button" onClick={() => setShow((v) => !v)} className="tap rounded-md p-1 text-ink-subtle hover:text-ink" aria-label={show ? "Hide password" : "Show password"}>
+                  {show ? <IconEyeOff size={18} /> : <IconEye size={18} />}
+                </button>
+              </span>
             </div>
           </Field>
           <Field label="Confirm new password">

@@ -102,7 +102,7 @@ export function buildSlides(p: Pack): Slide[] {
           <dl className="mt-[2.2cqw] flex gap-[4cqw] border-y border-line py-[1.4cqw]">
             {[
               ["Done", p.done.length, "text-emerald-700"],
-              ["Pending", p.pending.length, "text-ink"],
+              ["Open", p.pending.length, "text-ink"],
               ["Carried", p.carried.length, p.carried.length ? "text-amber-700" : "text-ink"],
               ["Overdue", p.overdue.length, p.overdue.length ? "text-red-600" : "text-ink"],
               ["Releases", p.releases.length, "text-ink"],
@@ -219,7 +219,7 @@ export function buildSlides(p: Pack): Slide[] {
       <Frame
         {...frame(n, total)}
         title="Next steps"
-        subtitle={carried.length ? `${carried.length} open task${carried.length === 1 ? "" : "s"} carr${carried.length === 1 ? "ies" : "y"} into the next meeting${p.overdue.length ? ` · ${p.overdue.length} already past due` : ""}${p.carried.length ? ` · ${p.carried.length} carried before` : ""}` : "Nothing carries forward — everything is closed."}
+        subtitle={carried.length ? `${carried.length} open task${carried.length === 1 ? "" : "s"} carr${carried.length === 1 ? "ies" : "y"} into the next meeting${p.overdue.length ? ` · ${p.overdue.length} overdue` : ""}${p.carried.length ? ` · ${p.carried.length} carried before` : ""}` : "Nothing carries forward — everything is closed."}
         tiles={
           <>
             <Tile n={carried.length} label="Open" />
@@ -332,7 +332,7 @@ function Frame({
                   )}
                 </div>
                 <div className="flex shrink-0 gap-[0.6cqw]">
-                  <Tile n={g.pending.length} label="Pending" />
+                  <Tile n={g.pending.length} label="Open" />
                   <Tile n={g.carried} label="Carried" tone={g.carried ? "amber" : undefined} />
                   <Tile n={g.overdue} label="Overdue" tone={g.overdue ? "red" : undefined} />
                   <Tile n={g.done.length} label="Done" tone="emerald" />
@@ -351,7 +351,7 @@ function Frame({
                 </div>
                 {g ? (
                   <div className="flex shrink-0 gap-[0.6cqw]">
-                    <Tile n={g.pending.length} label="Pending" />
+                    <Tile n={g.pending.length} label="Open" />
                     <Tile n={g.overdue} label="Overdue" tone={g.overdue ? "red" : undefined} />
                     <Tile n={g.done.length} label="Done" tone="emerald" />
                   </div>
@@ -745,7 +745,7 @@ function TaskNotes({ notes }: { notes: MeetingNote[] }) {
 
 function CarryChip({ carry }: { carry: number }) {
   return (
-    <span className={cn("shrink-0 whitespace-nowrap rounded-full px-[0.7cqw] py-[0.2cqw] text-[0.95cqw] font-bold ring-1 ring-inset", carry >= 3 ? "bg-red-600 text-white ring-red-600" : "bg-amber-100 text-amber-800 ring-amber-300")} title={`Pending for ${carry} earlier meeting${carry === 1 ? "" : "s"}`}>
+    <span className={cn("shrink-0 whitespace-nowrap rounded-full px-[0.7cqw] py-[0.2cqw] text-[0.95cqw] font-bold ring-1 ring-inset", carry >= 3 ? "bg-red-600 text-white ring-red-600" : "bg-amber-100 text-amber-800 ring-amber-300")} title={`Still open after ${carry} earlier meeting${carry === 1 ? "" : "s"}`}>
       {carry}× carried
     </span>
   );

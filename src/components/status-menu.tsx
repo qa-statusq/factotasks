@@ -24,7 +24,7 @@ export function StatusMenu({ task, size = "sm", className, canChange = true }: {
   const { toast } = useToast();
   const { isAdmin } = useSession();
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ left: number; top: number; up: boolean } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; up: boolean; vh: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -36,7 +36,7 @@ export function StatusMenu({ task, size = "sm", className, canChange = true }: {
     const b = btnRef.current ? anchorRect(btnRef.current) : null;
     if (b) {
       const up = b.vh - b.bottom < 280 && b.top > 280;
-      setPos({ left: Math.min(b.left, b.vw - 200), top: up ? b.top - 6 : b.bottom + 6, up });
+      setPos({ left: Math.min(b.left, b.vw - 200), top: up ? b.top - 6 : b.bottom + 6, up, vh: b.vh });
     }
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node;
@@ -116,7 +116,7 @@ export function StatusMenu({ task, size = "sm", className, canChange = true }: {
           <div
             ref={menuRef}
             role="listbox"
-            style={{ position: "fixed", left: pos.left, ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }) }}
+            style={{ position: "fixed", left: pos.left, ...(pos.up ? { bottom: pos.vh - pos.top } : { top: pos.top }) }}
             className="z-[200] w-48 animate-scale-in rounded-xl border border-line/80 bg-surface p-1 shadow-pop ring-1 ring-ink/5"
             onClick={(e) => e.stopPropagation()}
           >

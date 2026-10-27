@@ -79,7 +79,7 @@ export function MinutesDoc({ pack, onBack }: { pack: Pack; onBack: () => void })
         {/* Summary strip */}
         <section className="mt-4 grid grid-cols-4 divide-x divide-line border border-line">
           <Figure n={p.done.length} label="Done" tone="text-emerald-700" />
-          <Figure n={p.pending.length} label="Pending" />
+          <Figure n={p.pending.length} label="Open" />
           <Figure n={p.carried.length} label="Carried forward" tone={p.carried.length ? "text-amber-700" : undefined} />
           <Figure n={p.overdue.length} label="Overdue" tone={p.overdue.length ? "text-red-600" : undefined} />
         </section>
@@ -103,7 +103,7 @@ export function MinutesDoc({ pack, onBack }: { pack: Pack; onBack: () => void })
               <AppTile name={g.name} color={g.color} iconUrl={g.iconUrl} className="h-6 w-6 rounded-md text-[9px]" />
               <h2 className="text-[13pt] font-bold tracking-[-0.01em]">{g.name}</h2>
               <span className="ml-auto text-[8.5pt] text-ink-muted">
-                {g.pending.length} pending{g.carried ? ` · ${g.carried} carried` : ""}
+                {g.pending.length} open{g.carried ? ` · ${g.carried} carried` : ""}
                 {g.overdue ? ` · ${g.overdue} overdue` : ""} · {g.done.length} done{g.releases.length ? ` · ${g.releases.length} release${g.releases.length === 1 ? "" : "s"}` : ""}
               </span>
             </div>
@@ -175,7 +175,7 @@ export function MinutesDoc({ pack, onBack }: { pack: Pack; onBack: () => void })
                   </tr>
                 </thead>
                 <tbody>
-                  {g.pending.length > 0 && <SectionRow label={`Pending · ${g.pending.length}`} />}
+                  {g.pending.length > 0 && <SectionRow label={`Open · ${g.pending.length}`} />}
                   {g.pending.map((t) => (
                     <TaskRow key={t.id} t={t} notes={notes.get(t.id) || []} labels={labels} />
                   ))}

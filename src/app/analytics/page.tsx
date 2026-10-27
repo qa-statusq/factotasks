@@ -238,26 +238,12 @@ function AnalyticsView({ data }: { data: Pack }) {
             <Mini label="Released" value={rel.released} hint={`across ${rel.apps} app${rel.apps === 1 ? "" : "s"}`} />
             <Mini label="Android · iOS" value={`${rel.android} · ${rel.ios}`} hint="by platform" />
             <Mini label="On planned date" value={pct(rel.on_time, rel.with_plan)} hint={rel.with_plan ? `${rel.on_time} of ${rel.with_plan} dated versions` : "no dated versions"} />
-            <Mini label="Average slip" value={rel.avg_slip_days == null ? "—" : `${rel.avg_slip_days > 0 ? "+" : ""}${rel.avg_slip_days} d`} hint="released minus planned" />
+            <Mini label="Average slip" value={rel.avg_slip_days == null ? "—" : `${rel.avg_slip_days > 0 ? "+" : ""}${rel.avg_slip_days}d`} hint="released minus planned" />
           </div>
           {periods.length > 0 && rel.released > 0 && (
             <div className="mt-4">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">Versions per {bucket}</p>
-              <div className="flex items-end gap-1.5">
-                {periods.map((p) => {
-                  const n = rel.periods[p.key] ?? 0;
-                  const max = Math.max(1, ...Object.values(rel.periods));
-                  return (
-                    <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center gap-1" title={`${periodLabel(p.key, bucket)}: ${n} release${n === 1 ? "" : "s"}`}>
-                      <span className="text-[10.5px] font-semibold tabular-nums text-ink">{n || ""}</span>
-                      <div className="flex h-14 w-full items-end justify-center rounded-md bg-canvas/70">
-                        <div className="w-full max-w-[22px] rounded-t-md bg-ink/75" style={{ height: `${(n / max) * 100}%`, minHeight: n ? 4 : 0 }} />
-                      </div>
-                      <span className="truncate text-[10px] text-ink-subtle">{periodShort(p.key, bucket)}</span>
-                    </div>
-                  );
-                })}
-              </div>
+              <VersionsPerPeriod periods={periods} counts={rel.periods} bucket={bucket} />
             </div>
           )}
           <div className="mt-4 border-t border-line/70 pt-3">
@@ -299,7 +285,7 @@ function AnalyticsView({ data }: { data: Pack }) {
             <p className="py-4 text-center text-sm text-ink-subtle">No tasks yet.</p>
           )}
           {(types.length > 0 || priorities.length > 0) && (
-            <div className="mt-4 grid gap-4 border-t border-line/70 pt-3 sm:grid-cols-2">
+            <div className="mt-4 grid grid-cols-1 gap-4 border-t border-line/70 pt-3 sm:grid-cols-2">
               <MixList title="By type" rows={types.map(([k, v]) => ({ key: k, label: TYPE_META[k as TaskType]?.label ?? k, done: v.done, open: v.open }))} />
               <MixList title="By priority" rows={priorities.map(([k, v]) => ({ key: k, label: PRIORITY_META[k].label, lead: <PriorityBadge priority={k} compact />, done: v.done, open: v.open }))} />
             </div>
@@ -362,11 +348,45 @@ function AnalyticsView({ data }: { data: Pack }) {
 
 /* ------------------------------ components -------------------------------- */
 
+/**
+ * Versions released per period, as small columns. The labels never wrap: when
+ * the columns get narrow, every k-th period is labelled (counting back from the
+ * latest, as PeriodChart does) and the full name stays in each column's tooltip.
+ */
+function VersionsPerPeriod({ periods, counts, bucket }: { periods: Period[]; counts: Record<string, number>; bucket: "week" | "month" }) {
+  const [box, width] = useWidth<HTMLDivElement>();
+  const n = periods.length;
+  const max = Math.max(1, ...Object.values(counts));
+  // Columns share the row with a 6px gap; before the first measure, label them all.
+  const col = width ? (width - 6 * (n - 1)) / n : 0;
+  const every = col ? Math.max(1, Math.ceil(36 / col)) : 1;
+  return (
+    <div ref={box} className="flex items-end gap-1.5">
+      {periods.map((p, i) => {
+        const c = counts[p.key] ?? 0;
+        return (
+          <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center gap-1" title={`${periodLabel(p.key, bucket)}: ${c} release${c === 1 ? "" : "s"}`}>
+            <span className="text-[10.5px] font-semibold tabular-nums text-ink">{c || ""}</span>
+            <div className="flex h-14 w-full items-end justify-center rounded-md bg-canvas/70">
+              <div className="w-full max-w-[22px] rounded-t-md bg-ink/75" style={{ height: `${(c / max) * 100}%`, minHeight: c ? 4 : 0 }} />
+            </div>
+            {/* One line always; a skipped label keeps its height so the bars stay level. */}
+            <span className="h-[15px] whitespace-nowrap text-[10px] leading-[15px] text-ink-subtle">
+              {(n - 1 - i) % every === 0 ? periodShort(p.key, bucket) : ""}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Kpi({ icon, label, value, hint, tone }: { icon: React.ReactNode; label: string; value: number | string; hint?: string; tone?: "danger" | "success" }) {
   return (
+    // Phones: the icon steps aside and the tracking tightens so the label keeps one line.
     <div className="rounded-xl border border-line bg-surface px-4 py-3.5">
-      <div className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
-        <span className="text-ink-subtle">{icon}</span>
+      <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.05em] text-ink-subtle sm:text-[11.5px] sm:tracking-[0.08em]">
+        <span className="hidden text-ink-subtle sm:inline">{icon}</span>
         {label}
       </div>
       <div className={cn("mt-1.5 text-[26px] font-semibold leading-none tabular-nums tracking-[-0.02em]", tone === "danger" ? "text-red-600" : tone === "success" ? "text-emerald-700" : "text-ink")}>{value}</div>

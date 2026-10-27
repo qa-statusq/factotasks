@@ -13,6 +13,7 @@ import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
 import { istTime, istDate } from "@/lib/time";
+import { When } from "@/components/ui/live-time";
 import { fmtBytes, fmtDuration, recordingLabel } from "@/lib/recordings";
 import { cn } from "@/lib/cn";
 import { IconPlay, IconDownload, IconSend, IconTrash, IconEdit, IconX, IconMic, IconVideo } from "@/components/ui/icons";
@@ -99,7 +100,7 @@ function RecordingRow({ r, cacheKey, showMeeting, canManage, onPlay, onShare, on
             </>
           )}
           <span>·</span>
-          <span title={istTime(r.created_at)}>{timeOfDay(r.created_at)}</span>
+          <When iso={r.created_at} />
           {r.recorder && (
             <>
               <span>·</span>
@@ -121,10 +122,10 @@ function RecordingRow({ r, cacheKey, showMeeting, canManage, onPlay, onShare, on
                 <Button variant="secondary" size="sm" onClick={onShare} className="h-7 px-2 text-[12px]">
                   <IconSend size={13} /> Share
                 </Button>
-                <button type="button" onClick={rename} disabled={busy} className="rounded-md p-1 text-ink-subtle hover:bg-canvas hover:text-ink" aria-label="Rename" title="Rename">
+                <button type="button" onClick={rename} disabled={busy} className="tap rounded-md p-1 text-ink-subtle [--tap:28px] hover:bg-canvas hover:text-ink" aria-label="Rename" title="Rename">
                   <IconEdit size={14} />
                 </button>
-                <button type="button" onClick={remove} disabled={busy} className="rounded-md p-1 text-ink-subtle hover:bg-red-50 hover:text-red-600" aria-label="Delete" title="Delete">
+                <button type="button" onClick={remove} disabled={busy} className="tap rounded-md p-1 text-ink-subtle [--tap:28px] hover:bg-red-50 hover:text-red-600" aria-label="Delete" title="Delete">
                   <IconTrash size={14} />
                 </button>
               </>
@@ -246,7 +247,7 @@ function ShareSheet({ r, cacheKey, onClose }: { r: Recording; cacheKey: string; 
                   <span className="text-[11.5px] text-ink-subtle" title={istTime(s.created_at)}>
                     {istDate(s.created_at)}
                   </span>
-                  <button type="button" onClick={() => revoke(s)} className="rounded-md p-1 text-ink-subtle hover:bg-red-50 hover:text-red-600" aria-label={`Remove access for ${s.email}`} title="Remove access">
+                  <button type="button" onClick={() => revoke(s)} className="tap rounded-md p-1 text-ink-subtle hover:bg-red-50 hover:text-red-600" aria-label={`Remove access for ${s.email}`} title="Remove access">
                     <IconX size={14} />
                   </button>
                 </li>
@@ -276,11 +277,4 @@ export function MeetingRecordingsCard({ meetingId }: { meetingId: string }) {
       <RecordingList recordings={list} cacheKey={key} emptyText={data && !data.enabled ? "Recording isn't set up on this server yet." : "None yet. Use Record meeting above, or the record button while presenting."} />
     </section>
   );
-}
-
-/** "12:05 pm" — the day is already on the meeting. */
-const TIME_FMT = new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
-function timeOfDay(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : TIME_FMT.format(d);
 }

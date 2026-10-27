@@ -13,8 +13,9 @@ import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { postJson } from "@/lib/http";
-import { fmtDateTime } from "@/lib/time";
+import { When } from "@/components/ui/live-time";
 import { taskRef } from "@/lib/domain";
+import { cn } from "@/lib/cn";
 import { prettyDate } from "@/components/release-ui";
 import { IconUserCheck, IconRocket, IconCheck } from "@/components/ui/icons";
 import type { Release, TaskCard } from "@/lib/types";
@@ -153,8 +154,13 @@ export default function ApprovalsPage() {
                           </div>
                           <p className="mt-0.5 text-[12px] text-ink-muted">
                             Requested by {r.requested_by?.name ?? "a teammate"}
-                            {r.requested_at ? ` · ${fmtDateTime(r.requested_at)}` : ""}
-                            {r.request_note ? ` · “${r.request_note}”` : ""}
+                            {r.requested_at && (
+                              <>
+                                {"\u00a0· "}
+                                <When iso={r.requested_at} />
+                              </>
+                            )}
+                            {r.request_note ? `\u00a0· “${r.request_note}”` : ""}
                           </p>
                           {open.length ? (
                             <div className="mt-2 rounded-lg bg-canvas/70 px-3 py-2">
@@ -166,8 +172,14 @@ export default function ApprovalsPage() {
                                     <span className="min-w-0 flex-1">
                                       <span className="break-words text-ink">{t.title}</span>
                                       {t.description?.trim() && <span className="mt-0.5 line-clamp-2 block whitespace-pre-wrap text-[11.5px] leading-snug text-ink-muted">{t.description.trim()}</span>}
+                                      {/* Phones: the status sits under the title, which keeps the full width. */}
+                                      <span className="mt-1 block sm:hidden">
+                                        <StatusBadge status={t.status} />
+                                      </span>
                                     </span>
-                                    <StatusBadge status={t.status} className="ml-auto shrink-0" />
+                                    <span className="ml-auto hidden shrink-0 sm:block">
+                                      <StatusBadge status={t.status} />
+                                    </span>
                                   </li>
                                 ))}
                               </ul>
@@ -176,7 +188,8 @@ export default function ApprovalsPage() {
                             <p className="mt-1 text-[12px] text-ink-subtle">No tasks are linked to this version; only its status changes.</p>
                           )}
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
+                        {/* Phones: the buttons drop under the text instead of squeezing it to a sliver. */}
+                        <div className={cn("flex shrink-0 basis-full items-center gap-2 sm:basis-auto sm:pl-0", r.app && "pl-12")}>
                           <Button size="sm" variant="secondary" onClick={() => decideRelease(r, "reject")} disabled={busy === r.id}>
                             Send back
                           </Button>

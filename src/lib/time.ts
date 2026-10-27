@@ -49,13 +49,21 @@ export function istTime(input: string | null | undefined): string {
  */
 let dtParts: Intl.DateTimeFormat | null = null;
 export function fmtDateTime(input: string | null | undefined): string {
-  if (!input) return "";
+  const p = dateTimeParts(input);
+  return p ? `${p.date}, ${p.time}` : "";
+}
+
+/** fmtDateTime's two halves — { date: "27 Oct 2026", time: "11:05 am" } — so a
+ * narrow line can break between them while each stays whole. Null when empty
+ * or unparseable. */
+export function dateTimeParts(input: string | null | undefined): { date: string; time: string } | null {
+  if (!input) return null;
   const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return "";
+  if (Number.isNaN(d.getTime())) return null;
   dtParts ??= new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
   const p: Record<string, string> = {};
   for (const x of dtParts.formatToParts(d)) p[x.type] = x.value;
-  return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute} ${(p.dayPeriod ?? "").toLowerCase()}`;
+  return { date: `${p.day} ${p.month} ${p.year}`, time: `${p.hour}:${p.minute} ${(p.dayPeriod ?? "").toLowerCase()}` };
 }
 
 /**

@@ -129,7 +129,7 @@ export default function TeamPage() {
                       {isAdmin && (
                         <Link href={`/tasks?assignee=${m.id}`} className="hidden shrink-0 text-right text-xs text-ink-subtle hover:text-ink sm:block" title="Open their tasks">
                           <span className="block text-sm font-semibold tabular-nums text-ink">{m.open}</span>
-                          open{m.overdue ? <span className="text-red-600"> · {m.overdue} late</span> : ""}
+                          open{m.overdue ? <span className="text-red-600"> · {m.overdue} overdue</span> : ""}
                         </Link>
                       )}
                       {isAdmin && (

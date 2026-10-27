@@ -107,7 +107,7 @@ export default function InboxPage() {
     <div className="flex flex-col gap-5 animate-fade-in">
       <PageHeader
         title="Inbox"
-        description="Assignments, approvals, comments and releases that concern you."
+        description="Assignments, approvals, comments and meeting notes, due-date reminders, status changes and releases that concern you."
         actions={
           <Button
             variant="secondary"

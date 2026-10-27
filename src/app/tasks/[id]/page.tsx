@@ -233,7 +233,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
                       </Link>
                       {mm.series && <SeriesBadge series={mm.series} />}
                       <MeetingStatusBadge status={mm.status} />
-                      <span className="ml-auto text-[11.5px] text-ink-subtle">{fmtDateTime(mm.held_at)}</span>
+                      <When iso={mm.held_at} className="ml-auto text-[11.5px] text-ink-subtle" />
                     </li>
                   ))}
                 </ul>
@@ -361,23 +361,28 @@ function Details({ task }: { task: TaskDetail }) {
           </div>
           <ul className="divide-y divide-line/60">
             {task.targets.map((t) => (
-              <li key={`${t.app.id}:${t.platform}`} className="flex items-center gap-2 py-1.5 text-[12.5px]">
-                <AppTile name={t.app.name} color={t.app.color} iconUrl={t.app.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />
-                <Link href={`/apps/${t.app.id}`} className="min-w-0 flex-1 break-words font-medium leading-tight text-ink hover:underline">
-                  {t.app.name}
-                </Link>
-                <PlatformBadge platform={t.platform} />
-                {t.released_at ? (
-                  <span className="shrink-0 font-medium text-emerald-700" title={`Released ${fmtDateTime(t.released_at)}`}>
-                    {t.release ? `Released · v${t.release.version_name}` : "Released"}
-                  </span>
-                ) : t.release ? (
-                  <Link href={`/apps/${t.app.id}?tab=releases`} className="shrink-0 text-ink-muted hover:text-ink" title={RELEASE_STATUS_META[t.release.status].label}>
-                    v{t.release.version_name} · {RELEASE_STATUS_META[t.release.status].label}
+              <li key={`${t.app.id}:${t.platform}`} className="py-1.5 text-[12.5px]">
+                {/* The app name gets the whole line; platform and release state sit beneath it. */}
+                <div className="flex items-center gap-2">
+                  <AppTile name={t.app.name} color={t.app.color} iconUrl={t.app.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />
+                  <Link href={`/apps/${t.app.id}`} className="min-w-0 flex-1 break-words font-medium leading-tight text-ink hover:underline">
+                    {t.app.name}
                   </Link>
-                ) : (
-                  <span className="shrink-0 text-ink-subtle">No release yet</span>
-                )}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-7">
+                  <PlatformBadge platform={t.platform} />
+                  {t.released_at ? (
+                    <span className="font-medium text-emerald-700" title={`Released ${fmtDateTime(t.released_at)}`}>
+                      {t.release ? `Released · v${t.release.version_name}` : "Released"}
+                    </span>
+                  ) : t.release ? (
+                    <Link href={`/apps/${t.app.id}?tab=releases`} className="text-ink-muted hover:text-ink" title={RELEASE_STATUS_META[t.release.status].label}>
+                      v{t.release.version_name} · {RELEASE_STATUS_META[t.release.status].label}
+                    </Link>
+                  ) : (
+                    <span className="text-ink-subtle">No release yet</span>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -436,7 +441,7 @@ function Details({ task }: { task: TaskDetail }) {
         )}
         {task.estimate_hours != null && (
           <Row label="Estimate">
-            <span className="tabular-nums">{task.estimate_hours} h</span>
+            <span className="tabular-nums" title={`Working time — ${WORK_SCHEDULE_TEXT}`}>{formatDuration(task.estimate_hours * 3600)}</span>
           </Row>
         )}
       </section>

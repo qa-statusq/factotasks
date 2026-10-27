@@ -23,6 +23,7 @@ import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { postJson, deleteJson } from "@/lib/http";
 import { cn } from "@/lib/cn";
+import { istDayKey } from "@/lib/ist";
 import { APP_ROLE_META, DEPARTMENT_META, appRoleForDepartment, type AppRole } from "@/lib/domain";
 import { IconPlus, IconEdit, IconTasks, IconRocket, IconUsers, IconSettings, IconExternal, IconTrash, IconArchive, IconX } from "@/components/ui/icons";
 import type { AppOverview, Release, TaskCard, UserBrief } from "@/lib/types";
@@ -420,7 +421,7 @@ function SettingsTab({ app, onEdit }: { app: AppOverview; onEdit: () => void }) 
               </div>
               <p className="mt-1 text-[13px] text-ink-muted">{app.description?.trim() || <span className="text-ink-subtle">No description yet — say what the app does in a line.</span>}</p>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-subtle">
-                <span>Added {prettyDate(app.created_at.slice(0, 10))}</span>
+                <span>Added {prettyDate(istDayKey(app.created_at))}</span>
                 <span>· {app.members.length} member{app.members.length === 1 ? "" : "s"}</span>
               </div>
             </div>

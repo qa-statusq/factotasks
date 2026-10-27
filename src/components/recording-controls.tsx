@@ -11,6 +11,7 @@ import { fmtBytes, fmtClock, fmtDuration, recordingLabel } from "@/lib/recording
 import { istDayKey } from "@/lib/ist";
 import { cn } from "@/lib/cn";
 import { useLatest } from "@/lib/use-latest";
+import { anchorRect } from "@/lib/viewport";
 import { IconCircleDot, IconDownload, IconX, IconMic, IconVideo, IconChevronDown, IconPlay, IconCheck, IconPresentation } from "@/components/ui/icons";
 
 /** True on the meeting's day in India and any day after, while the meeting is still open. */
@@ -18,6 +19,9 @@ export function canRecordMeeting(m: { status: "open" | "finalized"; held_at: str
   if (m.status !== "open") return false;
   return istDayKey(new Date().toISOString()) >= istDayKey(m.held_at);
 }
+
+/** The record menu's width (w-64), for choosing the side it opens to. */
+const MENU_WIDTH = 256;
 
 /**
  * "Record meeting" on the meeting page: a menu with the two ways to record.
@@ -27,6 +31,9 @@ export function canRecordMeeting(m: { status: "open" | "finalized"; held_at: str
 export function RecordButton({ meetingId, title, className }: { meetingId: string; title: string; className?: string }) {
   const { state, start, stop } = useRecorder();
   const [open, setOpen] = useState(false);
+  // The menu opens towards the side with room: from the button's right edge when
+  // a left-anchored menu would run past the screen (phones, where the page clips it).
+  const [alignRight, setAlignRight] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -53,11 +60,23 @@ export function RecordButton({ meetingId, title, className }: { meetingId: strin
   };
   return (
     <span ref={ref} className={cn("relative inline-flex", className)}>
-      <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)} disabled={busy} title={busy && !mine ? "Another recording is running" : "Record this meeting"} aria-haspopup="menu" aria-expanded={open}>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {
+          const r = ref.current ? anchorRect(ref.current) : null;
+          setAlignRight(!!r && r.left + MENU_WIDTH + 8 > r.vw);
+          setOpen((o) => !o);
+        }}
+        disabled={busy}
+        title={busy && !mine ? "Another recording is running" : "Record this meeting"}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
         <IconCircleDot size={14} className="text-rose-500" /> Record meeting <IconChevronDown size={13} className="-mr-0.5 text-ink-subtle" />
       </Button>
       {open && (
-        <div role="menu" className="absolute left-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-xl border border-line bg-surface p-1 shadow-pop">
+        <div role="menu" className={cn("absolute top-full z-30 mt-1 w-64 overflow-hidden rounded-xl border border-line bg-surface p-1 shadow-pop", alignRight ? "right-0" : "left-0")}>
           {screenRecordingSupported() && (
             <button type="button" role="menuitem" onClick={() => pick("screen")} className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-canvas">
               <IconVideo size={16} className="mt-0.5 shrink-0 text-ink-muted" />

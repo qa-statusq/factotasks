@@ -15,7 +15,7 @@ import { postJson } from "@/lib/http";
 import { taskRef } from "@/lib/domain";
 import { cn } from "@/lib/cn";
 import { IconSearch, IconCheck } from "@/components/ui/icons";
-import { fmtDateTime } from "@/lib/time";
+import { When } from "@/components/ui/live-time";
 import type { Meeting, TaskCard } from "@/lib/types";
 
 /**
@@ -176,7 +176,7 @@ export function AddToMeetingSheet({ taskId, taskNumber, already, onClose }: { ta
                       {m.title}
                       {m.series && <SeriesBadge series={m.series} />}
                     </div>
-                    <div className="mt-0.5 text-[11.5px] text-ink-subtle">{fmtDateTime(m.held_at)}</div>
+                    <When iso={m.held_at} className="mt-0.5 block text-[11.5px] text-ink-subtle" />
                   </div>
                 </button>
               </li>

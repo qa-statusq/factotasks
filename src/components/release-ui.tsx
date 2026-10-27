@@ -21,10 +21,9 @@ import { useTaskComposer } from "@/components/task-composer";
 import { useNeedsApproval } from "@/lib/use-policy";
 import { useSubmitShortcut } from "@/lib/use-submit-shortcut";
 import { useDiscardGuard, same } from "@/lib/use-discard-guard";
-import { istDayKey } from "@/lib/ist";
 import { useCachedFetch, mutate, mutatePrefix, mutateWhere, revalidatePrefix } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
-import { fmtYmd, fmtDateTime } from "@/lib/time";
+import { fmtYmd } from "@/lib/time";
 import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { LIMITS, RELEASE_STATUSES, RELEASE_STATUS_META, PLATFORM_META, taskRef, type ReleaseStatus } from "@/lib/domain";
@@ -247,7 +246,7 @@ export function ReleaseFormSheet({ release, apps, appId, initial, onClose }: { r
             <Dropdown value={app} onChange={(v) => { setApp(v); setTaskIds([]); }} options={apps.map((a) => ({ value: a.id, label: a.name }))} placeholder="Pick an app" />
           </Field>
         )}
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Platform">
             <Dropdown value={platform} onChange={(v) => { setPlatform(v as "android" | "ios"); if (!release) setTaskIds([]); }} options={platformOptions.length ? platformOptions : [{ value: platform, label: PLATFORM_META[platform].label }]} />
           </Field>
@@ -449,7 +448,15 @@ export function ReleaseViewSheet({ release, apps, onClose }: { release: Release;
           <div className="flex flex-wrap items-center gap-2">
             {canManage ? <ReleaseStatusMenu release={r} size="md" /> : <ReleaseStatusBadge status={r.status} />}
             <span className="text-xs text-ink-subtle">
-              {r.status === "released" && r.released_at ? `Released ${prettyDate(istDayKey(r.released_at))}` : r.planned_date ? `Release date ${prettyDate(r.planned_date)}` : "No date yet"}
+              {r.status === "released" && r.released_at ? (
+                <>
+                  Released <When iso={r.released_at} />
+                </>
+              ) : r.planned_date ? (
+                `Release date ${prettyDate(r.planned_date)}`
+              ) : (
+                "No date yet"
+              )}
             </span>
             {r.created_by && (
               <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-ink-subtle">
@@ -464,7 +471,13 @@ export function ReleaseViewSheet({ release, apps, onClose }: { release: Release;
                 <IconUserCheck size={16} className="mt-0.5 shrink-0 text-amber-700" />
                 <div className="min-w-0 flex-1 text-[13px] text-amber-900">
                   <p className="font-semibold">
-                    {r.requested_by?.name ?? "A teammate"} asked to mark this released{r.requested_at ? ` · ${fmtDateTime(r.requested_at)}` : ""}
+                    {r.requested_by?.name ?? "A teammate"} asked to mark this released
+                    {r.requested_at && (
+                      <span className="font-normal">
+                        {"\u00a0· "}
+                        <When iso={r.requested_at} />
+                      </span>
+                    )}
                   </p>
                   {r.request_note && <p className="mt-0.5 text-amber-800">“{r.request_note}”</p>}
                   <p className="mt-1 text-amber-800">
@@ -564,7 +577,7 @@ export function ReleaseStatusMenu({ release: r, size = "sm", className }: { rele
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const close = useMemo(() => () => setOpen(false), []);
-  const pos = usePopover(open, close, btnRef, menuRef, 300, 200);
+  const pos = usePopover(open, close, btnRef, menuRef, 300, 208);
   // Who may change it is enforced by the API (admin or a member of the app);
   // the pill stays interactive and reports a clear error otherwise. Moving a
   // shipped version back is an admin call, so members see a plain badge there.

@@ -16,7 +16,8 @@ import { ReleaseViewSheet, prettyDate } from "@/components/release-ui";
 import { useCachedFetch } from "@/lib/client-cache";
 import { useNameLabels } from "@/lib/use-name-labels";
 import { usePref } from "@/lib/use-pref";
-import { fmtYmd, fmtDateTime } from "@/lib/time";
+import { fmtYmd } from "@/lib/time";
+import { When } from "@/components/ui/live-time";
 import { istDayKey } from "@/lib/ist";
 import { releaseDay } from "@/lib/release-day";
 import { cn } from "@/lib/cn";
@@ -28,7 +29,6 @@ import type { ReleaseEvent } from "@/app/api/releases/history/route";
 type Group = "app" | "month" | "date";
 
 const monthLabel = (ym: string) => fmtYmd(ym, { month: "long", year: true });
-const fmtWhen = fmtDateTime;
 /** Separator glued to the word before it, so a wrapped line never opens with "·". */
 const SEP = "\u00a0· ";
 
@@ -195,7 +195,7 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
     <div className="text-[12px] text-ink-muted">
       {releasedDay ? (
         <span>
-          Released <b className="font-semibold text-ink">{prettyDate(releasedDay)}</b>
+          Released <When iso={r.released_at} className="font-semibold text-ink" />
           {r.planned_date && r.planned_date !== releasedDay && <span className="text-ink-subtle">{SEP}planned {prettyDate(r.planned_date)}</span>}
         </span>
       ) : r.planned_date ? (
@@ -243,7 +243,7 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
         <div className="basis-full sm:hidden">{meta}</div>
       </header>
 
-      <div className="grid gap-0 border-t border-line/70 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:divide-x md:divide-line/70">
+      <div className="grid grid-cols-1 gap-0 border-t border-line/70 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:divide-x md:divide-line/70">
         {/* What shipped */}
         <div className="px-4 py-3">
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">In this version</p>
@@ -274,7 +274,7 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
           {r.description && (
             <div className="mt-2.5">
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">Release notes</p>
-              <p className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-ink-muted">{r.description}</p>
+              <p className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-ink-muted [overflow-wrap:anywhere]">{r.description}</p>
             </div>
           )}
         </div>
@@ -284,12 +284,12 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
             <IconChevronDown size={13} className={cn("transition-transform", showTimeline ? "rotate-180" : "")} />
             Timeline
             <span className="whitespace-nowrap font-normal normal-case tracking-normal">· {events.length || 1} {events.length === 1 || events.length === 0 ? "entry" : "entries"}</span>
-            {!showTimeline && lastEvent && <span className="w-full truncate pl-[19px] font-normal normal-case tracking-normal text-ink-subtle sm:ml-auto sm:w-auto sm:pl-0">last: {describe(lastEvent)} · {fmtWhen(lastEvent.created_at)}</span>}
+            {!showTimeline && lastEvent && <span className="w-full truncate pl-[19px] font-normal normal-case tracking-normal text-ink-subtle sm:ml-auto sm:w-auto sm:pl-0">last: {describe(lastEvent)}{SEP}<When iso={lastEvent.created_at} /></span>}
           </button>
           {showTimeline && (
           <ol className="mt-2 flex flex-col gap-1.5">
             {events.length === 0 && (
-              <li className="text-[12.5px] text-ink-subtle">Added {fmtWhen(r.created_at)}.</li>
+              <li className="text-[12.5px] text-ink-subtle">Added <When iso={r.created_at} />.</li>
             )}
             {events.map((e) => (
               <li key={e.id} className="flex items-start gap-2 text-[12.5px]">
@@ -299,7 +299,9 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
                 <div className="min-w-0 flex-1">
                   <div className="text-ink">{describe(e)}</div>
                   <div className="text-[11px] text-ink-subtle">
-                    {fmtWhen(e.created_at)} · {e.by}
+                    <When iso={e.created_at} />
+                    {SEP}
+                    {e.by}
                   </div>
                 </div>
               </li>
@@ -311,6 +313,9 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
     </article>
   );
 }
+
+/** "Android" / "iOS" for a logged platform code, never the raw code. */
+const platformLabel = (p: unknown) => PLATFORM_META[p as keyof typeof PLATFORM_META]?.label ?? String(p);
 
 /** One readable line per logged change, from the field diff when there is one. */
 function describe(e: ReleaseEvent): React.ReactNode {
@@ -326,7 +331,7 @@ function describe(e: ReleaseEvent): React.ReactNode {
     if (c.status) parts.push(<span key="s">Status {RELEASE_STATUS_META[c.status.from as ReleaseStatus]?.label ?? "—"} → <b className="font-semibold">{RELEASE_STATUS_META[c.status.to as ReleaseStatus]?.label ?? String(c.status.to)}</b>{e.closed ? ` — ${e.closed} task${e.closed === 1 ? "" : "s"} marked done` : ""}</span>);
     if (c.version_name) parts.push(<span key="v">Version v{String(c.version_name.from)} → <b className="font-semibold">v{String(c.version_name.to)}</b></span>);
     if (c.build_number) parts.push(<span key="b">Build {String(c.build_number.from ?? "—")} → <b className="font-semibold">{String(c.build_number.to ?? "—")}</b></span>);
-    if (c.platform) parts.push(<span key="p">Platform {String(c.platform.from)} → <b className="font-semibold">{String(c.platform.to)}</b></span>);
+    if (c.platform) parts.push(<span key="p">Platform {platformLabel(c.platform.from)} → <b className="font-semibold">{platformLabel(c.platform.to)}</b></span>);
     if (c.tasks) parts.push(<span key="t">Task list updated ({String(c.tasks.to)} task{c.tasks.to === 1 ? "" : "s"})</span>);
     if (c.description) parts.push(<span key="n">Notes edited</span>);
     if (c.notes) parts.push(<span key="i">Internal notes edited</span>);

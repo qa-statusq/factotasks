@@ -28,7 +28,7 @@ import { useCachedFetch, mutate } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText, type AgendaGroup } from "@/lib/meeting-agenda";
 import { postJson, deleteJson } from "@/lib/http";
-import { fmtDateTime } from "@/lib/time";
+import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { LIMITS, taskRef } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
@@ -36,7 +36,8 @@ import { IconMaximize, IconPrint, IconCheck, IconTrash, IconEdit, IconPresentati
 import type { AppOverview, Meeting, MeetingNote, MeetingPack, MeetingSeries, TaskCard } from "@/lib/types";
 
 type Pack = MeetingPack & { workspace_name: string };
-const fmt = fmtDateTime;
+/** Separator glued to the word before it, so a wrapped line never opens with "·". */
+const SEP = "\u00a0· ";
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -124,15 +125,23 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
           <MeetingStatusBadge status={m.status} />
           <SeriesBadge series={pack.series} />
           {isAdmin && (
-            <button type="button" onClick={() => setEditing(true)} className="rounded p-1 text-ink-subtle hover:text-ink" aria-label="Edit meeting" title="Edit meeting">
+            <button type="button" onClick={() => setEditing(true)} className="tap rounded p-1 text-ink-subtle hover:text-ink" aria-label="Edit meeting" title="Edit meeting">
               <IconEdit size={14} />
             </button>
           )}
         </div>
         <p className="text-[13px] text-ink-muted">
-          {fmt(m.held_at)} · covering {pack.previous_meeting ? `since the previous ${pack.series ? pack.series.name : "meeting"} (${fmt(pack.previous_meeting)})` : "the previous 7 days"}
-          {!finalized && (closesItself ? " · live until the end of its day" : " · live until closed by hand")}
-          {" · "}
+          <When iso={m.held_at} />
+          {SEP}covering{" "}
+          {pack.previous_meeting ? (
+            <>
+              since the previous {pack.series ? pack.series.name : "meeting"} (<When iso={pack.previous_meeting} />)
+            </>
+          ) : (
+            "the previous 7 days"
+          )}
+          {!finalized && (closesItself ? `${SEP}live until the end of its day` : `${SEP}live until closed by hand`)}
+          {SEP}
           <ScopeLabel scope={m} apps={ad?.apps} className="align-middle" />
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -169,7 +178,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
       {/* Numbers strip */}
       <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line bg-line/70 sm:grid-cols-6 [&>*]:bg-surface">
         <Stat label="Done" value={pack.done.length} tone="success" />
-        <Stat label="Pending" value={totalPending} />
+        <Stat label="Open" value={totalPending} />
         <Stat label="Carried" value={pack.carried.length} tone={pack.carried.length ? "warning" : undefined} />
         <Stat label="New" value={pack.new.length} />
         <Stat label="Overdue" value={pack.overdue.length} tone={pack.overdue.length ? "danger" : undefined} />
@@ -214,7 +223,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: Pack; cacheKey: string }) {
                     <th className="px-4 py-1.5 text-left font-medium"></th>
                     <th className="px-2 py-1.5 text-right font-medium">Done</th>
                     <th className="px-2 py-1.5 text-right font-medium">Open</th>
-                    <th className="px-4 py-1.5 text-right font-medium">Late</th>
+                    <th className="px-4 py-1.5 text-right font-medium">Overdue</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line/60">
@@ -271,9 +280,11 @@ function AppSection({ group: g, notes, labels, cacheKey, readOnly, onNote, meeti
         <AppTile name={g.name} color={g.color} iconUrl={g.iconUrl} className="h-7 w-7 text-xs" />
         <span className="text-[14px] font-semibold text-ink">{g.name}</span>
         <span className="text-[12px] text-ink-subtle">
-          {g.pending.length} pending{g.carried ? ` · ${g.carried} carried` : ""}
-          {g.overdue ? <span className="text-red-600"> · {g.overdue} late</span> : null} · <span className="text-emerald-700">{g.done.length} done</span>
-          {g.releases.length ? ` · ${g.releases.length} release${g.releases.length === 1 ? "" : "s"}` : ""}
+          {g.pending.length} open{g.carried ? `${SEP}${g.carried} carried` : ""}
+          {g.overdue ? <span className="text-red-600">{SEP}{g.overdue} overdue</span> : null}
+          {SEP}
+          <span className="text-emerald-700">{g.done.length} done</span>
+          {g.releases.length ? `${SEP}${g.releases.length} release${g.releases.length === 1 ? "" : "s"}` : ""}
         </span>
       </header>
       {g.releases.length > 0 && (
@@ -310,7 +321,16 @@ function AppSection({ group: g, notes, labels, cacheKey, readOnly, onNote, meeti
 
 function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }) {
   const desc = r.description?.trim();
-  const when = r.status === "released" && r.released_at ? `Released ${fmt(r.released_at)}` : r.planned_date ? `Release date ${prettyDate(r.planned_date)}` : "No date yet";
+  const when =
+    r.status === "released" && r.released_at ? (
+      <>
+        Released <When iso={r.released_at} />
+      </>
+    ) : r.planned_date ? (
+      `Release date ${prettyDate(r.planned_date)}`
+    ) : (
+      "No date yet"
+    );
   return (
     <li className="px-3 py-2.5 sm:px-4">
       <div className="flex items-start gap-3">
@@ -330,10 +350,18 @@ function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }
                 <li key={t.id} className="px-2.5 py-1.5">
                   <div className="flex items-baseline gap-1.5 text-[12.5px]">
                     <span className="shrink-0 tabular-nums whitespace-nowrap text-ink-subtle">{taskRef(t.number)}</span>
-                    <Link href={`/tasks/${t.id}`} className="min-w-0 break-words font-medium text-ink hover:text-brand-700">
-                      {t.title}
-                    </Link>
-                    <StatusBadge status={t.status} className="ml-auto shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <Link href={`/tasks/${t.id}`} className="break-words font-medium text-ink hover:text-brand-700">
+                        {t.title}
+                      </Link>
+                      {/* Phones: the status sits under the title, which keeps the full width. */}
+                      <div className="mt-1 sm:hidden">
+                        <StatusBadge status={t.status} />
+                      </div>
+                    </div>
+                    <span className="ml-auto hidden shrink-0 sm:block">
+                      <StatusBadge status={t.status} />
+                    </span>
                   </div>
                   <ClampedText text={t.description} rich lines={2} className="mt-0.5 text-[12px] text-ink-muted" />
                 </li>
@@ -416,8 +444,9 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, onNote, meeting
   if (gone) return null;
   return (
     <li className="px-3 py-2.5 sm:px-4">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
+      {/* Phones: the task takes the full width; the status pill and "+ Note" sit on a line beneath. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+        <div className="min-w-0 sm:flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <PriorityBadge priority={t.priority} compact className="shrink-0" />
             <Link href={`/tasks/${t.id}`} className="break-words text-[14px] font-medium text-ink hover:text-brand-700">
@@ -425,7 +454,7 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, onNote, meeting
               {t.title}
             </Link>
             {typeof t.carry === "number" && t.carry > 0 && (
-              <Badge tone={t.carry >= 3 ? "danger" : "warning"} title={`Pending for ${t.carry} earlier meeting${t.carry === 1 ? "" : "s"} of this series`}>
+              <Badge tone={t.carry >= 3 ? "danger" : "warning"} title={`Still open after ${t.carry} earlier meeting${t.carry === 1 ? "" : "s"} of this series`}>
                 {t.carry}× carried
               </Badge>
             )}
@@ -433,7 +462,7 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, onNote, meeting
               <Badge tone="neutral" title="Added to this meeting by hand" className="gap-1">
                 Pinned
                 {!readOnly && (
-                  <button type="button" onClick={unpin} className="-mr-0.5 rounded p-px hover:text-red-600" aria-label="Remove from meeting">
+                  <button type="button" onClick={unpin} className="tap -mr-0.5 rounded p-px [--tap:32px] hover:text-red-600" aria-label="Remove from meeting">
                     <IconX size={11} />
                   </button>
                 )}
@@ -454,10 +483,10 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, onNote, meeting
             </div>
           )}
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <div className="flex items-center gap-3 sm:shrink-0 sm:flex-col sm:items-end sm:gap-1.5">
           <StatusMenu task={t} canChange={isAdmin || t.assignees.some((a) => a.id === me?.id)} className={PILL_WIDTH} />
           {!readOnly && (
-            <button type="button" onClick={() => onNote(t)} className="text-[11.5px] font-medium text-brand-700 hover:text-brand-800">
+            <button type="button" onClick={() => onNote(t)} className="tap text-[11.5px] font-medium text-brand-700 [--tap:28px] hover:text-brand-800">
               + Note
             </button>
           )}

@@ -11,7 +11,6 @@ import { ListSkeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/components/providers/session-provider";
 import { useCachedFetch } from "@/lib/client-cache";
 import { usePref } from "@/lib/use-pref";
-import { fmtDateTime } from "@/lib/time";
 import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { NewMeetingSheet, ScopeLabel, SeriesBadge, MeetingStatusBadge } from "@/components/meeting-series";
@@ -19,8 +18,6 @@ import { RecordingBadge } from "@/components/recording-controls";
 import { useRecorder } from "@/lib/use-recorder";
 import { IconPresentation, IconPlus, IconMaximize, IconSettings, IconSearch, IconX, IconCalendar, IconMessage } from "@/components/ui/icons";
 import type { AppOverview, Meeting, MeetingSeries } from "@/lib/types";
-
-const fmt = fmtDateTime;
 
 export default function MeetingsPage() {
   const { isAdmin } = useSession();
@@ -57,7 +54,24 @@ export default function MeetingsPage() {
     <div className="flex flex-col gap-4 animate-fade-in">
       <PageHeader
         title="Meetings"
-        description={active ? `${active.name}${active.last_held_at ? ` · last held ${fmt(active.last_held_at)}` : " · no meetings yet"}. Each meeting covers its scope since the previous one in this series; pending work carries on to the next.` : "Every meeting gathers what was done and what's still pending since the previous one of its series — grouped by app, ready to present."}
+        description={
+          active ? (
+            <>
+              {active.name}
+              {active.last_held_at ? (
+                <>
+                  {"\u00a0· last held "}
+                  <When iso={active.last_held_at} />
+                </>
+              ) : (
+                "\u00a0· no meetings yet"
+              )}
+              . Each meeting covers its scope since the previous one in this series; open work carries on to the next.
+            </>
+          ) : (
+            "Every meeting gathers what was done and what's still open since the previous one of its series — grouped by app, ready to present."
+          )
+        }
         actions={
           isAdmin ? (
             <div className="flex items-center gap-2">

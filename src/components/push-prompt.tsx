@@ -60,7 +60,7 @@ export function PushPrompt() {
       <IconBell size={16} className="mt-0.5 shrink-0 text-ink-subtle sm:mt-0" />
       <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-3">
         <p className="min-w-0 sm:flex-1">
-          Get a notification on this device when something needs you<span className="hidden sm:inline"> — assignments, approvals, comments and releases</span>.
+          Get a notification on this device when something needs you<span className="hidden sm:inline"> — assignments, approvals, comments, due dates and releases</span>.
         </p>
         <Button size="sm" onClick={turnOn} disabled={busy} className="mt-2 shrink-0 sm:mt-0">
           {busy ? <Spinner /> : "Turn on"}

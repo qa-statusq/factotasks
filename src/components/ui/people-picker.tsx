@@ -16,6 +16,9 @@ interface MenuPos {
   top: number;
   width: number;
   up: boolean;
+  /** Viewport size in CSS px (as anchorRect measures it), never raw innerWidth/innerHeight. */
+  vw: number;
+  vh: number;
 }
 
 /**
@@ -101,7 +104,7 @@ export function PeoplePicker({
       const menuH = 320;
       const spaceBelow = b.vh - b.bottom;
       const up = spaceBelow < menuH + 12 && b.top > spaceBelow;
-      setPos({ left: b.left, width: Math.max(b.width, 280), top: up ? b.top - 6 : b.bottom + 6, up });
+      setPos({ left: b.left, width: Math.max(b.width, 280), top: up ? b.top - 6 : b.bottom + 6, up, vw: b.vw, vh: b.vh });
     };
     place();
     // Focus the search box once the portal has painted.
@@ -204,7 +207,7 @@ export function PeoplePicker({
         createPortal(
           <div
             ref={menuRef}
-            style={{ position: "fixed", left: pos.left, width: pos.width, ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }) }}
+            style={{ position: "fixed", left: pos.left, width: pos.width, ...(pos.up ? { bottom: pos.vh - pos.top } : { top: pos.top }) }}
             role="listbox"
             aria-multiselectable={!single}
             onKeyDown={onKey}
