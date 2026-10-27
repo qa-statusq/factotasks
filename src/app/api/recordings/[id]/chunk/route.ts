@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { fail, serverError } from "@/lib/api";
+import { fail, serverError, readCappedBody } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { uploadChunk, uploadStatus, DriveError, DRIVE_CHUNK_BYTES } from "@/lib/google-drive";
@@ -37,8 +37,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ done: true, empty: true, received: 0, recording: null });
   }
   if (total != null && (!Number.isInteger(total) || total <= 0 || offset > total)) return fail("Bad total size");
-  const body = await req.arrayBuffer();
-  if (body.byteLength > DRIVE_CHUNK_BYTES) return fail("Chunk too large");
+  // Never buffer more than one chunk, whatever the request declares.
+  const body = await readCappedBody(req, DRIVE_CHUNK_BYTES);
+  if (!body) return fail("Chunk too large");
   const last = total != null && offset + body.byteLength === total;
   if (!body.byteLength && !last) return fail("Empty chunk");
   if (total != null && offset + body.byteLength > total) return fail("Chunk runs past the end of the file");

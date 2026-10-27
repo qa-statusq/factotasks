@@ -14,7 +14,9 @@
 --     lock for tasks_renumber, and 025 rebuilt analytics_pack from 016.
 --     analytics_pack now leaves out per-person figures for a member's request
 --     (the API dropped them anyway).
---  4. report_pack is dropped: nothing has called /api/reports since Reports
+--  4. prefs_merge enforces the 60-key cap on the merged row (parallel requests
+--     could pass the route's check on a stale copy).
+--  4b. report_pack is dropped: nothing has called /api/reports since Reports
 --     moved into Analytics.
 --  5. Functions are no longer executable through PUBLIC (which anon inherits);
 --     only the server's service_role may call them.
@@ -130,6 +132,26 @@ begin
   values (p_task, p_kind, old_status, p_to, p_actor, p_note);
   return t;
 end;
+$$;
+
+-- 2b) Preferences: the 60-key cap is enforced in the merge itself
+create or replace function prefs_merge(p_user uuid, p_patch jsonb)
+returns jsonb
+language sql
+set search_path = public
+as $$
+  -- (026) At most 60 keys, checked on the merged row under the update's own lock,
+  -- so parallel requests cannot slip past a cap read from a stale copy. Over the
+  -- cap: nothing changes and the result is null (the route answers 400).
+  update users
+     set prefs = m.merged
+    from (select (select coalesce(jsonb_object_agg(k, v), '{}'::jsonb)
+                    from jsonb_each(coalesce(u.prefs, '{}'::jsonb) || p_patch) as e(k, v)
+                   where jsonb_typeof(v) <> 'null') as merged
+            from users u where u.id = p_user for update) m
+   where users.id = p_user
+     and (select count(*) from jsonb_object_keys(m.merged)) <= 60
+   returning users.prefs;
 $$;
 
 -- 3) Packs and renumbering, exactly as in schema.sql

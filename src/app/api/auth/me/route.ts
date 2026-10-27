@@ -115,8 +115,9 @@ export async function PATCH(req: NextRequest) {
     if (error) return serverError(error);
   }
   if (patch) {
-    const { error } = await sb.rpc("prefs_merge", { p_user: u.uid, p_patch: patch });
+    const { data: saved, error } = await sb.rpc("prefs_merge", { p_user: u.uid, p_patch: patch });
     if (error) return serverError(error);
+    if (saved == null) return NextResponse.json({ error: "Too many preferences" }, { status: 400 });
   }
   // The next /me (and every guard) must see the change immediately.
   invalidateAuthCache(u.uid);

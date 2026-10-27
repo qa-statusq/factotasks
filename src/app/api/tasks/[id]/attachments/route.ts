@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { fail, serverError } from "@/lib/api";
+import { fail, serverError, readCappedBody } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { LIMITS, taskRef } from "@/lib/domain";
@@ -45,9 +45,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { count } = await sb.from("task_attachments").select("id", { count: "exact", head: true }).eq("task_id", id);
   if ((count ?? 0) >= LIMITS.attachmentsPerTask) return fail(`A task can hold up to ${LIMITS.attachmentsPerTask} attachments`);
 
+  // Read at most the size limit (plus the form's own framing), whatever the request declares.
+  const raw = await readCappedBody(req, MAX_ATTACHMENT_BYTES + 64 * 1024);
+  if (!raw) return fail(`Files must be under ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`, 413);
   let form: FormData;
   try {
-    form = await req.formData();
+    form = await new Response(raw, { headers: { "content-type": req.headers.get("content-type") || "" } }).formData();
   } catch {
     return fail("Send the file as multipart/form-data");
   }

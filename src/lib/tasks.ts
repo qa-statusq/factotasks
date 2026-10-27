@@ -126,7 +126,7 @@ export async function validateTaskRefs(p: TaskPatch, assignees: string[] | undef
       const bad = who.filter((id) => !ok.has(id));
       if (bad.length) {
         const [{ data: u }, { data: a }] = await Promise.all([sb.from("users").select("first_name, last_name, email").eq("id", bad[0]).maybeSingle(), sb.from("apps").select("name").in("id", ids)]);
-        const name = u ? [u.first_name, u.last_name].filter(Boolean).join(" ") || (u.email as string) : "That person";
+        const name = u ? [u.first_name, u.last_name].filter(Boolean).join(" ") || String(u.email).split("@")[0] : "That person";
         const appNames = (a || []).map((x) => x.name as string).join(" / ");
         return `${name} isn't a member of ${appNames || "this app"} — only app members can be assigned`;
       }

@@ -31,6 +31,10 @@ export async function POST(req: NextRequest) {
   if (!mail || !pass) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
   }
+  // Bounded before any throttle key or password hashing is built from them.
+  if (mail.length > 200 || pass.length > 200) {
+    return NextResponse.json({ error: "Email or password is too long" }, { status: 400 });
+  }
 
   // Per address: a fixed window that resets by itself, so an office behind one
   // NAT is never locked out by its own successful sign-ins; the escalating lock

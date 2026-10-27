@@ -44,7 +44,54 @@ export function serverError(e: unknown, fallback = "Something went wrong. Please
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function readJsonObject(req: Request): Promise<Record<string, any>> {
-  const v = await req.json().catch(() => null);
-  return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  const buf = await readCappedBody(req, MAX_JSON_BYTES);
+  if (!buf) return {};
+  let v: unknown = null;
+  try {
+    v = JSON.parse(new TextDecoder().decode(buf));
+  } catch {
+    v = null;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, any>) : {};
+}
+
+/** No JSON request of the panel comes near this; anything bigger is refused unread. */
+const MAX_JSON_BYTES = 1024 * 1024;
+
+/**
+ * The request body, read only up to `max` bytes: null when it is larger (or
+ * unreadable). A declared Content-Length over the cap is refused before a byte
+ * is read, and a body without one (chunked) is cut off at the cap — so no
+ * request can make the server buffer more than `max`.
+ */
+export async function readCappedBody(req: Request, max: number): Promise<ArrayBuffer | null> {
+  const declared = Number(req.headers.get("content-length") || "");
+  if (Number.isFinite(declared) && declared > max) return null;
+  if (!req.body) return new ArrayBuffer(0);
+  const reader = req.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > max) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      parts.push(value);
+    }
+  } catch {
+    return null;
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.byteLength;
+  }
+  return out.buffer;
 }
 

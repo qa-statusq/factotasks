@@ -10,7 +10,8 @@ export const USER_BRIEF_COLS = "id, email, first_name, last_name, color, departm
 export function brief(u: Record<string, unknown>): UserBrief {
   return {
     id: String(u.id),
-    name: displayName(u.first_name as string | null, u.last_name as string | null) || String(u.email),
+    // A nameless account shows the part before "@", never the address (mirrors SQL user_brief).
+    name: displayName(u.first_name as string | null, u.last_name as string | null) || String(u.email).split("@")[0],
     first_name: (u.first_name as string | null) ?? null,
     last_name: (u.last_name as string | null) ?? null,
     email: String(u.email),

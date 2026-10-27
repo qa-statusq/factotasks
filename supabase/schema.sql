@@ -1044,12 +1044,18 @@ returns jsonb
 language sql
 set search_path = public
 as $$
+  -- (026) At most 60 keys, checked on the merged row under the update's own lock,
+  -- so parallel requests cannot slip past a cap read from a stale copy. Over the
+  -- cap: nothing changes and the result is null (the route answers 400).
   update users
-     set prefs = (select coalesce(jsonb_object_agg(k, v), '{}'::jsonb)
-                    from jsonb_each(coalesce(prefs, '{}'::jsonb) || p_patch) as e(k, v)
-                   where jsonb_typeof(v) <> 'null')
-   where id = p_user
-   returning prefs;
+     set prefs = m.merged
+    from (select (select coalesce(jsonb_object_agg(k, v), '{}'::jsonb)
+                    from jsonb_each(coalesce(u.prefs, '{}'::jsonb) || p_patch) as e(k, v)
+                   where jsonb_typeof(v) <> 'null') as merged
+            from users u where u.id = p_user for update) m
+   where users.id = p_user
+     and (select count(*) from jsonb_object_keys(m.merged)) <= 60
+   returning users.prefs;
 $$;
 
 -- (023) A task holds at most 25 attachments, enforced where two uploads at once cannot both slip past.
