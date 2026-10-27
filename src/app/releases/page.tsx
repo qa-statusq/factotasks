@@ -67,9 +67,9 @@ export default function ReleasesPage() {
         }
       />
       <UnreleasedWorkBanner />
-      <div className="flex flex-wrap gap-2">
-        <Dropdown fit value={app} onChange={setApp} options={[{ value: "", label: "All apps" }, ...apps.map((a) => ({ value: a.id, label: a.name }))]} className="min-w-[11rem] [&>button]:h-9 [&>button]:w-full" />
-        <div className="w-44">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <Dropdown fit value={app} onChange={setApp} options={[{ value: "", label: "All apps" }, ...apps.map((a) => ({ value: a.id, label: a.name }))]} className="min-w-0 sm:min-w-[11rem] [&>button]:h-9 [&>button]:w-full" />
+        <div className="min-w-0 sm:w-44">
           <Dropdown
             value={platform}
             onChange={setPlatform}

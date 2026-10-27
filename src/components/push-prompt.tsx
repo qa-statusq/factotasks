@@ -55,12 +55,17 @@ export function PushPrompt() {
   }
 
   return (
-    <div className="mb-5 flex items-center gap-3 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-muted animate-fade-in">
-      <IconBell size={16} className="shrink-0 text-ink-subtle" />
-      <p className="min-w-0 flex-1">Get a notification on this device when something needs you — assignments, approvals, comments and releases.</p>
-      <Button size="sm" onClick={turnOn} disabled={busy} className="shrink-0">
-        {busy ? <Spinner /> : "Turn on"}
-      </Button>
+    // Phones: the button sits under the sentence, so the sentence keeps the full width.
+    <div className="mb-5 flex items-start gap-3 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-muted animate-fade-in sm:items-center">
+      <IconBell size={16} className="mt-0.5 shrink-0 text-ink-subtle sm:mt-0" />
+      <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-3">
+        <p className="min-w-0 sm:flex-1">
+          Get a notification on this device when something needs you<span className="hidden sm:inline"> — assignments, approvals, comments and releases</span>.
+        </p>
+        <Button size="sm" onClick={turnOn} disabled={busy} className="mt-2 shrink-0 sm:mt-0">
+          {busy ? <Spinner /> : "Turn on"}
+        </Button>
+      </div>
       <button
         type="button"
         onClick={() => {

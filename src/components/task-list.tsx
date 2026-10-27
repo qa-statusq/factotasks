@@ -61,8 +61,9 @@ export const PILL_WIDTH = "sm:min-w-[8.5rem]";
 export const TaskRow = memo(function TaskRow({ task, showApp = true, showDescription = false, trailing, below, canChange = true }: { task: TaskCard; showApp?: boolean; showDescription?: boolean; trailing?: React.ReactNode; below?: React.ReactNode; canChange?: boolean }) {
   return (
     <li className="cv-card group px-3 py-2.5 transition-colors hover:bg-canvas/60 sm:px-4">
-      <div className="flex items-start gap-3">
-        <Link href={`/tasks/${task.id}`} className="min-w-0 flex-1">
+      {/* Phones: title and context take the full width; status and people sit on a line beneath. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+        <Link href={`/tasks/${task.id}`} className="min-w-0 sm:flex-1">
           <div className="flex items-start gap-2">
             <PriorityBadge priority={task.priority} compact className="mt-[3px] shrink-0" />
             <span className={cn("min-w-0 break-words text-[14px] font-medium leading-snug text-ink", task.status === "done" && "text-ink-muted", task.status === "cancelled" && "text-ink-subtle line-through")}>
@@ -95,12 +96,14 @@ export const TaskRow = memo(function TaskRow({ task, showApp = true, showDescrip
             )}
           </div>
         </Link>
-        <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-          <span className="flex justify-end sm:w-[5rem]">
+        <div className="flex items-center justify-between gap-3 pl-[22px] sm:shrink-0 sm:justify-end sm:pl-0">
+          <span className="order-last flex justify-end sm:order-none sm:w-[5rem]">
             <AvatarStack users={task.assignees} size="sm" />
           </span>
-          <StatusMenu task={task} canChange={canChange} className={PILL_WIDTH} />
-          {trailing}
+          <span className="flex items-center gap-2 sm:gap-3">
+            <StatusMenu task={task} canChange={canChange} className={PILL_WIDTH} />
+            {trailing}
+          </span>
         </div>
       </div>
       {below}

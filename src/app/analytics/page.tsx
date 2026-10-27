@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePref } from "@/lib/use-pref";
 import { LoadError, EmptyState, PageHeader } from "@/components/ui/misc";
 import { Dropdown } from "@/components/ui/dropdown";
@@ -388,12 +388,32 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   );
 }
 
-/** Grouped bars with gridlines and an integer axis — done beside created, per period. */
+/** The element's content width, kept current as it resizes (0 until first measured). */
+function useWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    // The observer reports once on start, then on every resize.
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
+
+/**
+ * Grouped bars with gridlines and an integer axis — done beside created, per period.
+ * Drawn at the card's own width (text stays its real size, nothing scrolls sideways);
+ * when the columns get narrow, every k-th period is labelled and the counts move to the tooltip.
+ */
 function PeriodChart({ periods, bucket }: { periods: Period[]; bucket: "week" | "month" }) {
+  const [box, width] = useWidth<HTMLDivElement>();
   const n = periods.length;
-  const W = Math.max(640, n * 76);
+  const W = Math.max(260, width || 640);
   const H = 240;
-  const padL = 40, padR = 12, padT = 16, padB = 54;
+  const padL = W < 480 ? 30 : 40, padR = 8, padT = 16, padB = 54;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
   const rawMax = Math.max(1, ...periods.flatMap((p) => [p.done, p.created]));
@@ -401,11 +421,14 @@ function PeriodChart({ periods, bucket }: { periods: Period[]; bucket: "week" | 
   const top = Math.ceil(rawMax / step) * step;
   const ticks = Array.from({ length: top / step + 1 }, (_, i) => i * step);
   const col = innerW / n;
-  const bw = Math.min(26, col * 0.28);
+  const bw = Math.min(26, col * (col < 30 ? 0.38 : 0.28));
+  const roomy = col >= 30; // room for the counts above the bars and the "rel." line
+  const every = Math.ceil(36 / col); // label every k-th period so the labels never collide
   const y = (v: number) => padT + innerH - (v / top) * innerH;
   return (
-    <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full min-w-[640px]" role="img" aria-label="Tasks done and created per period">
+    <div ref={box}>
+      {width ? (
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block max-w-full" role="img" aria-label="Tasks done and created per period">
         {ticks.map((v) => (
           <g key={v}>
             <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#e7e5e4" strokeWidth={1} strokeDasharray={v === 0 ? undefined : "3 4"} />
@@ -420,19 +443,25 @@ function PeriodChart({ periods, bucket }: { periods: Period[]; bucket: "week" | 
               <title>{`${periodLabel(p.key, bucket)}: ${p.done} done · ${p.created} created${p.released ? ` · ${p.released} release${p.released === 1 ? "" : "s"}` : ""}`}</title>
               <rect x={cx - bw - 2} y={y(p.done)} width={bw} height={Math.max(0, y(0) - y(p.done))} rx={4} fill="#10b981" />
               <rect x={cx + 2} y={y(p.created)} width={bw} height={Math.max(0, y(0) - y(p.created))} rx={4} fill="#a5b4fc" />
-              {p.done > 0 && <text x={cx - bw / 2 - 2} y={y(p.done) - 5} textAnchor="middle" fontSize={11} fontWeight={600} fill="#047857">{p.done}</text>}
-              {p.created > 0 && <text x={cx + bw / 2 + 2} y={y(p.created) - 5} textAnchor="middle" fontSize={11} fontWeight={600} fill="#4f46e5">{p.created}</text>}
-              <text x={cx} y={H - padB + 20} textAnchor="middle" fontSize={11.5} fontWeight={500} fill="#5f5c57">{label}</text>
-              {p.released > 0 && (
-                <text x={cx} y={H - padB + 38} textAnchor="middle" fontSize={10.5} fill="#8a8781">
-                  {p.released} rel.
-                </text>
-              )}
+              {roomy && p.done > 0 && <text x={cx - bw / 2 - 2} y={y(p.done) - 5} textAnchor="middle" fontSize={11} fontWeight={600} fill="#047857">{p.done}</text>}
+              {roomy && p.created > 0 && <text x={cx + bw / 2 + 2} y={y(p.created) - 5} textAnchor="middle" fontSize={11} fontWeight={600} fill="#4f46e5">{p.created}</text>}
+              {(n - 1 - i) % every === 0 && <text x={cx} y={H - padB + 20} textAnchor="middle" fontSize={11.5} fontWeight={500} fill="#5f5c57">{label}</text>}
+              {p.released > 0 &&
+                (roomy ? (
+                  <text x={cx} y={H - padB + 38} textAnchor="middle" fontSize={10.5} fill="#8a8781">
+                    {p.released} rel.
+                  </text>
+                ) : (
+                  <circle cx={cx} cy={H - padB + 34} r={2.5} fill="#8a8781" />
+                ))}
             </g>
           );
         })}
       </svg>
-      <div className="mt-2 flex gap-4 text-[11.5px] text-ink-subtle">
+      ) : (
+        <div style={{ height: H }} />
+      )}
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-ink-subtle">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> Done
         </span>
@@ -440,7 +469,7 @@ function PeriodChart({ periods, bucket }: { periods: Period[]; bucket: "week" | 
           <span className="h-2.5 w-2.5 rounded-sm bg-indigo-300" /> Created
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <IconRocket size={11} /> rel. = versions released
+          <IconRocket size={11} /> {roomy ? "rel. = versions released" : "dot = versions released"}
         </span>
       </div>
     </div>
@@ -490,13 +519,49 @@ function MixList({ title, rows }: { title: string; rows: { key: string; label: s
   );
 }
 
-/** Rows × figures, then a shaded cell per period — scrolls sideways on a phone. */
+/** Rows × figures, then a shaded cell per period. Phones get one card per row instead of a sideways-scrolling table. */
 function Grid({ rows, periods, bucket, max, showReleases }: { rows: { key: string; label: string; tile: React.ReactNode; row: Row }[]; periods: Period[]; bucket: "week" | "month"; max: number; showReleases?: boolean }) {
   const cols = periods.slice(-12);
-  const th = "whitespace-nowrap px-3 py-2 text-right text-[10.5px] font-semibold uppercase tracking-wide text-ink-subtle";
-  const td = "px-3 py-2 text-right tabular-nums";
+  const th = "whitespace-nowrap px-2.5 py-2 text-right text-[10.5px] font-semibold uppercase tracking-wide text-ink-subtle";
+  const td = "px-2.5 py-2 text-right tabular-nums";
+  const recent = cols.slice(-6);
   return (
-    <div className="-mx-4 overflow-x-auto sm:-mx-5">
+    <>
+    <ul className="-mx-4 divide-y divide-line/60 border-t border-line/60 sm:hidden">
+      {rows.map((r) => (
+        <li key={r.key} className="px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            {r.tile}
+            <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-ink">{r.label}</span>
+          </div>
+          <dl className="mt-2.5 grid grid-cols-3 gap-x-3 gap-y-2">
+            <Fig label="Done" className="font-semibold text-emerald-700">{r.row.done || <Dash />}</Fig>
+            <Fig label="Open" className="text-ink">{r.row.open || <Dash />}</Fig>
+            <Fig label="Overdue" className={r.row.overdue ? "font-semibold text-red-600" : ""}>{r.row.overdue || <Dash />}</Fig>
+            <Fig label="Lead time">{r.row.avg_lead_hours == null ? <Dash /> : hours(r.row.avg_lead_hours)}</Fig>
+            <Fig label="On time">{r.row.with_due ? pct(r.row.on_time, r.row.with_due) : <Dash />}</Fig>
+            {showReleases && <Fig label="Releases">{r.row.releases || <Dash />}</Fig>}
+          </dl>
+          {recent.length > 0 && (
+            <div className="mt-2.5 flex gap-1" aria-label="Done per period">
+              {recent.map((p) => {
+                const v = r.row.periods[p.key] ?? 0;
+                const a = v ? 0.18 + 0.82 * (v / max) : 0;
+                return (
+                  <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center gap-0.5" title={`${periodLabel(p.key, bucket)}: ${v} done`}>
+                    <span className={cn("flex h-6 w-full items-center justify-center rounded-md text-[11.5px] font-semibold tabular-nums ring-1 ring-inset", v ? (a >= 0.55 ? "text-white ring-transparent" : "text-ink ring-transparent") : "text-ink-subtle/30 ring-line/60")} style={v ? { backgroundColor: `rgba(5,150,105,${a.toFixed(2)})` } : undefined}>
+                      {v || ""}
+                    </span>
+                    <span className="max-w-full truncate text-[10px] text-ink-subtle">{periodShort(p.key, bucket)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+    <div className="-mx-4 hidden overflow-x-auto sm:-mx-5 sm:block">
       <table className="w-full min-w-[760px] text-[13px]">
         <thead className="bg-canvas/70">
           <tr>
@@ -546,6 +611,17 @@ function Grid({ rows, periods, bucket, max, showReleases }: { rows: { key: strin
           ))}
         </tbody>
       </table>
+    </div>
+    </>
+  );
+}
+
+/** One labelled figure in a phone card. */
+function Fig({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-subtle">{label}</dt>
+      <dd className={cn("mt-0.5 text-[13px] tabular-nums text-ink-muted", className)}>{children}</dd>
     </div>
   );
 }

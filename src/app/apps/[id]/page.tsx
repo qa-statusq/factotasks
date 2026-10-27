@@ -135,12 +135,14 @@ function AppScreen() {
             type="button"
             onClick={() => setTab(t.id)}
             className={cn(
-              "-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
+              // Phones: the tabs share the width equally and drop their icons, so all of them stay in view.
+              "-mb-px inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap border-b-2 px-1.5 py-2.5 text-[13px] font-medium transition-colors sm:flex-none sm:shrink-0 sm:px-3 sm:text-sm",
               tab === t.id ? "border-brand-600 text-brand-700" : "border-transparent text-ink-muted hover:text-ink"
             )}
             aria-current={tab === t.id ? "page" : undefined}
           >
-            {t.icon} {t.label}
+            <span className="hidden sm:inline-flex">{t.icon}</span>
+            {t.label}
             {t.id === "members" && <span className="text-xs text-ink-subtle">{app.members.length}</span>}
           </button>
         ))}

@@ -79,13 +79,18 @@ export function StatCard({
   hint?: string;
 }) {
   return (
-    <div className="rounded-xl border border-line bg-surface px-4 py-3.5">
+    // Phones: the icon steps aside so the label keeps one line, and the hint may take two.
+    <div className="min-w-0 rounded-xl border border-line bg-surface px-3.5 py-3 sm:px-4 sm:py-3.5">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">{label}</span>
-        {icon && <IconTile>{icon}</IconTile>}
+        <span className="min-w-0 truncate text-[10.5px] font-semibold uppercase tracking-[0.05em] text-ink-subtle sm:text-[11px] sm:tracking-[0.08em]">{label}</span>
+        {icon && (
+          <span className="hidden sm:block">
+            <IconTile>{icon}</IconTile>
+          </span>
+        )}
       </div>
-      <div className="mt-2 text-[26px] font-bold leading-none tracking-[-0.02em] text-ink tabular-nums">{value}</div>
-      {hint && <div className="mt-1.5 truncate text-[11.5px] text-ink-subtle">{hint}</div>}
+      <div className="mt-2 text-[24px] font-bold leading-none tracking-[-0.02em] text-ink tabular-nums sm:text-[26px]">{value}</div>
+      {hint && <div className="mt-1.5 line-clamp-2 text-[11.5px] leading-snug text-ink-subtle sm:truncate">{hint}</div>}
     </div>
   );
 }

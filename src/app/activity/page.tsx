@@ -110,9 +110,9 @@ export default function ActivityPage() {
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
       <PageHeader title="Activity" description="Every action by every teammate — the audit trail. Kept for 14 days." />
-      <div className="flex flex-wrap gap-2">
-        <Dropdown fit value={area} onChange={setArea} options={AREAS} className="min-w-[10rem] [&>button]:h-9 [&>button]:w-full" />
-        <Dropdown fit value={userId} onChange={setUserId} options={[{ value: "", label: "Everyone" }, ...users.map((u) => ({ value: u.id, label: u.name }))]} className="min-w-[12rem] [&>button]:h-9 [&>button]:w-full" />
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <Dropdown fit value={area} onChange={setArea} options={AREAS} className="min-w-0 sm:min-w-[10rem] [&>button]:h-9 [&>button]:w-full" />
+        <Dropdown fit value={userId} onChange={setUserId} options={[{ value: "", label: "Everyone" }, ...users.map((u) => ({ value: u.id, label: u.name }))]} className="min-w-0 sm:min-w-[12rem] [&>button]:h-9 [&>button]:w-full" />
       </div>
       {loading || sessionLoading ? (
         <ListSkeleton rows={8} />

@@ -90,16 +90,17 @@ export default function RecordingsPage() {
         <EmptyState icon={<IconPlay size={22} />} title="No recordings yet" description={data?.enabled ? "Press “Record meeting” on a meeting, or the record button while presenting." : "Recording isn't set up on this server yet."} />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
+          {/* Phones: search on its own line, then the filters two to a row. */}
+          <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
+            <div className="relative col-span-2 sm:min-w-[220px] sm:max-w-sm sm:flex-1">
               <IconSearch size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search meeting, recording or person…" className="h-9 w-full rounded-lg border border-line bg-surface pl-8 pr-3 text-[13px] text-ink placeholder:text-ink-subtle focus:border-brand-400 focus:outline-none" aria-label="Search recordings" />
             </div>
-            <Dropdown fit value={kind} onChange={setKind} options={[{ value: "", label: "Screen and audio" }, { value: "video", label: "Screen recordings" }, { value: "audio", label: "Audio only" }]} className="[&>button]:h-9" />
-            {seriesOptions.length > 1 && <Dropdown fit value={series} onChange={setSeries} options={[{ value: "", label: "All series" }, ...seriesOptions]} className="[&>button]:h-9" />}
-            {people.length > 1 && <Dropdown fit value={person} onChange={setPerson} options={[{ value: "", label: "Recorded by anyone" }, ...people.map((p) => ({ value: p.id, label: p.name }))]} className="[&>button]:h-9" />}
-            <DateRangeInput value={range} onChange={setRange} placeholder="Meeting held on any date" className="[&>button]:h-9" />
-            <span className="ml-auto text-[12px] tabular-nums text-ink-subtle">
+            <Dropdown fit value={kind} onChange={setKind} options={[{ value: "", label: "Screen and audio" }, { value: "video", label: "Screen recordings" }, { value: "audio", label: "Audio only" }]} className="min-w-0 [&>button]:h-9 max-sm:[&>button]:w-full" />
+            {seriesOptions.length > 1 && <Dropdown fit value={series} onChange={setSeries} options={[{ value: "", label: "All series" }, ...seriesOptions]} className="min-w-0 [&>button]:h-9 max-sm:[&>button]:w-full" />}
+            {people.length > 1 && <Dropdown fit value={person} onChange={setPerson} options={[{ value: "", label: "Recorded by anyone" }, ...people.map((p) => ({ value: p.id, label: p.name }))]} className="min-w-0 [&>button]:h-9 max-sm:[&>button]:w-full" />}
+            <DateRangeInput value={range} onChange={setRange} placeholder="Meeting held on any date" className="col-span-2 [&>button]:h-9 max-sm:[&>button]:w-full" />
+            <span className="col-span-2 text-[12px] sm:ml-auto tabular-nums text-ink-subtle">
               {filtered.length} recording{filtered.length === 1 ? "" : "s"} · {fmtDuration(totalSec)} · {fmtBytes(totalBytes)}
             </span>
           </div>

@@ -29,6 +29,8 @@ type Group = "app" | "month" | "date";
 
 const monthLabel = (ym: string) => fmtYmd(ym, { month: "long", year: true });
 const fmtWhen = (iso: string) => istTime(iso).replace(/:\d\d (am|pm)/, " $1");
+/** Separator glued to the word before it, so a wrapped line never opens with "·". */
+const SEP = "\u00a0· ";
 
 export default function ReleaseHistoryPage() {
   return (
@@ -102,26 +104,27 @@ function HistoryScreen() {
       <Breadcrumb items={[{ label: "Releases", href: "/releases" }, { label: "History" }]} />
       <PageHeader title="Release history" description="Every version, with how its date and status moved and what shipped in it." className="-mt-2" />
 
-      <div className="flex flex-wrap items-end gap-3">
+      {/* Phones: two filters a row; search and grouping take the full width. */}
+      <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
         <Cell label="App">
-          <Dropdown fit value={app} onChange={(v) => set({ app: v || undefined })} options={[{ value: "", label: "All apps" }, ...apps.map((a) => ({ value: a.id, label: a.name }))]} className="min-w-[11rem] [&>button]:h-9 [&>button]:w-full" />
+          <Dropdown fit value={app} onChange={(v) => set({ app: v || undefined })} options={[{ value: "", label: "All apps" }, ...apps.map((a) => ({ value: a.id, label: a.name }))]} className="min-w-0 sm:min-w-[11rem] [&>button]:h-9 [&>button]:w-full" />
         </Cell>
         <Cell label="Platform">
-          <Dropdown value={platform} onChange={(v) => set({ platform: v || undefined })} options={[{ value: "", label: "Both platforms" }, { value: "android", label: PLATFORM_META.android.label }, { value: "ios", label: PLATFORM_META.ios.label }]} className="w-44 [&>button]:h-9" />
+          <Dropdown value={platform} onChange={(v) => set({ platform: v || undefined })} options={[{ value: "", label: "Both platforms" }, { value: "android", label: PLATFORM_META.android.label }, { value: "ios", label: PLATFORM_META.ios.label }]} className="w-full sm:w-44 [&>button]:h-9" />
         </Cell>
         <Cell label="Status">
-          <Dropdown value={status} onChange={(v) => set({ status: v || undefined })} options={[{ value: "", label: "Any status" }, ...RELEASE_STATUSES.map((s) => ({ value: s, label: RELEASE_STATUS_META[s].label }))]} className="w-40 [&>button]:h-9" />
+          <Dropdown value={status} onChange={(v) => set({ status: v || undefined })} options={[{ value: "", label: "Any status" }, ...RELEASE_STATUSES.map((s) => ({ value: s, label: RELEASE_STATUS_META[s].label }))]} className="w-full sm:w-40 [&>button]:h-9" />
         </Cell>
         <Cell label="Dates">
-          <DateRangeInput value={from && to ? { from, to } : null} onChange={(v) => set({ from: v?.from, to: v?.to })} placeholder="Any dates" className="[&>button]:h-9" />
+          <DateRangeInput value={from && to ? { from, to } : null} onChange={(v) => set({ from: v?.from, to: v?.to })} placeholder="Any dates" className="[&>button]:h-9 max-sm:[&>button]:w-full" />
         </Cell>
-        <Cell label="Search">
+        <Cell label="Search" className="col-span-2">
           <div className="relative">
             <IconSearch size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Version, task, note, app…" className="h-9 w-64 pl-8 text-[13px]" aria-label="Search releases" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Version, task, note, app…" className="h-9 w-full pl-8 text-[13px] sm:w-64" aria-label="Search releases" />
           </div>
         </Cell>
-        <Cell label="Group by">
+        <Cell label="Group by" className="col-span-2">
           <Segmented
             value={group}
             onChange={(v) => {
@@ -166,9 +169,9 @@ function HistoryScreen() {
   );
 }
 
-function Cell({ label, children }: { label: string; children: React.ReactNode }) {
+function Cell({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
       <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">{label}</span>
       {children}
     </div>
@@ -187,6 +190,34 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
   const shippedTasks = tasks.filter((t) => t.released_at).length;
   const [showTimeline, setShowTimeline] = useState(false);
   const lastEvent = events.length ? events[events.length - 1] : null;
+  // Flows as one sentence; each "·" stays on the line before, never opening a new one.
+  const meta = (
+    <div className="text-[12px] text-ink-muted">
+      {releasedDay ? (
+        <span>
+          Released <b className="font-semibold text-ink">{prettyDate(releasedDay)}</b>
+          {r.planned_date && r.planned_date !== releasedDay && <span className="text-ink-subtle">{SEP}planned {prettyDate(r.planned_date)}</span>}
+        </span>
+      ) : r.planned_date ? (
+        <span>
+          Release date <b className="font-semibold text-ink">{prettyDate(r.planned_date)}</b>
+        </span>
+      ) : (
+        <span>No date yet</span>
+      )}
+      {slipped && (
+        <span className="text-amber-700" title={`Originally ${prettyDate(firstPlanned)}`}>
+          {SEP}moved {plannedMoves.length}× (first {prettyDate(firstPlanned)})
+        </span>
+      )}
+      {tasks.length > 0 && (
+        <span>
+          {SEP}{shippedTasks}/{tasks.length} task{tasks.length === 1 ? "" : "s"} shipped
+        </span>
+      )}
+      {r.created_by && <span>{SEP}added by {label(r.created_by)}</span>}
+    </div>
+  );
 
   return (
     <article className="overflow-hidden rounded-xl border border-line bg-surface">
@@ -195,41 +226,21 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {showApp && r.app && <span className="text-[14px] font-semibold text-ink">{r.app.name}</span>}
-            <span className="text-[14px] font-semibold tabular-nums text-ink">v{r.version_name}</span>
-            {r.build_number && <span className="text-xs text-ink-subtle">({r.build_number})</span>}
+            <span className="whitespace-nowrap">
+              <span className="text-[14px] font-semibold tabular-nums text-ink">v{r.version_name}</span>
+              {r.build_number && <span className="ml-1.5 text-xs text-ink-subtle">({r.build_number})</span>}
+            </span>
             <PlatformBadge platform={r.platform} />
             <ReleaseStatusBadge status={r.status} />
             {r.requested_status && <Badge tone="warning">Awaiting approval</Badge>}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-ink-muted">
-            {releasedDay ? (
-              <span>
-                Released <b className="font-semibold text-ink">{prettyDate(releasedDay)}</b>
-                {r.planned_date && r.planned_date !== releasedDay && <span className="text-ink-subtle"> · planned {prettyDate(r.planned_date)}</span>}
-              </span>
-            ) : r.planned_date ? (
-              <span>
-                Release date <b className="font-semibold text-ink">{prettyDate(r.planned_date)}</b>
-              </span>
-            ) : (
-              <span>No date yet</span>
-            )}
-            {slipped && (
-              <span className="text-amber-700" title={`Originally ${prettyDate(firstPlanned)}`}>
-                · moved {plannedMoves.length}× (first {prettyDate(firstPlanned)})
-              </span>
-            )}
-            {tasks.length > 0 && (
-              <span>
-                · {shippedTasks}/{tasks.length} task{tasks.length === 1 ? "" : "s"} shipped
-              </span>
-            )}
-            {r.created_by && <span>· added by {label(r.created_by)}</span>}
-          </div>
+          {/* Phones: the date line takes the card's full width under the title row. */}
+          <div className="mt-0.5 hidden sm:block">{meta}</div>
         </div>
         <Button size="sm" variant="secondary" onClick={onOpen}>
           Open
         </Button>
+        <div className="basis-full sm:hidden">{meta}</div>
       </header>
 
       <div className="grid gap-0 border-t border-line/70 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:divide-x md:divide-line/70">
@@ -247,8 +258,13 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
                     </Link>
                     {t.released_at ? <span className="ml-1.5 inline-flex items-center gap-0.5 align-[-1px] text-[11px] font-semibold text-emerald-700"><IconCheck size={11} /> shipped</span> : null}
                     {t.description?.trim() && <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap break-words text-[11.5px] leading-snug text-ink-muted">{t.description.trim()}</p>}
+                    <div className="mt-1 sm:hidden">
+                      <StatusBadge status={t.status} />
+                    </div>
                   </div>
-                  <StatusBadge status={t.status} className="ml-auto shrink-0" />
+                  <span className="ml-auto hidden shrink-0 sm:block">
+                    <StatusBadge status={t.status} />
+                  </span>
                 </li>
               ))}
             </ul>
@@ -264,11 +280,11 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
         </div>
         {/* Timeline — folded by default; the header line already says what matters. */}
         <div className="border-t border-line/70 px-4 py-3 md:border-t-0">
-          <button type="button" onClick={() => setShowTimeline((v) => !v)} aria-expanded={showTimeline} className="flex w-full items-center gap-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-subtle hover:text-ink">
+          <button type="button" onClick={() => setShowTimeline((v) => !v)} aria-expanded={showTimeline} className="flex w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-subtle hover:text-ink sm:flex-nowrap">
             <IconChevronDown size={13} className={cn("transition-transform", showTimeline ? "rotate-180" : "")} />
             Timeline
-            <span className="font-normal normal-case tracking-normal">· {events.length || 1} {events.length === 1 || events.length === 0 ? "entry" : "entries"}</span>
-            {!showTimeline && lastEvent && <span className="ml-auto truncate font-normal normal-case tracking-normal text-ink-subtle">last: {describe(lastEvent)} · {fmtWhen(lastEvent.created_at)}</span>}
+            <span className="whitespace-nowrap font-normal normal-case tracking-normal">· {events.length || 1} {events.length === 1 || events.length === 0 ? "entry" : "entries"}</span>
+            {!showTimeline && lastEvent && <span className="w-full truncate pl-[19px] font-normal normal-case tracking-normal text-ink-subtle sm:ml-auto sm:w-auto sm:pl-0">last: {describe(lastEvent)} · {fmtWhen(lastEvent.created_at)}</span>}
           </button>
           {showTimeline && (
           <ol className="mt-2 flex flex-col gap-1.5">

@@ -82,11 +82,19 @@ export default function DashboardPage() {
                 onChange={setTab}
                 options={[
                   { value: "mine", label: `My tasks · ${data.counts.my_open}` },
-                  { value: "team", label: `Team due this week · ${data.due_soon.length}` },
+                  // Phones: "Team · this week" keeps the tabs and the "All" link on one line.
+                  {
+                    value: "team",
+                    label: (
+                      <>
+                        Team<span className="hidden min-[400px]:inline"> due</span> this week · {data.due_soon.length}
+                      </>
+                    ),
+                  },
                 ]}
                 aria-label="Dashboard list"
               />
-              <Link href={tab === "mine" ? "/tasks?scope=mine" : "/tasks?due=week"} className="ml-auto inline-flex items-center gap-1 px-1 text-xs font-medium text-ink-muted hover:text-ink">
+              <Link href={tab === "mine" ? "/tasks?scope=mine" : "/tasks?due=week"} className="ml-auto inline-flex shrink-0 items-center gap-1 px-1 text-xs font-medium text-ink-muted hover:text-ink">
                 All <IconArrowRight size={12} />
               </Link>
             </header>

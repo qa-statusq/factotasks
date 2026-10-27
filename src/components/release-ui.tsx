@@ -301,12 +301,16 @@ export function ReleaseRow({ r, showApp = true, onOpen }: { r: Release; showApp?
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {showApp && r.app && <span className="text-sm font-medium text-ink">{r.app.name}</span>}
-            <span className="text-sm font-semibold tabular-nums text-ink">v{r.version_name}</span>
-            {r.build_number && <span className="text-xs text-ink-subtle">({r.build_number})</span>}
+            {/* Version and build travel together when the name wraps. */}
+            <span className="whitespace-nowrap">
+              <span className="text-sm font-semibold tabular-nums text-ink">v{r.version_name}</span>
+              {r.build_number && <span className="ml-1.5 text-xs text-ink-subtle">({r.build_number})</span>}
+            </span>
             {showApp && <PlatformBadge platform={r.platform} />}
             {r.requested_status && <Badge tone="warning">Awaiting approval</Badge>}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-subtle">
+          {/* Flows as one sentence; the "·" stays at the end of a line, never opening the next. */}
+          <div className="mt-0.5 text-[11px] text-ink-subtle">
             {r.status === "released" && r.released_at ? (
               <span title={istTime(r.released_at)}>
                 Released {prettyDate(istDayKey(r.released_at))} · <RelTime iso={r.released_at} />
@@ -318,7 +322,8 @@ export function ReleaseRow({ r, showApp = true, onOpen }: { r: Release; showApp?
             )}
             {typeof r.task_count === "number" && r.task_count > 0 && (
               <span>
-                · {r.done_count}/{r.task_count} tasks done
+                {"\u00a0· "}
+                {r.done_count}/{r.task_count} tasks done
               </span>
             )}
           </div>
@@ -667,7 +672,8 @@ export function UnreleasedWorkBanner({ className, compact = false }: { className
     <>
       <div className={cn("flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-inset ring-amber-100", className)}>
         <IconRocket size={16} className="shrink-0 text-amber-700" />
-        <div className="min-w-0 flex-1 text-[13px] text-amber-900">
+        {/* Phones: the button drops under the sentence instead of squeezing it. */}
+        <div className="min-w-0 flex-1 basis-[14rem] text-[13px] text-amber-900">
           <p className="font-semibold">
             {total} task{total === 1 ? "" : "s"} in progress {total === 1 ? "isn't" : "aren't"} in any release yet.
             {compact ? " " : " Create the version now and they ride along:"}
@@ -691,7 +697,7 @@ export function UnreleasedWorkBanner({ className, compact = false }: { className
           )}
         </div>
         {!compact && visible.length === 1 && (
-          <Button size="sm" onClick={() => setForm({ app: visible[0].app, platform: visible[0].platform, task_ids: visible[0].tasks.map((t) => t.id) })} className="shrink-0">
+          <Button size="sm" onClick={() => setForm({ app: visible[0].app, platform: visible[0].platform, task_ids: visible[0].tasks.map((t) => t.id) })} className="ml-7 shrink-0 sm:ml-0">
             <IconRocket size={14} /> Create release
           </Button>
         )}
@@ -721,7 +727,7 @@ export function PendingReleaseBanner({ task, className }: { task: TaskCard; clas
     <>
       <div className={cn("flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-inset ring-amber-100", className)}>
         <IconRocket size={16} className="shrink-0 text-amber-700" />
-        <div className="min-w-0 flex-1 text-[13px] text-amber-900">
+        <div className="min-w-0 flex-1 basis-[14rem] text-[13px] text-amber-900">
           <p className="font-semibold">
             {released ? `Released on ${released} of ${targets.length} targets.` : planned ? `Planned on ${planned} of ${targets.length} targets.` : "No release planned yet."} {pending.length} still {pending.length === 1 ? "has" : "have"} no release:
           </p>
@@ -735,7 +741,7 @@ export function PendingReleaseBanner({ task, className }: { task: TaskCard; clas
             ))}
           </p>
         </div>
-        <Button size="sm" onClick={() => (pending.length === 1 ? start(pending[0]) : setChoosing(true))} className="shrink-0">
+        <Button size="sm" onClick={() => (pending.length === 1 ? start(pending[0]) : setChoosing(true))} className="ml-7 shrink-0 sm:ml-0">
           <IconRocket size={14} /> Create release
         </Button>
       </div>

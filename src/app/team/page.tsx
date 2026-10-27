@@ -85,7 +85,7 @@ export default function TeamPage() {
                 </CardHeader>
                 <ul className="divide-y divide-line/80">
                   {list.map((m) => (
-                    <li key={m.id} className={cn("flex items-center gap-4 px-4 py-3.5 sm:px-5", !m.is_active && "opacity-60")}>
+                    <li key={m.id} className={cn("flex items-start gap-3 px-4 py-3.5 sm:items-center sm:gap-4 sm:px-5", !m.is_active && "opacity-60")}>
                       <Avatar user={m} size="lg" />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -94,16 +94,27 @@ export default function TeamPage() {
                           {!m.is_active && <Badge tone="neutral">Deactivated</Badge>}
                           {m.id === me?.id && <span className="text-xs text-ink-subtle">(you)</span>}
                         </div>
-                        <div className="mt-0.5 truncate text-[12px] text-ink-subtle">
-                          {m.title ? `${m.title} · ` : ""}
-                          {isAdmin ? m.email : DEPARTMENT_META[m.department]?.label ?? ""}
-                          {isAdmin && m.last_login_at && (
-                            <span title={istTime(m.last_login_at)}>
-                              {" "}
-                              · active <RelTime iso={m.last_login_at} />
+                        {/* Phones: one fact per line; wider screens: one line joined by "·". */}
+                        <div className="mt-0.5 text-[12px] text-ink-subtle sm:truncate">
+                          {m.title && (
+                            <span className="block sm:inline">
+                              {m.title}
+                              <span className="hidden sm:inline"> · </span>
                             </span>
                           )}
-                          {isAdmin && m.must_change_password && <span className="text-amber-700"> · hasn&rsquo;t set a password yet</span>}
+                          <span className="block [overflow-wrap:anywhere] sm:inline">{isAdmin ? <EmailText email={m.email} /> : DEPARTMENT_META[m.department]?.label ?? ""}</span>
+                          {isAdmin && m.last_login_at && (
+                            <span className="block sm:inline" title={istTime(m.last_login_at)}>
+                              <span className="hidden sm:inline"> · </span>
+                              active <RelTime iso={m.last_login_at} />
+                            </span>
+                          )}
+                          {isAdmin && m.must_change_password && (
+                            <span className="block text-amber-700 sm:inline">
+                              <span className="hidden sm:inline"> · </span>
+                              hasn&rsquo;t set a password yet
+                            </span>
+                          )}
                         </div>
                         {m.apps.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -363,5 +374,18 @@ function MemberSheet({ member: m, meId, onClose }: { member: TeamMember; meId?: 
         </p>
       </div>
     </Sheet>
+  );
+}
+
+/** An e-mail that, when it must wrap, breaks after the "@" rather than mid-word. */
+function EmailText({ email }: { email: string }) {
+  const at = email.indexOf("@");
+  if (at < 1) return <>{email}</>;
+  return (
+    <>
+      {email.slice(0, at + 1)}
+      <wbr />
+      {email.slice(at + 1)}
+    </>
   );
 }
