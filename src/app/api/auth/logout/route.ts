@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { clearSessionCookieOn, getSessionUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
+import { revokeSessions } from "@/lib/sessions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,11 @@ async function endSession<T extends NextResponse>(res: T): Promise<T> {
   const u = await getSessionUser();
   clearSessionCookieOn(res);
   if (u) {
-    after(() => logActivity({ action: "auth.logout", actor: { id: u.uid, email: u.email }, summary: "Signed out" }));
+    after(async () => {
+      // This sign-in leaves "Signed-in devices" too.
+      if (u.sid) await revokeSessions(u.uid, { only: u.sid }).catch(() => 0);
+      await logActivity({ action: "auth.logout", actor: { id: u.uid, email: u.email }, summary: "Signed out" });
+    });
   }
   return res;
 }

@@ -3,6 +3,7 @@ import { readJsonObject } from "@/lib/api";
 import { getSupabase } from "@/lib/supabase";
 import { hashPassword, verifyPassword, safeEqual } from "@/lib/password";
 import { createSession, setSessionCookie } from "@/lib/auth";
+import { openSession } from "@/lib/sessions";
 import { rateLimited } from "@/lib/rate-limit";
 import { checkThrottle, registerFailure, clearThrottle, clientIp, reserveAttempt, overLimit, lockIfExceeded } from "@/lib/throttle";
 import { logActivity } from "@/lib/activity";
@@ -76,12 +77,14 @@ export async function POST(req: NextRequest) {
       await logActivity({ action: "auth.login_blocked", actor: { id: user.id, email: user.email }, summary: "Sign-in blocked (account deactivated)", ip: clientIp(req) });
       return NextResponse.json({ error: "This account has been deactivated. Ask an admin to re-activate it." }, { status: 403 });
     }
+    const sid = await openSession(user.id, user.token_version ?? 0, req);
     const token = await createSession({
       uid: user.id,
       role: user.role,
       email: user.email,
       tv: user.token_version ?? 0,
       mc: !!user.must_change_password,
+      sid,
     });
     await setSessionCookie(token);
     // Bookkeeping after the reply: the cookie is already on it.
@@ -121,7 +124,8 @@ export async function POST(req: NextRequest) {
     }
     console.warn("[auth] Bootstrapped admin account from APP_PASSWORD. Remove APP_PASSWORD from the environment after confirming you can sign in.");
     await clearThrottle(keys);
-    const token = await createSession({ uid: created.id, role: created.role, email: created.email, tv: created.token_version ?? 0, mc: false });
+    const sid = await openSession(created.id, created.token_version ?? 0, req);
+    const token = await createSession({ uid: created.id, role: created.role, email: created.email, tv: created.token_version ?? 0, mc: false, sid });
     await setSessionCookie(token);
     await logActivity({ action: "auth.bootstrap_admin", actor: { id: created.id, email: created.email }, summary: "Created the first admin account", ip: clientIp(req) });
     return NextResponse.json({ ok: true, bootstrap: true });

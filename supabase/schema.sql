@@ -524,6 +524,22 @@ create table if not exists notifications (
 create index if not exists notifications_user_idx on notifications (user_id, created_at desc);
 create index if not exists notifications_unread_idx on notifications (user_id) where read_at is null;
 
+-- (032) One row per sign-in, so a person can see where they are signed in and
+-- end one session without ending the others. The session token carries the
+-- row's id; a revoked row (or one from an older token_version) no longer
+-- verifies. Rows older than the 7-day token life are swept by the daily job.
+create table if not exists user_sessions (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references users(id) on delete cascade,
+  token_version int not null default 0,
+  user_agent    text,
+  ip            text,
+  created_at    timestamptz not null default now(),
+  last_seen     timestamptz not null default now(),
+  revoked_at    timestamptz
+);
+create index if not exists user_sessions_user_idx on user_sessions (user_id, created_at desc);
+
 -- Browser push subscriptions (Web Push / VAPID). One row per browser.
 create table if not exists push_subscriptions (
   id         uuid primary key default gen_random_uuid(),
@@ -1611,6 +1627,7 @@ alter table push_subscriptions enable row level security;
 alter table meeting_recordings enable row level security;
 alter table recording_shares   enable row level security;
 alter table meeting_series_members enable row level security;
+alter table user_sessions      enable row level security;
 
 revoke all on all tables    in schema public from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;

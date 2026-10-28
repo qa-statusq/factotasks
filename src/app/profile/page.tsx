@@ -9,8 +9,11 @@ import { PageHeader, Spinner, PageLoader } from "@/components/ui/misc";
 import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
 import { useSession } from "@/components/providers/session-provider";
-import { mutate } from "@/lib/client-cache";
-import { postJson } from "@/lib/http";
+import { mutate, useCachedFetch, dropEverywhere, settleDelete } from "@/lib/client-cache";
+import { postJson, deleteJson } from "@/lib/http";
+import { useDialog } from "@/components/ui/dialog";
+import { When } from "@/components/ui/live-time";
+import { signOut } from "@/lib/signout";
 import { NAME_MAX, displayName } from "@/lib/name";
 import { DEPARTMENT_META, LIMITS } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
@@ -25,13 +28,14 @@ export default function ProfilePage() {
   const { loading } = useSession();
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      <PageHeader title="Profile" description="How you appear to the team, your notifications and your password." />
+      <PageHeader title="Profile" description="How you appear to the team, your notifications, where you are signed in, and your password." />
       {loading ? (
         <PageLoader />
       ) : (
         <>
           <AccountCard />
           <NotificationsCard />
+          <SessionsCard />
           <ChangePasswordCard />
         </>
       )}
@@ -240,6 +244,108 @@ function NotificationsCard() {
             </div>
             <p className="mt-3 text-[12px] text-ink-subtle">Everything still appears in your Inbox; these only decide what reaches your devices.</p>
           </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+interface SignIn {
+  id: string;
+  device: string;
+  ip: string | null;
+  created_at: string;
+  last_seen: string;
+  current: boolean;
+}
+
+/** Where this account is signed in — end one sign-in, or every other one (GitHub / Google style). */
+function SessionsCard() {
+  const { toast } = useToast();
+  const { confirm } = useDialog();
+  const { data, error, refresh } = useCachedFetch<{ sessions: SignIn[]; untracked: boolean }>("/api/auth/sessions");
+  const [busy, setBusy] = useState<string | null>(null);
+  const list = data?.sessions ?? [];
+  const others = list.filter((x) => !x.current).length;
+
+  async function end(x: SignIn) {
+    if (x.current) {
+      if (!(await confirm({ title: "Sign out of this device?", confirmLabel: "Sign out" }))) return;
+      void signOut();
+      return;
+    }
+    if (!(await confirm({ title: `Sign out ${x.device}?`, message: "That browser is signed out within a few seconds and has to sign in again.", confirmLabel: "Sign out", tone: "danger" }))) return;
+    // Goes at once; comes back only if the server refuses.
+    dropEverywhere(x.id, ["/api/auth/sessions"]);
+    const r = await deleteJson(`/api/auth/sessions?id=${x.id}`);
+    settleDelete(x.id);
+    refresh();
+    if (r.ok) toast(`${x.device} signed out`);
+    else toast(r.data?.error || "Couldn't sign that device out", "error");
+  }
+
+  async function endOthers() {
+    if (busy) return;
+    if (!(await confirm({ title: "Sign out of all other devices?", message: "Every other browser and phone signed in to this account is signed out and has to sign in again. This one stays signed in.", confirmLabel: "Sign out others", tone: "danger" }))) return;
+    setBusy("others");
+    const keep = await currentSubscription().catch(() => null);
+    const r = await postJson("/api/auth/sessions", { others: true, keep_endpoint: keep?.endpoint ?? null });
+    setBusy(null);
+    refresh();
+    if (r.ok) toast("Signed out of all other devices");
+    else toast(r.data?.error || "Couldn't sign the other devices out", "error");
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <span className="inline-flex items-center gap-2">
+            <IconLock size={16} className="text-ink-subtle" /> Signed-in devices
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardBody>
+        {error && !data ? (
+          <p className="text-[13px] text-ink-muted">Couldn&rsquo;t load your sign-ins. <button type="button" onClick={refresh} className="font-medium text-ink underline-offset-2 hover:underline">Try again</button></p>
+        ) : !data ? (
+          <Spinner />
+        ) : (
+          <>
+            <p className="mb-3 text-[13px] text-ink-muted">Every browser and phone signed in to your account in the last 7 days. Sign out any you don&rsquo;t recognise.</p>
+            {list.length > 0 && (
+              <ul className="divide-y divide-line/70 overflow-hidden rounded-lg border border-line">
+                {list.map((x) => (
+                  <li key={x.id} className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium text-ink">
+                        {x.device}
+                        {x.current && <Badge tone="success">This device</Badge>}
+                      </div>
+                      <div className="mt-0.5 text-[12px] text-ink-subtle">
+                        Signed in <When iso={x.created_at} relative={false} />
+                        <span className="block sm:inline">
+                          <span className="hidden sm:inline">{"\u00a0· "}</span>last active <When iso={x.last_seen} />
+                        </span>
+                        {x.ip && <span className="block sm:inline"><span className="hidden sm:inline">{"\u00a0· "}</span>{x.ip}</span>}
+                      </div>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={() => void end(x)} className="self-start sm:self-auto">
+                      Sign out
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {data.untracked && <p className="mt-3 text-[12px] text-ink-subtle">This browser signed in before devices were listed here; signing out of all other devices lists it too.</p>}
+            {(others > 0 || data.untracked) && (
+              <div className="mt-3 flex justify-end">
+                <Button variant="secondary" size="sm" onClick={() => void endOthers()} disabled={!!busy}>
+                  {busy === "others" ? <Spinner /> : "Sign out of all other devices"}
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </CardBody>
     </Card>

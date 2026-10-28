@@ -1,5 +1,6 @@
 import { NextRequest, after } from "next/server";
 import { createSession, setSessionCookie, invalidateAuthCache } from "@/lib/auth";
+import { revokeSessions } from "@/lib/sessions";
 import { resolveUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
 import { hashPassword } from "@/lib/password";
@@ -42,7 +43,10 @@ export async function POST(req: NextRequest) {
   if (error) return serverError(error);
   invalidateAuthCache(u.uid);
 
-  const token = await createSession({ uid: u.uid, role: u.role, email: u.email, tv: nextVersion, mc: false });
+  // Every other sign-in ends (token_version moved on); this one stays, under its own session row.
+  await revokeSessions(u.uid, { keep: u.sid }).catch(() => 0);
+  if (u.sid) await getSupabase().from("user_sessions").update({ token_version: nextVersion }).eq("id", u.sid);
+  const token = await createSession({ uid: u.uid, role: u.role, email: u.email, tv: nextVersion, mc: false, sid: u.sid });
   await setSessionCookie(token);
   after(() => logActivity({ action: "auth.password_set", actor: { id: u.uid, email: u.email }, summary: "Set a new password (first login)" }));
   return ok();

@@ -73,7 +73,9 @@ export async function GET(req: NextRequest) {
   };
   await Promise.all(Array.from({ length: Math.min(5, jobs.length) }, worker));
 
-  await Promise.all([purgeOldActivity(90), purgeOldNotifications(60)]);
+  // Sign-in records outlive their 7-day token by a few weeks, then go.
+  const staleSessions = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  await Promise.all([purgeOldActivity(90), purgeOldNotifications(60), sb.from("user_sessions").delete().lt("created_at", staleSessions)]);
   await logActivity({ action: "cron.daily", actor: { email: "system" }, summary: `Daily job: ${reminders} due-date reminder(s), old activity/notifications trimmed` });
   return NextResponse.json({ ok: true, reminders });
 }
