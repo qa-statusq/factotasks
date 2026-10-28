@@ -21,6 +21,9 @@ interface ComposerDefaults {
   priority?: Priority;
   /** Link the matching target to this version right after creation. */
   release_id?: string | null;
+  /** Attach to this meeting series (a meeting's "New task"): it joins that series' meetings. */
+  series_id?: string | null;
+  series_name?: string | null;
   /** Called with the created task (e.g. a list that wants to react). */
   onCreated?: (task: TaskCard) => void;
 }
@@ -59,7 +62,7 @@ function Composer({ defaults, onClose }: { defaults: ComposerDefaults; onClose: 
   const router = useRouter();
   const { toast } = useToast();
 
-  async function create(values: TaskFormValues, open: boolean): Promise<string | null> {
+  async function create(values: TaskFormValues, open: boolean, another = false): Promise<string | null> {
     const { ok, data } = await postJson<{ task?: TaskCard; error?: string }>("/api/tasks", { ...values, release_id: defaults.release_id ?? null });
     if (!ok || !data?.task) return data?.error || "Couldn't create the task.";
     // Every list that could contain it, plus the dashboard counts.
@@ -69,6 +72,7 @@ function Composer({ defaults, onClose }: { defaults: ComposerDefaults; onClose: 
     mutate("/api/apps");
     defaults.onCreated?.(data.task);
     toast(`Task T-${data.task.number} created`);
+    if (another) return null; // "Create another": the form stays open for the next one
     if (open) closeForNavigation();
     onClose();
     if (open) router.push(`/tasks/${data.task.id}`);
@@ -83,9 +87,11 @@ function Composer({ defaults, onClose }: { defaults: ComposerDefaults; onClose: 
         assignee_ids: defaults.assignee_ids ?? [],
         type: defaults.type,
         priority: defaults.priority,
+        series_id: defaults.series_id ?? null,
+        series_name: defaults.series_name ?? null,
       }}
       onClose={onClose}
-      onSubmit={(v) => create(v, false)}
+      onSubmit={(v, o) => create(v, false, o?.another)}
       secondaryLabel="Create & open"
       onSecondary={(v) => create(v, true)}
     />

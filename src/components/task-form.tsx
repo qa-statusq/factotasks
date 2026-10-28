@@ -14,6 +14,7 @@ import { Spinner, LoadError } from "@/components/ui/misc";
 import { useSession } from "@/components/providers/session-provider";
 import { useToast } from "@/components/ui/toast";
 import { useCachedFetch } from "@/lib/client-cache";
+import { usePref } from "@/lib/use-pref";
 import { cn } from "@/lib/cn";
 import { LIMITS, PRIORITIES, PRIORITY_META, TASK_TYPES, TYPE_META, type Priority, type TaskType } from "@/lib/domain";
 import { IconAndroid, IconApple, IconCheck, IconSearch } from "@/components/ui/icons";
@@ -170,7 +171,8 @@ export function TaskFormSheet({
   mode: "create" | "edit";
   initial?: Partial<TaskFormValues>;
   onClose: () => void;
-  onSubmit: (values: TaskFormValues) => Promise<string | null>;
+  /** `another`: the person ticked "Create another" — the caller keeps the sheet open. */
+  onSubmit: (values: TaskFormValues, opts?: { another: boolean }) => Promise<string | null>;
   /** Optional second submit (e.g. "Create & open"). */
   secondaryLabel?: string;
   onSecondary?: (values: TaskFormValues) => Promise<string | null>;
@@ -227,6 +229,9 @@ export function TaskFormSheet({
     if (m) toast(m, "error");
   };
   const titleRef = useRef<HTMLInputElement>(null);
+  // "Create another" (create mode): after saving, the form stays open with everything but the
+  // title and description, ready for the next task — the way Jira and Linear do it. Remembered.
+  const [another, setAnother] = usePref<boolean>("task.createAnother", false);
 
   useEffect(() => {
     const t = window.setTimeout(() => titleRef.current?.focus(), 30);
@@ -263,17 +268,31 @@ export function TaskFormSheet({
     };
   }
 
+  // What "unchanged" means: the opening values, or — after "Create another" — the choices
+  // carried over to the next task (closing then asks nothing unless something new was typed).
+  const [base, setBase] = useState(() => ({
+    targets: initial?.targets ?? [],
+    type: initial?.type ?? "feature",
+    priority: initial?.priority ?? "medium",
+    assignees: initial?.assignee_ids ?? [],
+    due: initial?.due_date ?? "",
+    labels: initial?.labels ?? [],
+    estimate: initial?.estimate_hours != null ? String(initial.estimate_hours) : "",
+    seriesId: initial?.series_id ?? "",
+    title: initial?.title ?? "",
+    description: initial?.description ?? "",
+  }));
   const dirty =
-    !same(title, initial?.title ?? "") ||
-    !same(description, initial?.description ?? "") ||
-    !same(targets.map((t) => `${t.app_id}:${t.platform}`), (initial?.targets ?? []).map((t) => `${t.app_id}:${t.platform}`)) ||
-    type !== (initial?.type ?? "feature") ||
-    priority !== (initial?.priority ?? "medium") ||
-    !same(assignees, initial?.assignee_ids ?? []) ||
-    !same(due, initial?.due_date ?? "") ||
-    !same(labels, initial?.labels ?? []) ||
-    !same(estimate, initial?.estimate_hours != null ? String(initial.estimate_hours) : "") ||
-    !same(seriesId, initial?.series_id ?? "");
+    !same(title, base.title) ||
+    !same(description, base.description) ||
+    !same(targets.map((t) => `${t.app_id}:${t.platform}`), base.targets.map((t) => `${t.app_id}:${t.platform}`)) ||
+    type !== base.type ||
+    priority !== base.priority ||
+    !same(assignees, base.assignees) ||
+    !same(due, base.due) ||
+    !same(labels, base.labels) ||
+    !same(estimate, base.estimate) ||
+    !same(seriesId, base.seriesId);
   const close = useDiscardGuard(dirty && !busy, onClose);
   useSubmitShortcut(() => void run("primary"));
 
@@ -283,17 +302,35 @@ export function TaskFormSheet({
     if (!values) return;
     setBusy(which);
     setError("");
-    const err = await (which === "secondary" && onSecondary ? onSecondary(values) : onSubmit(values));
+    const keepOpen = mode === "create" && which === "primary" && another;
+    const err = await (which === "secondary" && onSecondary ? onSecondary(values) : onSubmit(values, { another: keepOpen }));
     if (err) {
       setBusy(false);
       setError(err);
+      return;
     }
-    // On success the caller closes the sheet; keep the spinner until unmount.
+    if (keepOpen) {
+      // Next task: same apps, people, meeting, priority, due date and labels; a fresh title.
+      setTitle("");
+      setDescription("");
+      setLabelDraft("");
+      setBase({ targets, type, priority, assignees, due, labels: values.labels, estimate, seriesId, title: "", description: "" });
+      setLabels(values.labels);
+      setBusy(false);
+      titleRef.current?.focus();
+    }
+    // Otherwise the caller closes the sheet; keep the spinner until unmount.
   }
 
   const footer = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <span className="mr-auto hidden text-[11px] text-ink-subtle sm:inline">
+      {mode === "create" && (
+        <label className="mr-auto flex cursor-pointer select-none items-center gap-2 text-[12.5px] text-ink-muted" title="After saving, keep the form open for the next task">
+          <input type="checkbox" checked={another} onChange={(e) => setAnother(e.target.checked)} className="h-4 w-4 accent-[var(--color-brand-600,#1c1c1a)]" />
+          Create another
+        </label>
+      )}
+      <span className={cn("hidden text-[11px] text-ink-subtle sm:inline", mode !== "create" && "mr-auto")}>
         <kbd className="rounded border border-line bg-canvas px-1 py-0.5 font-sans">Ctrl</kbd>+<kbd className="rounded border border-line bg-canvas px-1 py-0.5 font-sans">Enter</kbd> to save
       </span>
       {secondaryLabel && onSecondary && (

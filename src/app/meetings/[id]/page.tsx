@@ -32,8 +32,9 @@ import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { LIMITS, taskRef } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
-import { IconMaximize, IconPrint, IconCheck, IconTrash, IconEdit, IconPresentation, IconChevronDown, IconPlus, IconX } from "@/components/ui/icons";
+import { IconMaximize, IconPrint, IconCheck, IconTrash, IconEdit, IconPresentation, IconChevronDown, IconPlus, IconX, IconLink } from "@/components/ui/icons";
 import type { AppOverview, DeckPack, Meeting, MeetingNote, MeetingPack, MeetingSeries, TaskCard } from "@/lib/types";
+import { useTaskComposer } from "@/components/task-composer";
 
 /** Separator glued to the word before it, so a wrapped line never opens with "·". */
 const SEP = "\u00a0· ";
@@ -63,6 +64,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: DeckPack; cacheKey: string })
   const { toast } = useToast();
   const { confirm } = useDialog();
   const { isAdmin } = useSession();
+  const composer = useTaskComposer();
   const m = pack.meeting;
   const { data: sd } = useCachedFetch<{ series: MeetingSeries[] }>("/api/meeting-series");
   // The pack carries the agenda; the meeting row (list endpoint) carries the closing rule.
@@ -155,8 +157,26 @@ function MeetingScreen({ pack, cacheKey }: { pack: DeckPack; cacheKey: string })
           </Link>
           {canRecordMeeting(m) && <RecordButton meetingId={m.id} title={m.title} />}
           {canAdd && (
-            <Button variant="secondary" size="sm" onClick={() => setAdding(true)} title="Pin any task to this meeting">
-              <IconPlus size={14} /> Add task
+            <Button
+              variant="secondary"
+              size="sm"
+              title="A new task on this meeting's series — it joins this meeting and the next ones until it's done"
+              onClick={() =>
+                composer.open({
+                  series_id: m.series_id ?? null,
+                  series_name: pack.series?.name ?? null,
+                  // A meeting about one app: the task ships on it (both platforms; trimmed to what the app has).
+                  app_id: m.app_ids?.length === 1 ? m.app_ids[0] : null,
+                  onCreated: () => mutate(cacheKey),
+                })
+              }
+            >
+              <IconPlus size={14} /> New task
+            </Button>
+          )}
+          {canAdd && (
+            <Button variant="secondary" size="sm" onClick={() => setAdding(true)} title="Pin an existing task to this meeting">
+              <IconLink size={14} /> Add existing
             </Button>
           )}
           {isAdmin && !finalized && (
