@@ -23,7 +23,7 @@ import { useSession } from "@/components/providers/session-provider";
 import { useClock } from "@/components/providers/clock-provider";
 import { workSeconds, WORK_SCHEDULE_TEXT } from "@/lib/work-time";
 import { useNameLabels } from "@/lib/use-name-labels";
-import { useCachedFetch, mutate, mutatePrefix } from "@/lib/client-cache";
+import { useCachedFetch, mutate, mutatePrefix, dropEverywhere, settleDelete } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { reviewTask, applyTaskCard, refreshTaskViews } from "@/lib/task-actions";
 import { postJson, deleteJson } from "@/lib/http";
@@ -155,13 +155,17 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
 
   async function remove() {
     if (!(await confirm({ title: `Delete ${taskRef(task.number)}?`, message: "Removes the task, its comments and attachments.", confirmLabel: "Delete", tone: "danger" }))) return;
+    // Goes at once from every list; the server catches up in the background and the task
+    // comes back only if that fails.
+    const ref = taskRef(task.number);
+    dropEverywhere(task.id, ["/api/tasks", "/api/dashboard", "/api/approvals", "/api/meetings/"]);
+    toast(`${ref} deleted`);
+    router.replace("/tasks");
     const { ok, data } = await deleteJson(cacheKey);
-    if (ok) {
-      toast(`${taskRef(task.number)} deleted`);
-      mutatePrefix("/api/tasks");
-      mutate("/api/dashboard");
-      router.replace("/tasks");
-    } else toast(data?.error || "Couldn't delete the task", "error");
+    settleDelete(task.id);
+    mutatePrefix("/api/tasks");
+    mutate("/api/dashboard");
+    if (!ok) toast(data?.error ? `Couldn't delete ${ref}: ${data.error}` : `Couldn't delete ${ref} — it is back`, "error");
   }
 
   const pending = task.requested_status;
@@ -481,9 +485,13 @@ function Comments({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) {
   }
   async function remove(c: TaskComment) {
     if (!(await confirm({ title: "Delete this comment?", confirmLabel: "Delete", tone: "danger" }))) return;
+    // Goes at once; comes back only if the server refuses.
+    mutate(cacheKey, { task: { ...task, comments: task.comments.filter((x) => x.id !== c.id), comment_count: Math.max(0, task.comment_count - 1) } });
     const { ok, data } = await deleteJson(`/api/comments/${c.id}`);
-    if (ok) mutate(cacheKey, { task: { ...task, comments: task.comments.filter((x) => x.id !== c.id), comment_count: Math.max(0, task.comment_count - 1) } });
-    else toast(data?.error || "Couldn't delete", "error");
+    if (!ok) {
+      mutate(cacheKey);
+      toast(data?.error || "Couldn't delete the comment", "error");
+    }
   }
 
   return (

@@ -15,7 +15,7 @@ import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { AppScopePicker } from "@/components/meeting-series";
 import { AdminGate } from "@/components/admin-gate";
-import { useCachedFetch, mutate } from "@/lib/client-cache";
+import { useCachedFetch, mutate, dropEverywhere, settleDelete } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { SHARED_ORDER_ID } from "@/lib/meeting-agenda";
@@ -174,12 +174,14 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
   async function remove() {
     if (!series) return;
     if (!(await confirm({ title: `Delete “${series.name}”?`, message: "Its meetings are kept; they just lose the series. Carry-forward for them restarts, and its people lose access to them.", confirmLabel: "Delete", tone: "danger" }))) return;
+    // Goes at once; comes back only if the server refuses.
+    dropEverywhere(series.id, ["/api/meeting-series"]);
+    toast("Series deleted");
+    onDeleted();
     const r = await deleteJson(`/api/meeting-series/${series.id}`);
-    if (r.ok) {
-      toast("Series deleted");
-      mutate("/api/meeting-series");
-      onDeleted();
-    } else toast(r.data?.error || "Couldn't delete", "error");
+    settleDelete(series.id);
+    mutate("/api/meeting-series");
+    if (!r.ok) toast(r.data?.error ? `Couldn't delete the series: ${r.data.error}` : "Couldn't delete the series — it is back", "error");
   }
 
   return (

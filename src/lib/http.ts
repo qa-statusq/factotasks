@@ -26,14 +26,34 @@ export function deleteJson<T = { error?: string } & Record<string, unknown>>(url
   return postJson<T>(url, undefined, "DELETE");
 }
 
-export async function postJson<T = { error?: string } & Record<string, unknown>>(
+// Writes on their way, by method + url + body. A second identical write while the first
+// is still travelling (a double click, a second tap because the first felt slow) joins the
+// first request instead of sending another: no duplicate work, and no "not found" for a
+// delete the first request already did. Standard request de-duplication.
+const inFlight = new Map<string, Promise<JsonResult<unknown>>>();
+
+export function postJson<T = { error?: string } & Record<string, unknown>>(
   url: string,
   body?: unknown,
   method: "POST" | "PATCH" | "PUT" | "DELETE" = "POST",
+  timeoutMs = 20_000
+): Promise<JsonResult<T>> {
+  const key = `${method} ${url} ${body === undefined ? "" : JSON.stringify(body)}`;
+  const running = inFlight.get(key);
+  if (running) return running as Promise<JsonResult<T>>;
+  const p = sendJson<T>(url, body, method, timeoutMs).finally(() => inFlight.delete(key));
+  inFlight.set(key, p as Promise<JsonResult<unknown>>);
+  return p;
+}
+
+async function sendJson<T>(
+  url: string,
+  body: unknown,
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
   // Per-call ceiling. It must exceed the slowest route's own budget (uploads
   // and the daily job declare maxDuration 60), or a slow-but-successful save
   // would be completed server-side and then reported as a network error.
-  timeoutMs = 20_000
+  timeoutMs: number
 ): Promise<JsonResult<T>> {
   // NEVER throws. A network failure/timeout resolves to { ok:false, status:0 }
   // like any other failed request — so the 20+ call sites can't strand a busy
@@ -81,6 +101,9 @@ export async function postJson<T = { error?: string } & Record<string, unknown>>
   } catch {
     data = null as T;
   }
+  // A delete that finds the thing already gone (removed in another tab, or by a teammate a
+  // moment ago) reached its goal: report success, not an error toast.
+  if (method === "DELETE" && res.status === 404) return { ok: true, status: 404, data: { gone: true } as T };
   if (res.ok) syncRevAfterOwnWrite();
   return { ok: res.ok, status: res.status, data };
 }

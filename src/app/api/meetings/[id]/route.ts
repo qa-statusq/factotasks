@@ -105,10 +105,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   const { id } = await params;
   if (!isUuid(id)) return fail("Meeting not found", 404);
-  const cur = await loadMeeting(id);
-  if (!cur) return fail("Meeting not found", 404);
-  const { error } = await getSupabase().from("meetings").delete().eq("id", id);
+  // One round trip: delete and read back the title for the activity log.
+  const { data: gone, error } = await getSupabase().from("meetings").delete().eq("id", id).select("title").maybeSingle();
   if (error) return serverError(error);
-  after(() => logActivity({ action: "meeting.delete", entityType: "meeting", entityId: id, summary: `Deleted meeting “${cur.title}”` }));
+  if (!gone) return fail("Meeting not found", 404);
+  after(() => logActivity({ action: "meeting.delete", entityType: "meeting", entityId: id, summary: `Deleted meeting “${gone.title}”` }));
   return ok();
 }

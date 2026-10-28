@@ -153,6 +153,55 @@ export function mutateWhere(prefix: string, fn: (data: unknown, key: string) => 
   }
 }
 
+/**
+ * OPTIMISTIC removal: take the item with this `id` out of every cached list
+ * under `prefixes` (any array of objects with an `id`, one level deep — the
+ * shape of every list payload here), so it disappears from all screens at once
+ * while the delete request is still on its way. The caller revalidates after.
+ */
+export function dropEverywhere(id: string, prefixes: string[]) {
+  pendingDeletes.add(id);
+  for (const prefix of prefixes)
+    mutateWhere(prefix, (data) => {
+      if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
+      let changed = false;
+      const next: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+      for (const [k, v] of Object.entries(next)) {
+        if (!Array.isArray(v)) continue;
+        const kept = v.filter((x) => !(x && typeof x === "object" && (x as { id?: unknown }).id === id));
+        if (kept.length !== v.length) {
+          next[k] = kept;
+          changed = true;
+        }
+      }
+      return changed ? next : undefined;
+    });
+}
+
+// Ids removed optimistically whose delete request has not answered yet.
+const pendingDeletes = new Set<string>();
+
+/** The delete request for `id` answered (either way): lists may show it again if it still exists. */
+export function settleDelete(id: string) {
+  pendingDeletes.delete(id);
+}
+
+/** A fetched payload without any item whose delete is still on its way (lists one level deep). */
+function stripPending(data: unknown): unknown {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  let changed = false;
+  const next: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+  for (const [k, v] of Object.entries(next)) {
+    if (!Array.isArray(v)) continue;
+    const kept = v.filter((x) => !(x && typeof x === "object" && pendingDeletes.has((x as { id?: string }).id ?? "")));
+    if (kept.length !== v.length) {
+      next[k] = kept;
+      changed = true;
+    }
+  }
+  return changed ? next : data;
+}
+
 /** Background-revalidate every mounted key under `prefix` (after an optimistic edit). */
 export function revalidatePrefix(prefix: string) {
   for (const key of subscribers.keys()) if (key.startsWith(prefix)) revalidate(key, true).catch(reportAuthFailure);
@@ -363,6 +412,8 @@ function revalidate(key: string, force = false): Promise<unknown> {
         revalidate(key).catch(() => {});
         return d;
       }
+      // A list loaded while a delete is still on its way must not bring the item back.
+      if (pendingDeletes.size) d = stripPending(d) as typeof d;
       const prev = cache.get(key);
       // An optimistic mutate(key, data) landed AFTER this fetch started — the
       // fetch carries pre-write data; committing it would visibly revert the

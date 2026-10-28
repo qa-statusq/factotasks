@@ -21,7 +21,7 @@ import { useTaskComposer } from "@/components/task-composer";
 import { useNeedsApproval } from "@/lib/use-policy";
 import { useSubmitShortcut } from "@/lib/use-submit-shortcut";
 import { useDiscardGuard, same } from "@/lib/use-discard-guard";
-import { useCachedFetch, mutate, mutatePrefix, mutateWhere, revalidatePrefix } from "@/lib/client-cache";
+import { useCachedFetch, mutate, mutatePrefix, mutateWhere, revalidatePrefix, dropEverywhere, settleDelete } from "@/lib/client-cache";
 import { postJson, deleteJson } from "@/lib/http";
 import { fmtYmd } from "@/lib/time";
 import { When } from "@/components/ui/live-time";
@@ -360,12 +360,14 @@ export function ReleaseViewSheet({ release, apps, onClose }: { release: Release;
 
   async function remove() {
     if (!(await confirm({ title: `Delete v${r.version_name}?`, message: "Linked tasks keep existing; only the release entry is removed.", confirmLabel: "Delete", tone: "danger" }))) return;
+    // Goes at once from every list; comes back only if the server refuses.
+    dropEverywhere(r.id, ["/api/releases", `/api/apps/${r.app_id}`]);
+    toast("Release deleted");
+    onClose();
     const { ok, data } = await deleteJson(key);
-    if (ok) {
-      toast("Release deleted");
-      invalidateReleases(r.app_id);
-      onClose();
-    } else toast(data?.error || "Couldn't delete", "error");
+    settleDelete(r.id);
+    invalidateReleases(r.app_id);
+    if (!ok) toast(data?.error ? `Couldn't delete v${r.version_name}: ${data.error}` : `Couldn't delete v${r.version_name} — it is back`, "error");
   }
 
   async function markReleased() {

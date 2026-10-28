@@ -24,7 +24,7 @@ import { prettyDate } from "@/components/release-ui";
 import { tabMemSet } from "@/lib/compat";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
-import { useCachedFetch, mutate } from "@/lib/client-cache";
+import { useCachedFetch, mutate, dropEverywhere, settleDelete } from "@/lib/client-cache";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText, type AgendaGroup } from "@/lib/meeting-agenda";
 import { postJson, deleteJson } from "@/lib/http";
@@ -105,12 +105,15 @@ function MeetingScreen({ pack, cacheKey }: { pack: DeckPack; cacheKey: string })
   const [editing, setEditing] = useState(false);
   async function remove() {
     if (!(await confirm({ title: "Delete this meeting?", message: "Its minutes are deleted too. Tasks are untouched.", confirmLabel: "Delete", tone: "danger" }))) return;
+    // Goes at once — out of every list, and off this page; the server catches up in the
+    // background and the meeting comes back only if that fails.
+    dropEverywhere(m.id, ["/api/meetings", "/api/recordings"]);
+    toast("Meeting deleted");
+    router.replace("/meetings");
     const { ok, data } = await deleteJson(cacheKey);
-    if (ok) {
-      toast("Meeting deleted");
-      mutate("/api/meetings");
-      router.replace("/meetings");
-    } else toast(data?.error || "Couldn't delete", "error");
+    settleDelete(m.id);
+    mutate("/api/meetings");
+    if (!ok) toast(data?.error ? `Couldn't delete the meeting: ${data.error}` : "Couldn't delete the meeting — it is back", "error");
   }
 
   const totalPending = pack.pending.length;
