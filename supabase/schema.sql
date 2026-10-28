@@ -1335,7 +1335,13 @@ as $$
         'carried', (select count(*) from pending p where u.id = any(p.assignee_ids) and p.carry > 0),
         'overdue', (select count(*) from pending p, asof where u.id = any(p.assignee_ids) and p.due_date < asof.today)
       ) order by u.department, u.first_name, u.email)
-      from users u where u.is_active
+      -- (031) The meeting's people, not the whole team: its series' members, plus
+      -- anyone with a task on this agenda (so no one with work here is hidden).
+      from users u where u.is_active and (
+        u.id in (select sm.user_id from meeting_series_members sm, m where sm.series_id = m.series_id)
+        or exists (select 1 from done d where u.id = any(d.assignee_ids))
+        or exists (select 1 from pending p where u.id = any(p.assignee_ids))
+      )
     ), '[]'::jsonb) else '[]'::jsonb end,
     'apps', coalesce((
       select jsonb_agg(jsonb_build_object(
