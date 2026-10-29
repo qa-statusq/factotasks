@@ -9,7 +9,7 @@ import { AppTile, PlatformGlyph } from "@/components/ui/task-chips";
 import { nameInitials } from "@/lib/name";
 import { ClampedText } from "@/components/ui/clamped-text";
 import { NoteLink } from "@/components/ui/note-link";
-import { IconAndroid, IconApple, IconCheck, IconPaperclip } from "@/components/ui/icons";
+import { IconAndroid, IconApple, IconCheck, IconPaperclip, IconMessage } from "@/components/ui/icons";
 import { createContext, useContext } from "react";
 import type { DeckPack, MeetingNote, MeetingPack, TaskCard, UserBrief } from "@/lib/types";
 
@@ -567,6 +567,7 @@ function TaskTable({
                     {typeof t.carry === "number" && t.carry > 0 && <CarryChip carry={t.carry} />}
                     {t.pinned && <span className="shrink-0 rounded-full bg-canvas px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold text-ink-muted ring-1 ring-inset ring-line">Pinned</span>}
                     <AttachmentChip t={t} />
+                    <CommentChip t={t} />
                   </div>
                   <ClampedText text={desc} lines={2} className="mt-[0.4cqw] text-[1.15cqw] leading-snug text-ink-muted" buttonClassName="mt-[0.2cqw] text-[1.05cqw]" moreLabel="Show more" lessLabel="Show less" />
                   {matrix && <DeckTargets t={t} />}
@@ -762,23 +763,32 @@ function NoteKind({ kind, label }: { kind: MeetingNote["kind"]; label?: string }
   );
 }
 
-/** Opens a task's attachments from a slide; the deck page supplies the viewer. */
-export const DeckAttachmentsContext = createContext<((t: TaskCard) => void) | null>(null);
+/** Opens a task's attachments or comments from a slide; the deck page supplies the viewers. */
+export const DeckTaskContext = createContext<{ attachments: (t: TaskCard) => void; comments: (t: TaskCard) => void } | null>(null);
 
-/** "📎 3" on a task with attachments — opens them in the viewer, previous/next between them. */
+const CHIP = "deck-chrome inline-flex shrink-0 items-center gap-[0.3cqw] rounded-full bg-canvas px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold text-ink-muted ring-1 ring-inset ring-line hover:text-ink hover:ring-ink/40";
+
+/** Paperclip + count on a task with attachments — opens them in the viewer, previous/next between them. */
 function AttachmentChip({ t }: { t: TaskCard }) {
-  const open = useContext(DeckAttachmentsContext);
+  const open = useContext(DeckTaskContext);
   if (!open || !t.attachment_count) return null;
   const n = t.attachment_count;
   return (
-    <button
-      type="button"
-      onClick={() => open(t)}
-      className="deck-chrome inline-flex shrink-0 items-center gap-[0.3cqw] rounded-full bg-canvas px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold text-ink-muted ring-1 ring-inset ring-line hover:text-ink hover:ring-ink/40"
-      title={`${n} attachment${n === 1 ? "" : "s"} — open`}
-      aria-label={`Open ${n} attachment${n === 1 ? "" : "s"}`}
-    >
+    <button type="button" onClick={() => open.attachments(t)} className={CHIP} title={`${n} attachment${n === 1 ? "" : "s"} — open`} aria-label={`Open ${n} attachment${n === 1 ? "" : "s"}`}>
       <IconPaperclip className="h-[1.05cqw] w-[1.05cqw]" />
+      {n}
+    </button>
+  );
+}
+
+/** Speech bubble + count on a task with comments — opens them, read-only. */
+function CommentChip({ t }: { t: TaskCard }) {
+  const open = useContext(DeckTaskContext);
+  if (!open || !t.comment_count) return null;
+  const n = t.comment_count;
+  return (
+    <button type="button" onClick={() => open.comments(t)} className={CHIP} title={`${n} comment${n === 1 ? "" : "s"} — open`} aria-label={`Open ${n} comment${n === 1 ? "" : "s"}`}>
+      <IconMessage className="h-[1.05cqw] w-[1.05cqw]" />
       {n}
     </button>
   );

@@ -12,10 +12,11 @@ import { useRecorder, screenRecordingSupported } from "@/lib/use-recorder";
 import { canRecordMeeting } from "@/components/recording-controls";
 import { fmtClock } from "@/lib/recordings";
 import { IconCircleDot, IconX, IconMaximize, IconChevronLeft, IconChevronRight, IconPrint, IconApps, IconUserCheck, IconMessage, IconArrowRight } from "@/components/ui/icons";
-import { buildSlides, Mark, DeckAttachmentsContext, type Slide } from "./deck-slides";
+import { buildSlides, Mark, DeckTaskContext, type Slide } from "./deck-slides";
+import { CommentsViewer } from "@/components/comments-viewer";
 import { AttachmentViewer, kindOf } from "@/components/attachment-viewer";
 import { istDate } from "@/lib/time";
-import type { DeckPack, TaskAttachment, TaskCard } from "@/lib/types";
+import type { DeckPack, TaskAttachment, TaskCard, TaskComment } from "@/lib/types";
 import { useDeckKeys, useIdleChrome } from "./use-deck-controls";
 
 /**
@@ -77,14 +78,32 @@ function Deck() {
   const touchX = useRef<number | null>(null);
   const { chrome, wake } = useIdleChrome();
   const [jumpOpen, setJumpOpen] = useState(false);
-  // A task's attachments, opened from its paperclip on a slide.
+  // A task's attachments or comments, opened from the icons on its slide row. The task's
+  // details are fetched once per task and reused while the deck is open.
   const [viewing, setViewing] = useState<{ taskId: string; items: TaskAttachment[] } | null>(null);
-  const openAttachments = useCallback(async (t: TaskCard) => {
+  const [reading, setReading] = useState<{ task: TaskCard; comments: TaskComment[] } | null>(null);
+  const details = useRef(new Map<string, { attachments?: TaskAttachment[]; comments?: TaskComment[] }>());
+  const loadTask = useCallback(async (t: TaskCard) => {
+    const hit = details.current.get(t.id);
+    if (hit) return hit;
     const r = await fetch(`/api/tasks/${t.id}`, { credentials: "same-origin" }).catch(() => null);
-    const d = r && r.ok ? ((await r.json()) as { task?: { attachments?: TaskAttachment[] } }) : null;
-    const items = d?.task?.attachments ?? [];
-    if (items.length) setViewing({ taskId: t.id, items });
+    const d = r && r.ok ? ((await r.json()) as { task?: { attachments?: TaskAttachment[]; comments?: TaskComment[] } }) : null;
+    if (d?.task) details.current.set(t.id, d.task);
+    return d?.task ?? null;
   }, []);
+  const taskActions = useMemo(
+    () => ({
+      attachments: async (t: TaskCard) => {
+        const items = (await loadTask(t))?.attachments ?? [];
+        if (items.length) setViewing({ taskId: t.id, items });
+      },
+      comments: async (t: TaskCard) => {
+        const d = await loadTask(t);
+        if (d) setReading({ task: t, comments: d.comments ?? [] });
+      },
+    }),
+    [loadTask]
+  );
 
   const slides = useMemo<Slide[]>(() => (data ? buildSlides(data) : []), [data]);
   const total = slides.length;
@@ -151,7 +170,7 @@ function Deck() {
       <style>{`@media print { @page { size: landscape; margin: 0; } }`}</style>
       {/* 16:9 stage */}
       <EagerIconsContext.Provider value={true}>
-      <DeckAttachmentsContext.Provider value={openAttachments}>
+      <DeckTaskContext.Provider value={taskActions}>
       <div className="deck-stage relative overflow-hidden bg-canvas text-ink shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_30px_80px_rgba(0,0,0,0.6)]" style={{ width: "min(100vw, calc(100vh * 16 / 9))", height: "min(100vh, calc(100vw * 9 / 16))" }}>
         {/* The title band lives once, above every slide, so it never blinks on a slide change. Each slide keeps an invisible copy for print. */}
         <div className="deck-chrome absolute inset-x-0 top-0 flex items-center bg-[#1c1c1a] px-[4cqw] text-[1.05cqw] text-white/60" style={{ height: "9.6%", containerType: "inline-size" }}>
@@ -213,7 +232,7 @@ function Deck() {
         <button type="button" onClick={prev} className="deck-chrome absolute inset-y-[12%] left-0 w-[3%] opacity-0" aria-label="Previous slide" tabIndex={-1} />
         <button type="button" onClick={next} className="deck-chrome absolute inset-y-[12%] right-0 w-[3%] opacity-0" aria-label="Next slide" tabIndex={-1} />
       </div>
-      </DeckAttachmentsContext.Provider>
+      </DeckTaskContext.Provider>
       </EagerIconsContext.Provider>
 
       {viewing && (
@@ -223,6 +242,7 @@ function Deck() {
           onClose={() => setViewing(null)}
         />
       )}
+      {reading && <CommentsViewer task={reading.task} comments={reading.comments} onClose={() => setReading(null)} />}
 
       {jumpOpen && (
         <div className="absolute inset-0 z-20 flex items-start justify-center bg-black/50 p-6 pt-16" onClick={() => setJumpOpen(false)}>
