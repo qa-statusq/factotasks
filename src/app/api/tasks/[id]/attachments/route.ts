@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { fail, serverError, readCappedBody, storageFail } from "@/lib/api";
+import { fail, ok, serverError, readCappedBody, readJsonObject, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { LIMITS, taskRef } from "@/lib/domain";
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { error: upErr } = await sb.storage.from("attachments").upload(key, bytes, { contentType: mime, upsert: false, cacheControl: "3600" });
     if (upErr) {
       console.error("[attachments] upload failed:", upErr);
-      return fail("Couldn't store the file — is the “attachments” bucket created? (supabase/storage.sql)", 502);
+      return fail("Couldn't store the file", 502);
     }
   }
 
@@ -150,4 +150,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       uploaded_by: embeddedUser(data.uploader),
     },
   }, { headers: { "Server-Timing": timing } });
+}
+
+/**
+ * Put a batch the user just uploaded into the order they picked it. Files upload
+ * several at a time, so they are recorded in the order they FINISH; this re-times
+ * them (to the millisecond, within the batch's own first time) so the task lists
+ * them as selected. Only the uploader's own files from the last hour.
+ */
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const u = await requireAccessUser();
+  if (u instanceof NextResponse) return u;
+  const { id } = await params;
+  if (!isUuid(id)) return fail("Task not found", 404);
+  const b = await readJsonObject(req);
+  const order = Array.isArray(b.order) ? b.order : null;
+  if (!order || order.length < 2 || order.length > LIMITS.attachmentsPerTask || !order.every(isUuid) || new Set(order).size !== order.length) return fail("Invalid order");
+  const sb = getSupabase();
+  const [rows, visible] = await Promise.all([
+    sb.from("task_attachments").select("id, created_at").eq("task_id", id).eq("uploaded_by", u.uid).gte("created_at", new Date(Date.now() - 3600_000).toISOString()).in("id", order),
+    canSeeTask(u, id),
+  ]);
+  if (!visible) return fail("Task not found", 404);
+  if (rows.error) return serverError(rows.error);
+  if ((rows.data || []).length !== order.length) return fail("Those files can no longer be reordered", 409);
+  const first = Math.min(...(rows.data || []).map((r) => Date.parse(r.created_at as string)));
+  const results = await Promise.all(order.map((attId: string, i: number) => sb.from("task_attachments").update({ created_at: new Date(first + i).toISOString() }).eq("id", attId)));
+  const failed = results.find((r) => r.error);
+  if (failed) return serverError(failed.error);
+  return ok();
 }

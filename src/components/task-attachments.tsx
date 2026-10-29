@@ -8,8 +8,8 @@ import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
-import { mutate } from "@/lib/client-cache";
-import { deleteJson } from "@/lib/http";
+import { mutate, mutateWhere } from "@/lib/client-cache";
+import { deleteJson, postJson } from "@/lib/http";
 import { compressImage } from "@/lib/image-compress";
 import { fmtBytes } from "@/lib/format";
 import { LIMITS } from "@/lib/domain";
@@ -34,7 +34,7 @@ interface UploadRow {
 const PARALLEL_UPLOADS = 3;
 
 /** PUT/POST with upload progress (XHR is the only browser API that reports it). */
-function postWithProgress(url: string, body: FormData, onProgress: (ratio: number) => void): Promise<{ ok: boolean; data: { error?: string } | null }> {
+function postWithProgress(url: string, body: FormData, onProgress: (ratio: number) => void): Promise<{ ok: boolean; data: { error?: string; attachment?: TaskAttachment } | null }> {
   return new Promise((resolve) => {
     const x = new XMLHttpRequest();
     x.open("POST", url);
@@ -90,6 +90,19 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
     setUploading(list.map((f, i) => ({ name: f.name, size: f.size, progress: 0, phase: "waiting", thumb: thumbs[i] })));
     const set = (i: number, p: Partial<UploadRow>) => setUploading((cur) => cur.map((x, j) => (j === i ? { ...x, ...p } : x)));
     let added = 0;
+    // Files upload several at a time and so FINISH in any order; the task still lists
+    // them in the order they were picked — placed locally as each one lands, then
+    // the server is told the order once, at the end (one request, only if needed).
+    const landed: (TaskAttachment | undefined)[] = [];
+    const finished: string[] = [];
+    const place = () =>
+      mutateWhere(cacheKey, (d, key) => {
+        const t = key === cacheKey ? (d as { task?: TaskDetail } | undefined)?.task : undefined;
+        if (!t) return undefined;
+        const mine = landed.filter((a): a is TaskAttachment => !!a);
+        const ids = new Set(mine.map((a) => a.id));
+        return { ...(d as object), task: { ...t, attachments: [...t.attachments.filter((a) => !ids.has(a.id)), ...mine] } };
+      });
     const queue = list.map((f, i) => [f, i] as const);
     const one = async (original: File, i: number) => {
       set(i, { phase: "sending" });
@@ -100,10 +113,12 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
         const fd = new FormData();
         fd.append("file", file, file.name);
         const { ok, data } = await postWithProgress(base, fd, (ratio) => set(i, { progress: ratio, phase: ratio >= 0.999 ? "saving" : "sending" }));
-        if (!ok) throw new Error(data?.error || "Upload failed");
+        if (!ok || !data?.attachment) throw new Error(data?.error || "Upload failed");
         added++;
+        landed[i] = data.attachment;
+        finished.push(data.attachment.id);
+        place();
         set(i, { progress: 1, phase: "done" });
-        mutate(cacheKey);
       } catch (e) {
         set(i, { phase: "error", error: (e as Error).message });
       }
@@ -112,7 +127,12 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
       for (let next = queue.shift(); next; next = queue.shift()) await one(next[0], next[1]);
     };
     await Promise.all(Array.from({ length: Math.min(PARALLEL_UPLOADS, list.length) }, worker));
-    if (added) toast(added === 1 ? "File attached" : `${added} files attached`);
+    if (added) {
+      toast(added === 1 ? "File attached" : `${added} files attached`);
+      const picked = landed.filter((a): a is TaskAttachment => !!a).map((a) => a.id);
+      if (picked.join() !== finished.join()) await postJson(base, { order: picked }, "PATCH");
+      mutate(cacheKey);
+    }
     window.setTimeout(() => {
       setUploading((cur) => cur.filter((x) => x.phase === "error"));
       thumbs.forEach((t) => t && URL.revokeObjectURL(t));
