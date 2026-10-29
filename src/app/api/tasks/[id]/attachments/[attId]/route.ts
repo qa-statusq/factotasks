@@ -57,7 +57,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         if (v) headers.set(h, v);
       }
       headers.set("accept-ranges", "bytes");
-      headers.set("cache-control", "private, max-age=3600");
+      // A stored attachment never changes under its id: the browser keeps it (fetched once, then instant).
+      headers.set("cache-control", "private, max-age=604800, immutable");
       headers.set("x-content-type-options", "nosniff");
       const name = att.file_name as string;
       headers.set("content-disposition", `${asDownload ? "attachment" : "inline"}; filename="${asciiName(name)}"; filename*=UTF-8''${encodeURIComponent(name)}`);

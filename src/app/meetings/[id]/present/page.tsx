@@ -78,31 +78,55 @@ function Deck() {
   const touchX = useRef<number | null>(null);
   const { chrome, wake } = useIdleChrome();
   const [jumpOpen, setJumpOpen] = useState(false);
-  // A task's attachments or comments, opened from the icons on its slide row. The task's
-  // details are fetched once per task and reused while the deck is open.
-  const [viewing, setViewing] = useState<{ taskId: string; items: TaskAttachment[] } | null>(null);
-  const [reading, setReading] = useState<{ task: TaskCard; comments: TaskComment[] } | null>(null);
-  const details = useRef(new Map<string, { attachments?: TaskAttachment[]; comments?: TaskComment[] }>());
-  const loadTask = useCallback(async (t: TaskCard) => {
-    const hit = details.current.get(t.id);
-    if (hit) return hit;
-    const r = await fetch(`/api/tasks/${t.id}`, { credentials: "same-origin" }).catch(() => null);
-    const d = r && r.ok ? ((await r.json()) as { task?: { attachments?: TaskAttachment[]; comments?: TaskComment[] } }) : null;
-    if (d?.task) details.current.set(t.id, d.task);
-    return d?.task ?? null;
+  // A task's attachments or comments, opened from the icons on its slide row. The panel
+  // opens at once (loading), the small list arrives a moment later; hovering or touching an
+  // icon starts that request early, and each list is fetched once per task.
+  const [viewing, setViewing] = useState<{ taskId: string; items: TaskAttachment[] | null } | null>(null);
+  const [reading, setReading] = useState<{ task: TaskCard; comments: TaskComment[] | null } | null>(null);
+  const lists = useRef(new Map<string, Promise<unknown>>());
+  const fetchList = useCallback(<T,>(kind: "attachments" | "comments", taskId: string): Promise<T[]> => {
+    const key = `${kind}:${taskId}`;
+    let p = lists.current.get(key) as Promise<T[]> | undefined;
+    if (!p) {
+      p = fetch(`/api/tasks/${taskId}/${kind}`, { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+        .then((d: Record<string, T[]>) => d[kind] ?? [])
+        .catch((e) => {
+          lists.current.delete(key); // a failed load is tried again next time
+          throw e;
+        });
+      lists.current.set(key, p);
+    }
+    return p;
   }, []);
   const taskActions = useMemo(
     () => ({
-      attachments: async (t: TaskCard) => {
-        const items = (await loadTask(t))?.attachments ?? [];
-        if (items.length) setViewing({ taskId: t.id, items });
+      // On hover / touch: fetch the list, and for attachments start downloading the first picture
+      // too — the browser keeps it, so the viewer shows it the moment it opens.
+      prefetch: (t: TaskCard, kind: "attachments" | "comments") =>
+        void fetchList<TaskAttachment>(kind, t.id)
+          .then((list) => {
+            if (kind !== "attachments") return;
+            const first = [...list.filter((a) => kindOf(a.mime, a.file_name) === "image"), ...list][0];
+            if (first && kindOf(first.mime, first.file_name) === "image") new Image().src = `/api/tasks/${t.id}/attachments/${first.id}`;
+          })
+          .catch(() => undefined),
+      attachments: (t: TaskCard) => {
+        setViewing({ taskId: t.id, items: null });
+        fetchList<TaskAttachment>("attachments", t.id).then(
+          (items) => setViewing((v) => (v?.taskId === t.id ? { taskId: t.id, items } : v)),
+          () => setViewing((v) => (v?.taskId === t.id ? { taskId: t.id, items: [] } : v))
+        );
       },
-      comments: async (t: TaskCard) => {
-        const d = await loadTask(t);
-        if (d) setReading({ task: t, comments: d.comments ?? [] });
+      comments: (t: TaskCard) => {
+        setReading({ task: t, comments: null });
+        fetchList<TaskComment>("comments", t.id).then(
+          (comments) => setReading((v) => (v?.task.id === t.id ? { task: t, comments } : v)),
+          () => setReading((v) => (v?.task.id === t.id ? { task: t, comments: [] } : v))
+        );
       },
     }),
-    [loadTask]
+    [fetchList]
   );
 
   const slides = useMemo<Slide[]>(() => (data ? buildSlides(data) : []), [data]);
@@ -237,7 +261,7 @@ function Deck() {
 
       {viewing && (
         <AttachmentViewer
-          items={[...viewing.items.filter((a) => kindOf(a.mime, a.file_name) === "image"), ...viewing.items.filter((a) => kindOf(a.mime, a.file_name) !== "image")]}
+          items={viewing.items && [...viewing.items.filter((a) => kindOf(a.mime, a.file_name) === "image"), ...viewing.items.filter((a) => kindOf(a.mime, a.file_name) !== "image")]}
           base={`/api/tasks/${viewing.taskId}/attachments`}
           onClose={() => setViewing(null)}
         />

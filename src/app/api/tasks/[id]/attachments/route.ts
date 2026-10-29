@@ -16,6 +16,32 @@ import { driveConfigured, ensureFolder, uploadBytes, trashFile, DriveError } fro
 
 const ATTACHMENTS_FOLDER = "Task attachments";
 
+/** Just this task's attachments (the presentation's paperclip) — one round trip, not the whole task. */
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const u = await requireAccessUser();
+  if (u instanceof NextResponse) return u;
+  const { id } = await params;
+  if (!isUuid(id)) return fail("Task not found", 404);
+  const [rows, visible] = await Promise.all([
+    getSupabase().from("task_attachments").select(`id, file_name, mime, size_bytes, width, height, created_at, uploader:users(${USER_BRIEF_COLS})`).eq("task_id", id).order("created_at", { ascending: true }),
+    canSeeTask(u, id),
+  ]);
+  if (!visible) return fail("Task not found", 404);
+  if (rows.error) return serverError(rows.error);
+  return NextResponse.json({
+    attachments: (rows.data || []).map((r) => ({
+      id: r.id as string,
+      file_name: r.file_name as string,
+      mime: r.mime as string,
+      size_bytes: r.size_bytes as number,
+      width: (r.width as number | null) ?? null,
+      height: (r.height as number | null) ?? null,
+      created_at: r.created_at as string,
+      uploaded_by: embeddedUser(r.uploader),
+    })),
+  });
+}
+
 export const dynamic = "force-dynamic";
 // A 15 MB upload over a slow mobile connection needs more than the default budget.
 export const maxDuration = 60;

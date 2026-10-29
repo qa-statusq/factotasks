@@ -3,6 +3,7 @@
 import { Button, buttonClass } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { Avatar } from "@/components/ui/avatar";
+import { Spinner } from "@/components/ui/misc";
 import { RichText } from "@/components/ui/rich-text";
 import { When } from "@/components/ui/live-time";
 import { IconExternal, IconMessage } from "@/components/ui/icons";
@@ -14,12 +15,12 @@ import type { TaskComment } from "@/lib/types";
  * so the discussion behind a task can be shown without leaving the deck. Oldest
  * first, the way the conversation happened. Esc, the ✕ or Close dismisses it.
  */
-export function CommentsViewer({ task, comments, onClose }: { task: { id: string; number: number; title: string }; comments: TaskComment[]; onClose: () => void }) {
-  const n = comments.length;
+export function CommentsViewer({ task, comments, onClose }: { task: { id: string; number: number; title: string }; comments: TaskComment[] | null; onClose: () => void }) {
+  const n = comments?.length ?? 0;
   return (
     <Sheet
       title={`${taskRef(task.number)} · ${task.title}`}
-      description={`${n} comment${n === 1 ? "" : "s"}`}
+      description={comments ? `${n} comment${n === 1 ? "" : "s"}` : "Loading…"}
       onClose={onClose}
       wide
       footer={
@@ -32,7 +33,11 @@ export function CommentsViewer({ task, comments, onClose }: { task: { id: string
       }
     >
       <div data-comments-viewer>
-      {n === 0 ? (
+      {!comments ? (
+        <div className="flex justify-center py-12">
+          <Spinner />
+        </div>
+      ) : n === 0 ? (
         <div className="flex flex-col items-center gap-2 py-10 text-center text-[13px] text-ink-subtle">
           <IconMessage size={22} />
           No comments on this task.

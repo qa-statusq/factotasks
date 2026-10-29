@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/misc";
@@ -33,10 +33,23 @@ export function fileLabel(a: TaskAttachment): string {
  * than one: the buttons, the ← → keys, or a swipe on a phone. Used by the task
  * page and the meeting presentation alike.
  */
-export function AttachmentViewer({ items, startId, base, onClose }: { items: TaskAttachment[]; startId?: string; base: string; onClose: () => void }) {
+export function AttachmentViewer({ items: maybeItems, startId, base, onClose }: { items: TaskAttachment[] | null; startId?: string; base: string; onClose: () => void }) {
+  const items = useMemo(() => maybeItems ?? [], [maybeItems]);
   const [idx, setIdx] = useState(() => Math.max(0, items.findIndex((x) => x.id === startId)));
   const a = items[Math.min(idx, items.length - 1)];
   const many = items.length > 1;
+
+  // Next and previous pictures load in the background, so stepping to them is instant.
+  useEffect(() => {
+    if (!many) return;
+    for (const d of [1, -1]) {
+      const n = items[(idx + d + items.length) % items.length];
+      if (n && kindOf(n.mime, n.file_name) === "image") {
+        const img = new Image();
+        img.src = `${base}/${n.id}`;
+      }
+    }
+  }, [idx, items, many, base]);
   const step = (d: number) => setIdx((i) => (i + d + items.length) % items.length);
   const stepRef = useLatest(step);
 
@@ -58,7 +71,12 @@ export function AttachmentViewer({ items, startId, base, onClose }: { items: Tas
 
   // Swipe left / right on a phone.
   const touch = useRef<{ x: number; y: number } | null>(null);
-  if (!a) return null;
+  if (!a)
+    return (
+      <Sheet title={maybeItems ? "No attachments" : "Attachments"} description={maybeItems ? undefined : "Loading…"} onClose={onClose} wide footer={<div className="flex justify-end"><Button size="sm" onClick={onClose}>Close</Button></div>}>
+        <div data-attachment-viewer className="flex h-[50vh] items-center justify-center">{maybeItems ? <p className="text-[13px] text-ink-subtle">This task has no attachments.</p> : <Spinner />}</div>
+      </Sheet>
+    );
   const kind = kindOf(a.mime, a.file_name);
   const src = `${base}/${a.id}`;
 
@@ -139,12 +157,7 @@ function FileView({ a, base }: { a: TaskAttachment; base: string }) {
 
   return (
     <>
-      {kind === "image" && (
-        <div className="flex max-h-[70vh] items-center justify-center overflow-hidden rounded-lg bg-canvas">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt={a.file_name} className="max-h-[70vh] max-w-full object-contain" />
-        </div>
-      )}
+      {kind === "image" && <ImageView src={src} alt={a.file_name} />}
       {kind === "pdf" && <iframe src={src} title={a.file_name} className="h-[70vh] w-full rounded-lg border border-line bg-white" />}
       {kind === "video" && <video src={src} controls autoPlay playsInline preload="metadata" className="aspect-video w-full rounded-lg bg-black" />}
       {kind === "audio" && (
@@ -169,5 +182,21 @@ function FileView({ a, base }: { a: TaskAttachment; base: string }) {
         </div>
       )}
     </>
+  );
+}
+
+/** A picture with a spinner until it has arrived (no blank box while it downloads). */
+function ImageView({ src, alt }: { src: string; alt: string }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <div className="relative flex min-h-[40vh] max-h-[70vh] items-center justify-center overflow-hidden rounded-lg bg-canvas">
+      {!loaded && (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <Spinner />
+        </span>
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} className={`max-h-[70vh] max-w-full object-contain transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} />
+    </div>
   );
 }

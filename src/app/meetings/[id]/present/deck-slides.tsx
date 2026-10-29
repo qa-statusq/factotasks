@@ -764,7 +764,7 @@ function NoteKind({ kind, label }: { kind: MeetingNote["kind"]; label?: string }
 }
 
 /** Opens a task's attachments or comments from a slide; the deck page supplies the viewers. */
-export const DeckTaskContext = createContext<{ attachments: (t: TaskCard) => void; comments: (t: TaskCard) => void } | null>(null);
+export const DeckTaskContext = createContext<{ attachments: (t: TaskCard) => void; comments: (t: TaskCard) => void; prefetch: (t: TaskCard, kind: "attachments" | "comments") => void } | null>(null);
 
 const CHIP = "deck-chrome inline-flex shrink-0 items-center gap-[0.3cqw] rounded-full bg-canvas px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold text-ink-muted ring-1 ring-inset ring-line hover:text-ink hover:ring-ink/40";
 
@@ -774,7 +774,7 @@ function AttachmentChip({ t }: { t: TaskCard }) {
   if (!open || !t.attachment_count) return null;
   const n = t.attachment_count;
   return (
-    <button type="button" onClick={() => open.attachments(t)} className={CHIP} title={`${n} attachment${n === 1 ? "" : "s"} — open`} aria-label={`Open ${n} attachment${n === 1 ? "" : "s"}`}>
+    <button type="button" onPointerEnter={() => open.prefetch(t, "attachments")} onPointerDown={() => open.prefetch(t, "attachments")} onClick={() => open.attachments(t)} className={CHIP} title={`${n} attachment${n === 1 ? "" : "s"} — open`} aria-label={`Open ${n} attachment${n === 1 ? "" : "s"}`}>
       <IconPaperclip className="h-[1.05cqw] w-[1.05cqw]" />
       {n}
     </button>
@@ -787,7 +787,7 @@ function CommentChip({ t }: { t: TaskCard }) {
   if (!open || !t.comment_count) return null;
   const n = t.comment_count;
   return (
-    <button type="button" onClick={() => open.comments(t)} className={CHIP} title={`${n} comment${n === 1 ? "" : "s"} — open`} aria-label={`Open ${n} comment${n === 1 ? "" : "s"}`}>
+    <button type="button" onPointerEnter={() => open.prefetch(t, "comments")} onPointerDown={() => open.prefetch(t, "comments")} onClick={() => open.comments(t)} className={CHIP} title={`${n} comment${n === 1 ? "" : "s"} — open`} aria-label={`Open ${n} comment${n === 1 ? "" : "s"}`}>
       <IconMessage className="h-[1.05cqw] w-[1.05cqw]" />
       {n}
     </button>

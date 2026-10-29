@@ -553,6 +553,23 @@ create table if not exists push_subscriptions (
 );
 create index if not exists push_subscriptions_user_idx on push_subscriptions (user_id);
 
+-- (033) A target linked to a version that is ALREADY released ships with it: it takes
+-- that version's release time. (Releasing stamps the targets linked at that moment;
+-- one linked afterwards — a task attached to v2.9.6 after v2.9.6 went out — was left
+-- unticked.) Moving a target to another version follows that version.
+create or replace function task_target_release_stamp()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.release_id is not null and (tg_op = 'INSERT' or new.release_id is distinct from old.release_id) then
+    new.released_at := coalesce((select r.released_at from releases r where r.id = new.release_id and r.status = 'released'), new.released_at);
+  end if;
+  return new;
+end;
+$$;
+
 -- ---------------------------------------------------------------------
 -- CHANGE COUNTER triggers (see app_settings.rev)
 -- ---------------------------------------------------------------------
@@ -570,6 +587,8 @@ drop trigger if exists meetings_rev on meetings;
 create trigger meetings_rev after insert or update or delete on meetings for each statement execute function bump_rev();
 drop trigger if exists meeting_notes_rev on meeting_notes;
 create trigger meeting_notes_rev after insert or update or delete on meeting_notes for each statement execute function bump_rev();
+drop trigger if exists task_targets_release_stamp on task_targets;
+create trigger task_targets_release_stamp before insert or update of release_id on task_targets for each row execute function task_target_release_stamp();
 drop trigger if exists task_targets_rev on task_targets;
 create trigger task_targets_rev after insert or update or delete on task_targets for each statement execute function bump_rev();
 drop trigger if exists meeting_series_rev on meeting_series;

@@ -14,6 +14,23 @@ import { USER_BRIEF_COLS, embeddedUser } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
 
+/** Just this task's comments, oldest first (the presentation's comment icon) — one round trip. */
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const u = await requireAccessUser();
+  if (u instanceof NextResponse) return u;
+  const { id } = await params;
+  if (!isUuid(id)) return fail("Task not found", 404);
+  const [rows, visible] = await Promise.all([
+    getSupabase().from("task_comments").select(`id, body, created_at, edited_at, author:users(${USER_BRIEF_COLS})`).eq("task_id", id).order("created_at", { ascending: true }).limit(500),
+    canSeeTask(u, id),
+  ]);
+  if (!visible) return fail("Task not found", 404);
+  if (rows.error) return serverError(rows.error);
+  return NextResponse.json({
+    comments: (rows.data || []).map((r) => ({ id: r.id as string, body: r.body as string, created_at: r.created_at as string, edited_at: (r.edited_at as string | null) ?? null, author: embeddedUser(r.author) })),
+  });
+}
+
 /** Add a comment (any signed-in user). Everyone involved is notified. */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const u = await requireAccessUser();
