@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { fail, serverError, readCappedBody } from "@/lib/api";
+import { fail, serverError, readCappedBody, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { LIMITS, taskRef } from "@/lib/domain";
@@ -12,7 +12,7 @@ import { displayName } from "@/lib/name";
 import { rateLimited } from "@/lib/rate-limit";
 import { MAX_ATTACHMENT_BYTES, cleanFileName, extFor, imageSize, isImageMime, resolveMime } from "@/lib/attachments";
 import { USER_BRIEF_COLS, embeddedUser } from "@/lib/users";
-import { driveConfigured, ensureFolder, uploadBytes, trashFile, DriveError } from "@/lib/google-drive";
+import { driveConfigured, ensureFolder, uploadBytes, trashFile } from "@/lib/google-drive";
 
 const ATTACHMENTS_FOLDER = "Task attachments";
 
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const folder = await ensureFolder(ATTACHMENTS_FOLDER);
       driveFileId = await uploadBytes(`${taskRef(own.number)} — ${originalName}`, mime, bytes, folder);
     } catch (e) {
-      return fail(e instanceof DriveError ? e.message : "Couldn't store the file", 502);
+      return storageFail(e, "Couldn't store the file");
     }
   } else {
     key = `tasks/${id}/${crypto.randomUUID()}.${extFor(mime, originalName)}`;
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
   // Where the time went, readable in the browser's network panel (standard Server-Timing).
   const tDone = performance.now();
-  const timing = `receive;desc="file + checks";dur=${Math.round(tReceived - t0)}, store;desc="${toDrive ? "Google Drive" : "storage"}";dur=${Math.round(tStored - tStore)}, record;desc="database";dur=${Math.round(tDone - tStored)}`;
+  const timing = `receive;desc="file + checks";dur=${Math.round(tReceived - t0)}, store;desc="storage";dur=${Math.round(tStored - tStore)}, record;desc="database";dur=${Math.round(tDone - tStored)}`;
   return NextResponse.json({
     attachment: {
       id: data.id,

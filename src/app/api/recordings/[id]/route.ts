@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { ok, fail, serverError, readJsonObject, memberJson } from "@/lib/api";
+import { ok, fail, serverError, readJsonObject, memberJson, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid } from "@/lib/validate";
-import { renameFile, trashFile, unshareFile, DriveError } from "@/lib/google-drive";
+import { renameFile, trashFile, unshareFile } from "@/lib/google-drive";
 import { loadRecording, loadShares, canManage, canUpload, publicRecording, recordingFileName } from "@/lib/recordings";
 import { canAccessSeries } from "@/lib/series-access";
 
@@ -40,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     try {
       await renameFile(rec.drive_file_id, name);
     } catch (e) {
-      return fail(e instanceof DriveError ? e.message : "Couldn't rename the recording", 502);
+      return storageFail(e, "Couldn't rename the recording");
     }
   }
   const { error } = await getSupabase().from("meeting_recordings").update({ name }).eq("id", id);
@@ -65,7 +65,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       for (const s of shares ?? []) if (s.permission_id) await unshareFile(rec.drive_file_id, s.permission_id as string).catch(() => undefined);
       await trashFile(rec.drive_file_id);
     } catch (e) {
-      return fail(e instanceof DriveError ? e.message : "Couldn't delete the recording", 502);
+      return storageFail(e, "Couldn't delete the recording");
     }
   }
   const { error } = await getSupabase().from("meeting_recordings").delete().eq("id", id);

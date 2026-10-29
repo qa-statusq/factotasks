@@ -22,7 +22,7 @@ import { AttachmentViewer, kindOf, fileLabel } from "@/components/attachment-vie
 interface UploadRow {
   name: string;
   size: number;
-  /** 0..1 sent to the panel; then "saving" while the panel hands it to Drive. */
+  /** 0..1 sent to the panel; then "saving" while the panel stores it. */
   progress: number;
   phase: "waiting" | "sending" | "saving" | "done" | "error";
   error?: string;
@@ -61,7 +61,7 @@ function postWithProgress(url: string, body: FormData, onProgress: (ratio: numbe
 /**
  * Files on a task, kept in the team's Google Shared Drive: images in a grid,
  * everything else as a list, each with a preview sheet that fits its type.
- * Uploads show a real progress bar, then "Saving to Drive" until it is there.
+ * Uploads show a real progress bar, then "Saving…" until it is stored.
  */
 export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) {
   const { toast } = useToast();
@@ -256,7 +256,7 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
                 ) : null}
                 {u.phase === "done" ? <span className="text-emerald-600">✓</span> : u.phase === "error" ? <IconX size={12} /> : <Spinner className="h-3 w-3" />}
                 <span className="min-w-0 flex-1 truncate">{u.name}</span>
-                <span className="shrink-0 tabular-nums">{u.phase === "waiting" ? "Waiting…" : u.phase === "sending" ? `${Math.round(u.progress * 100)}% · ${fmtBytes(u.size)}` : u.phase === "saving" ? "Saving to Drive…" : u.phase === "done" ? "Attached" : u.error}</span>
+                <span className="shrink-0 tabular-nums">{u.phase === "waiting" ? "Waiting…" : u.phase === "sending" ? `${Math.round(u.progress * 100)}% · ${fmtBytes(u.size)}` : u.phase === "saving" ? "Saving…" : u.phase === "done" ? "Attached" : u.error}</span>
               </div>
               {(u.phase === "sending" || u.phase === "saving") && (
                 <div className="mt-1 h-1 overflow-hidden rounded-full bg-line/70">

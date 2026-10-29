@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
-import { fail } from "@/lib/api";
+import { fail, storageFail } from "@/lib/api";
 import { isUuid } from "@/lib/validate";
-import { streamFile, DriveError } from "@/lib/google-drive";
+import { streamFile } from "@/lib/google-drive";
 import { loadRecording } from "@/lib/recordings";
 import { canAccessSeries } from "@/lib/series-access";
 import { patchWebmHead, type WebmHeadPatch } from "@/lib/webm-duration";
@@ -117,6 +117,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (m) headers.set("content-range", `bytes ${a}-${b}/${total}`);
     return new Response(body, { status: m ? 206 : 200, headers });
   } catch (e) {
-    return fail(e instanceof DriveError ? e.message : "Couldn't read the recording", 502);
+    return storageFail(e, "Couldn't read the recording");
   }
 }

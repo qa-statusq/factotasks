@@ -61,7 +61,7 @@ function DeckRecordControls({ meetingId, meeting }: { meetingId: string; meeting
       <span className="ml-[0.3cqw] flex h-[2cqw] w-[2cqw] items-center justify-center rounded-full bg-white/10"><span className="block h-[0.9cqw] w-[0.9cqw] rounded-[0.15cqw] bg-rose-300" aria-hidden /></span>
     </button>
   ) : (
-    <button type="button" onClick={() => recorder.start(meetingId, meeting.title, "screen")} disabled={recPhase === "starting" || recPhase === "finishing"} className="flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-rose-300 disabled:opacity-40" aria-label="Record" title="Record this meeting — screen and microphone, saved to the team's Shared Drive">
+    <button type="button" onClick={() => recorder.start(meetingId, meeting.title, "screen")} disabled={recPhase === "starting" || recPhase === "finishing"} className="flex h-[52%] w-[4cqw] shrink-0 items-center justify-center rounded-[0.8cqw] text-white/60 hover:bg-white/10 hover:text-rose-300 disabled:opacity-40" aria-label="Record" title="Record this meeting — screen and microphone, saved with the meeting">
       <IconCircleDot className="h-[58%] w-[58%]" />
     </button>
   );

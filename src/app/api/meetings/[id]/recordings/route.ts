@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { fail, serverError, readJsonObject, memberJson } from "@/lib/api";
+import { fail, serverError, readJsonObject, memberJson, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid, parseNumber } from "@/lib/validate";
 import { loadMeeting } from "@/lib/meetings";
 import { rateLimited } from "@/lib/rate-limit";
-import { createUploadSession, driveConfigured, DRIVE_CHUNK_BYTES, DriveError } from "@/lib/google-drive";
+import { createUploadSession, driveConfigured, DRIVE_CHUNK_BYTES } from "@/lib/google-drive";
 import { RECORDING_SELECT, shapeRecording, publicRecording, notConfigured, recordingFileName } from "@/lib/recordings";
 import { expireStaleUploads } from "@/lib/recording-uploads";
 import { canAccessMeeting } from "@/lib/series-access";
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     uploadUri = await createUploadSession(name, mime, size);
   } catch (e) {
-    return fail(e instanceof DriveError ? e.message : "Couldn't start saving the recording", 502);
+    return storageFail(e, "Couldn't start saving the recording");
   }
   const { data, error } = await sb
     .from("meeting_recordings")

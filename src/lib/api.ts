@@ -36,6 +36,16 @@ export function serverError(e: unknown, fallback = "Something went wrong. Please
 }
 
 /**
+ * File storage failed (upload, read, rename, share…). The provider's own error
+ * goes to the server log only; people see a plain message that names the action,
+ * never the storage service behind it.
+ */
+export function storageFail(e: unknown, message: string) {
+  console.error("[storage]", e);
+  return fail(message, 502);
+}
+
+/**
  * Parse a request body as a JSON OBJECT, never anything else. `req.json()`
  * happily returns null, a number or an array for a valid JSON body, and every
  * route then did `"x" in b` or destructured it — a 500 from a one-byte body

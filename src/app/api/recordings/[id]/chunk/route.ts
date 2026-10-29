@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { fail, serverError, readCappedBody } from "@/lib/api";
+import { fail, serverError, readCappedBody, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { uploadChunk, uploadStatus, DriveError, DRIVE_CHUNK_BYTES } from "@/lib/google-drive";
@@ -80,7 +80,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       await getSupabase().from("meeting_recordings").update({ status: "failed", upload_uri: null }).eq("id", id);
       return fail("The upload session expired — record again", 410);
     }
-    return fail(e instanceof DriveError ? e.message : "Couldn't save this part of the recording", 502);
+    return storageFail(e, "Couldn't save this part of the recording");
   }
 }
 
@@ -96,6 +96,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const s = await uploadStatus(rec.upload_uri, rec.size_bytes || null);
     return NextResponse.json({ done: s.done, received: s.received });
   } catch (e) {
-    return fail(e instanceof DriveError ? e.message : "Couldn't check the upload", 502);
+    return storageFail(e, "Couldn't check the upload");
   }
 }

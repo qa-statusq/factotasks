@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { ok, fail, serverError } from "@/lib/api";
+import { ok, fail, serverError, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { canSeeTask } from "@/lib/visibility";
-import { streamFile, trashFile, DriveError } from "@/lib/google-drive";
+import { streamFile, trashFile } from "@/lib/google-drive";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       headers.set("content-disposition", `${asDownload ? "attachment" : "inline"}; filename="${asciiName(name)}"; filename*=UTF-8''${encodeURIComponent(name)}`);
       return new Response(up.body, { status: up.status, headers });
     } catch (e) {
-      return fail(e instanceof DriveError ? e.message : "Couldn't read the file", 502);
+      return storageFail(e, "Couldn't read the file");
     }
   }
   const { data, error } = await getSupabase()
@@ -107,7 +107,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     try {
       await trashFile(att.drive_file_id as string);
     } catch (e) {
-      return fail(e instanceof DriveError ? e.message : "Couldn't remove the file", 502);
+      return storageFail(e, "Couldn't remove the file");
     }
   } else if (att.storage_path) {
     const { error: sErr } = await sb.storage.from("attachments").remove([att.storage_path as string]);

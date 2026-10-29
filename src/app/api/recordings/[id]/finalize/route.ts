@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
-import { fail, readJsonObject } from "@/lib/api";
+import { fail, readJsonObject, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid, parseNumber } from "@/lib/validate";
-import { DriveError } from "@/lib/google-drive";
 import { loadRecording, canUpload, publicRecording } from "@/lib/recordings";
 import { closeUpload } from "@/lib/recording-uploads";
 
@@ -35,6 +34,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (r.recovered) after(() => logActivity({ action: "meeting.record", entityType: "meeting", entityId: rec.meeting_id, summary: `Recording saved after an interruption: “${rec.name}”` }));
     return NextResponse.json({ done: true, recovered: !!r.recovered, recording: r.recording ? publicRecording(r.recording) : null });
   } catch (e) {
-    return fail(e instanceof DriveError ? e.message : "Couldn't close the recording", 502);
+    return storageFail(e, "Couldn't close the recording");
   }
 }

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { requireAccessUser } from "@/lib/guard";
 import { getSupabase } from "@/lib/supabase";
-import { ok, fail, serverError, readJsonObject } from "@/lib/api";
+import { ok, fail, serverError, readJsonObject, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, cleanText, isUuid } from "@/lib/validate";
 import { rateLimited } from "@/lib/rate-limit";
-import { shareFile, unshareFile, DriveError } from "@/lib/google-drive";
+import { shareFile, unshareFile } from "@/lib/google-drive";
 import { loadRecording, loadShares, canManage, SHARE_SELECT, shapeShare } from "@/lib/recordings";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +48,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // address at the same moment claims nothing and creates no second permission.
     const { data: claimed, error: claimErr } = await sb.from("recording_shares").upsert({ recording_id: id, email, message, shared_by: u.uid }, { onConflict: "recording_id,email", ignoreDuplicates: true }).select("id");
     if (claimErr) {
-      failed.push({ email, error: claimErr.message });
+      console.error("[api] share claim:", claimErr);
+      failed.push({ email, error: "Couldn't share with this address" });
       continue;
     }
     if (!claimed?.length) continue;
@@ -58,7 +59,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       added.push(email);
     } catch (e) {
       await sb.from("recording_shares").delete().eq("id", claimed[0].id as string);
-      failed.push({ email, error: e instanceof DriveError ? e.message : "Couldn't share with this address" });
+      console.error("[storage]", e);
+      failed.push({ email, error: "Couldn't share with this address" });
     }
   }
   if (added.length) after(() => logActivity({ action: "meeting.record", entityType: "meeting", entityId: rec.meeting_id, summary: `Recording “${rec.name}” shared with ${added.join(", ")}` }));
@@ -83,7 +85,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     try {
       await unshareFile(rec.drive_file_id, s.permission_id as string);
     } catch (e) {
-      return fail(e instanceof DriveError ? e.message : "Couldn't remove the access", 502);
+      return storageFail(e, "Couldn't remove the access");
     }
   }
   const { error } = await sb.from("recording_shares").delete().eq("id", shareId);
