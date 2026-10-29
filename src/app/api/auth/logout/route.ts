@@ -13,6 +13,9 @@ export const dynamic = "force-dynamic";
 async function endSession<T extends NextResponse>(res: T): Promise<T> {
   const u = await getSessionUser();
   clearSessionCookieOn(res);
+  // Attachment files are the one thing the browser may keep (privately) while signed in;
+  // signing out empties the panel's HTTP cache so nothing stays behind on a shared computer.
+  res.headers.set("Clear-Site-Data", '"cache"');
   if (u) {
     after(async () => {
       // This sign-in leaves "Signed-in devices" too.

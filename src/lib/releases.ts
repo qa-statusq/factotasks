@@ -118,7 +118,8 @@ export function shapeRelease(r: Record<string, unknown>): Release {
  * this release: link the new ones, unlink the ones no longer chosen (never a
  * target that has already shipped).
  */
-export async function setReleaseTasks(releaseId: string, appId: string, platform: "android" | "ios", ids: string[]): Promise<void> {
+/** Link exactly `ids` to this version; returns the tasks newly linked (for settling when it is already out). */
+export async function setReleaseTasks(releaseId: string, appId: string, platform: "android" | "ios", ids: string[]): Promise<{ id: string; number: number; title: string }[]> {
   const sb = getSupabase();
   const { data: cur } = await sb.from("task_targets").select("task_id").eq("release_id", releaseId);
   const current = new Set((cur || []).map((t) => t.task_id as string));
@@ -126,7 +127,9 @@ export async function setReleaseTasks(releaseId: string, appId: string, platform
   const toClear = [...current].filter((id) => !wanted.has(id));
   const toSet = ids.filter((id) => !current.has(id));
   if (toClear.length) await sb.from("task_targets").update({ release_id: null }).eq("release_id", releaseId).in("task_id", toClear).is("released_at", null);
-  if (toSet.length) await sb.from("task_targets").update({ release_id: releaseId }).in("task_id", toSet).eq("app_id", appId).eq("platform", platform).is("released_at", null);
+  if (!toSet.length) return [];
+  const { data: linked } = await sb.from("task_targets").update({ release_id: releaseId }).in("task_id", toSet).eq("app_id", appId).eq("platform", platform).is("released_at", null).select("task:tasks(id, number, title)");
+  return (linked || []).map((r) => embedded<{ id: string; number: number; title: string }>(r.task)).filter((t): t is { id: string; number: number; title: string } => !!t);
 }
 
 /** Targets in this release that have not shipped yet — what a "released" closes. */
@@ -181,63 +184,83 @@ export async function applyReleased(rel: ReleaseCore, actor: SessionUser, opts: 
   const label = `${rel.app_name} ${PLATFORM_META[rel.platform].label} v${rel.version_name}`;
   const open = await openReleaseTasks(rel.id);
   await sb.from("task_targets").update({ released_at }).eq("release_id", rel.id).is("released_at", null);
-  const actorName = displayName(actor.firstName, actor.lastName) || actor.email;
+  const { closed, partial } = await settleShippedTasks(open, actor, label, { note: opts.note, completedAt: opts.completedAt ?? released_at });
+  return { released_at, closed, partial };
+}
+
+/**
+ * Tasks whose targets just shipped (a version was released, or a task was added
+ * to a version that is already out): each moves to Done when every one of its
+ * targets has shipped, otherwise to Partly released — with a status-log line
+ * naming the version — and the people on it are told after the response.
+ * Tasks already Done or Cancelled are left alone. One rule for both paths.
+ */
+export async function settleShippedTasks(
+  tasks: { id: string; number: number; title: string }[],
+  actor: SessionUser,
+  label: string,
+  opts: { note?: string | null; completedAt?: string | null } = {}
+): Promise<{ closed: { id: string; number: number; title: string }[]; partial: { id: string; number: number; title: string }[] }> {
+  const sb = getSupabase();
   const closed: { id: string; number: number; title: string }[] = [];
   const partial: { id: string; number: number; title: string }[] = [];
-  if (open.length) {
-    const ids = open.map((t) => t.id);
-    const [{ data: allTargets }, { data: rows }] = await Promise.all([
-      sb.from("task_targets").select("task_id, released_at").in("task_id", ids),
-      sb.from("tasks").select("id, status").in("id", ids),
-    ]);
-    const statusOf = new Map((rows || []).map((r) => [r.id as string, r.status as string]));
-    const tally = new Map<string, { total: number; shipped: number }>();
-    for (const x of allTargets || []) {
-      const c = tally.get(x.task_id as string) ?? { total: 0, shipped: 0 };
-      c.total += 1;
-      if (x.released_at) c.shipped += 1;
-      tally.set(x.task_id as string, c);
+  if (!tasks.length) return { closed, partial };
+  const ids = tasks.map((t) => t.id);
+  const [{ data: allTargets }, { data: rows }] = await Promise.all([
+    sb.from("task_targets").select("task_id, released_at").in("task_id", ids),
+    sb.from("tasks").select("id, status").in("id", ids),
+  ]);
+  const statusOf = new Map((rows || []).map((r) => [r.id as string, r.status as string]));
+  const tally = new Map<string, { total: number; shipped: number; last: string | null }>();
+  for (const x of allTargets || []) {
+    const c = tally.get(x.task_id as string) ?? { total: 0, shipped: 0, last: null };
+    c.total += 1;
+    if (x.released_at) {
+      c.shipped += 1;
+      if (!c.last || (x.released_at as string) > c.last) c.last = x.released_at as string;
     }
-    const jobs: (() => Promise<void>)[] = [];
-    for (const t of open) {
-      const status = statusOf.get(t.id) ?? "todo";
-      if (status === "done" || status === "cancelled") continue;
-      const { total, shipped } = tally.get(t.id) ?? { total: 0, shipped: 0 };
-      const allDone = total > 0 && shipped >= total;
-      if (!allDone && status === "partial") continue;
-      jobs.push(async () => {
-        // Always a plain "change" on the task: the task carries no request of
-        // its own here, and the "approve" kind would trip task_apply_status's
-        // request guard. opts.kind still labels the release activity.
-        const { error: e } = await sb.rpc("task_apply_status", {
-          p_task: t.id,
-          p_to: allDone ? "done" : "partial",
-          p_actor: actor.uid,
-          p_kind: "change",
-          p_note: `${allDone ? "Shipped" : `Shipped on ${shipped} of ${total} targets`} — ${label}${opts.note ? ` — ${opts.note}` : ""}`,
-          p_completed_at: allDone ? (opts.completedAt ?? released_at) : null,
-        });
-        if (!e) (allDone ? closed : partial).push(t);
-      });
-    }
-    // A few at a time keeps a 40-task release at well under a second.
-    const worker = async () => {
-      for (let j = jobs.shift(); j; j = jobs.shift()) await j();
-    };
-    await Promise.all(Array.from({ length: Math.min(6, jobs.length) }, worker));
-    closed.sort((a, b) => a.number - b.number);
-    partial.sort((a, b) => a.number - b.number);
+    tally.set(x.task_id as string, c);
   }
+  const jobs: (() => Promise<void>)[] = [];
+  for (const t of tasks) {
+    const status = statusOf.get(t.id) ?? "todo";
+    if (status === "done" || status === "cancelled") continue;
+    const { total, shipped, last } = tally.get(t.id) ?? { total: 0, shipped: 0, last: null };
+    if (!shipped) continue;
+    const allDone = total > 0 && shipped >= total;
+    if (!allDone && status === "partial") continue;
+    jobs.push(async () => {
+      // Always a plain "change" on the task: the task carries no request of
+      // its own here, and the "approve" kind would trip task_apply_status's
+      // request guard.
+      const { error: e } = await sb.rpc("task_apply_status", {
+        p_task: t.id,
+        p_to: allDone ? "done" : "partial",
+        p_actor: actor.uid,
+        p_kind: "change",
+        p_note: `${allDone ? "Shipped" : `Shipped on ${shipped} of ${total} targets`} — ${label}${opts.note ? ` — ${opts.note}` : ""}`,
+        p_completed_at: allDone ? (opts.completedAt ?? last) : null,
+      });
+      if (!e) (allDone ? closed : partial).push(t);
+    });
+  }
+  // A few at a time keeps a 40-task release at well under a second.
+  const worker = async () => {
+    for (let j = jobs.shift(); j; j = jobs.shift()) await j();
+  };
+  await Promise.all(Array.from({ length: Math.min(6, jobs.length) }, worker));
+  closed.sort((a, b) => a.number - b.number);
+  partial.sort((a, b) => a.number - b.number);
   const touched = [...closed, ...partial];
   if (touched.length) {
-    // After the response, a few at a time: marking a 40-task release done never waits for
-    // (or bursts) one inbox row + push fan-out per task.
+    const actorName = displayName(actor.firstName, actor.lastName) || actor.email;
+    // After the response, a few at a time: never waits for (or bursts) one inbox row + push per task.
     after(async () => {
       const { data: who } = await sb.from("task_assignees").select("task_id, user_id").in("task_id", touched.map((t) => t.id));
       const byTask = new Map<string, string[]>();
       for (const w of who || []) byTask.set(w.task_id as string, [...(byTask.get(w.task_id as string) || []), w.user_id as string]);
       const queue = [...touched];
-      const worker = async () => {
+      const notify = async () => {
         for (let t = queue.shift(); t; t = queue.shift()) {
           await notifyUsers({
             userIds: byTask.get(t.id) || [],
@@ -248,8 +271,8 @@ export async function applyReleased(rel: ReleaseCore, actor: SessionUser, opts: 
           });
         }
       };
-      await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker));
+      await Promise.all(Array.from({ length: Math.min(3, queue.length) }, notify));
     });
   }
-  return { released_at, closed, partial };
+  return { closed, partial };
 }

@@ -4,7 +4,7 @@ import { getSupabase } from "@/lib/supabase";
 import { ok, fail, serverError, readJsonObject, memberJson } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanText, isUniqueViolation, isUuid } from "@/lib/validate";
-import { releasePatch, canManageApp, parseTaskIds, setReleaseTasks, applyReleased, AlreadyReleased, openReleaseTasks, RELEASE_SELECT, shapeRelease } from "@/lib/releases";
+import { releasePatch, canManageApp, parseTaskIds, setReleaseTasks, settleShippedTasks, applyReleased, AlreadyReleased, openReleaseTasks, RELEASE_SELECT, shapeRelease } from "@/lib/releases";
 import { getSettings, needsApproval } from "@/lib/settings";
 import { canSeeApp } from "@/lib/visibility";
 import { adminIds, notifyUsers } from "@/lib/notify";
@@ -87,7 +87,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (ids) changes.tasks = { from: null, to: ids.length };
   if (wantsReleased && !mustAsk) changes.status = { from: cur.status, to: "released" };
-  if (ids) await setReleaseTasks(id, cur.app_id as string, (p.platform ?? (cur.platform as "android" | "ios")), ids);
+  const added = ids ? await setReleaseTasks(id, cur.app_id as string, (p.platform ?? (cur.platform as "android" | "ios")), ids) : [];
   if (Object.keys(p).length) {
     // A status move is decided against the status the form saw: if an approval or another admin moved
     // the version meanwhile, this write must not land on top of it.
@@ -100,9 +100,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     if (p.status && !hit?.length) return fail("This version changed a moment ago — refresh and try again", 409);
   }
+  // A shipped version's release date was corrected: everything shipped in it follows the new date.
+  if (cur.status === "released" && !unreleasing && p.released_at && p.released_at !== cur.released_at) {
+    await sb.from("task_targets").update({ released_at: p.released_at }).eq("release_id", id).not("released_at", "is", null);
+  }
 
   let closed: { id: string; number: number; title: string }[] = [];
   let mode: "applied" | "requested" | "saved" = "saved";
+  // Tasks added to a version that is ALREADY out ship with it now, exactly as they would have
+  // at release time: their targets were stamped on link (033), and each task moves to Done
+  // (or Partly released) with its history line and notifications.
+  if (added.length && cur.status === "released" && !wantsReleased) {
+    const already = `${app?.name ?? "App"} ${PLATFORM_META[(p.platform ?? cur.platform) as "android" | "ios"].label} v${(p.version_name as string | undefined) ?? (cur.version_name as string)}`;
+    closed = (await settleShippedTasks(added, u, already)).closed;
+  }
   const version = (p.version_name as string | undefined) ?? (cur.version_name as string);
   const platform = (p.platform ?? cur.platform) as "android" | "ios";
   if (wantsReleased && !mustAsk) {

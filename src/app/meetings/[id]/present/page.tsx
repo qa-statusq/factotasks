@@ -84,8 +84,10 @@ function Deck() {
   const [viewing, setViewing] = useState<{ taskId: string; items: TaskAttachment[] | null } | null>(null);
   const [reading, setReading] = useState<{ task: TaskCard; comments: TaskComment[] | null } | null>(null);
   const lists = useRef(new Map<string, Promise<unknown>>());
-  const fetchList = useCallback(<T,>(kind: "attachments" | "comments", taskId: string): Promise<T[]> => {
-    const key = `${kind}:${taskId}`;
+  // Keyed by the count on the card too: when a comment or file is added meanwhile, the next open fetches again.
+  const fetchList = useCallback(<T,>(kind: "attachments" | "comments", t: TaskCard): Promise<T[]> => {
+    const taskId = t.id;
+    const key = `${kind}:${taskId}:${kind === "attachments" ? t.attachment_count : t.comment_count}`;
     let p = lists.current.get(key) as Promise<T[]> | undefined;
     if (!p) {
       p = fetch(`/api/tasks/${taskId}/${kind}`, { credentials: "same-origin" })
@@ -104,7 +106,7 @@ function Deck() {
       // On hover / touch: fetch the list, and for attachments start downloading the first picture
       // too — the browser keeps it, so the viewer shows it the moment it opens.
       prefetch: (t: TaskCard, kind: "attachments" | "comments") =>
-        void fetchList<TaskAttachment>(kind, t.id)
+        void fetchList<TaskAttachment>(kind, t)
           .then((list) => {
             if (kind !== "attachments") return;
             const first = [...list.filter((a) => kindOf(a.mime, a.file_name) === "image"), ...list][0];
@@ -113,14 +115,14 @@ function Deck() {
           .catch(() => undefined),
       attachments: (t: TaskCard) => {
         setViewing({ taskId: t.id, items: null });
-        fetchList<TaskAttachment>("attachments", t.id).then(
+        fetchList<TaskAttachment>("attachments", t).then(
           (items) => setViewing((v) => (v?.taskId === t.id ? { taskId: t.id, items } : v)),
           () => setViewing((v) => (v?.taskId === t.id ? { taskId: t.id, items: [] } : v))
         );
       },
       comments: (t: TaskCard) => {
         setReading({ task: t, comments: null });
-        fetchList<TaskComment>("comments", t.id).then(
+        fetchList<TaskComment>("comments", t).then(
           (comments) => setReading((v) => (v?.task.id === t.id ? { task: t, comments } : v)),
           () => setReading((v) => (v?.task.id === t.id ? { task: t, comments: [] } : v))
         );

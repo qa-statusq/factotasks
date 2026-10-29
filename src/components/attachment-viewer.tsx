@@ -157,9 +157,9 @@ function FileView({ a, base }: { a: TaskAttachment; base: string }) {
 
   return (
     <>
-      {kind === "image" && <ImageView src={src} alt={a.file_name} />}
-      {kind === "pdf" && <iframe src={src} title={a.file_name} className="h-[70vh] w-full rounded-lg border border-line bg-white" />}
-      {kind === "video" && <video src={src} controls autoPlay playsInline preload="metadata" className="aspect-video w-full rounded-lg bg-black" />}
+      {kind === "image" && <ImageView src={src} a={a} />}
+      {kind === "pdf" && <PdfView src={src} a={a} />}
+      {kind === "video" && <VideoView src={src} a={a} />}
       {kind === "audio" && (
         <div className="flex flex-col items-center gap-4 rounded-lg bg-canvas px-4 py-8">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-ink text-white">
@@ -185,18 +185,133 @@ function FileView({ a, base }: { a: TaskAttachment; base: string }) {
   );
 }
 
-/** A picture with a spinner until it has arrived (no blank box while it downloads). */
-function ImageView({ src, alt }: { src: string; alt: string }) {
-  const [loaded, setLoaded] = useState(false);
+/**
+ * The file's bytes with live progress — how Drive, Slack and WhatsApp Web open a file:
+ * a ring with the percentage and "1.2 of 2.6 MB" while it downloads, then the file.
+ * A file the browser already holds (opened before, or preloaded as a neighbour)
+ * arrives at once and the ring never shows. Moving on or closing cancels the download.
+ */
+function useFileBytes(src: string) {
+  const [state, setState] = useState<{ url: string | null; loaded: number; total: number; error: boolean }>({ url: null, loaded: 0, total: 0, error: false });
+  useEffect(() => {
+    const ctrl = new AbortController();
+    let url: string | null = null;
+    (async () => {
+      try {
+        const r = await fetch(src, { credentials: "same-origin", signal: ctrl.signal });
+        if (!r.ok || !r.body) throw new Error(String(r.status));
+        const total = Number(r.headers.get("content-length") || 0);
+        const reader = r.body.getReader();
+        const parts: Uint8Array[] = [];
+        let loaded = 0;
+        let shown = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parts.push(value);
+          loaded += value.byteLength;
+          // Repaint the ring at most every ~3% (a 10 MB file is hundreds of chunks).
+          if (!total || loaded - shown > total / 33) {
+            shown = loaded;
+            setState((st) => ({ ...st, loaded, total }));
+          }
+        }
+        url = URL.createObjectURL(new Blob(parts as BlobPart[], { type: r.headers.get("content-type") || "" }));
+        setState({ url, loaded, total: total || loaded, error: false });
+      } catch {
+        if (!ctrl.signal.aborted) setState((st) => ({ ...st, error: true }));
+      }
+    })();
+    return () => {
+      ctrl.abort();
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [src]);
+  return state;
+}
+
+/** The loading card: a progress ring (or a spinner while the size is unknown), the name and the bytes so far. */
+function FileLoading({ a, loaded, total }: { a: TaskAttachment; loaded: number; total: number }) {
+  const size = total || a.size_bytes;
+  const pct = size ? Math.min(100, Math.round((loaded / size) * 100)) : 0;
+  const r = 22;
+  const c = 2 * Math.PI * r;
   return (
-    <div className="relative flex min-h-[40vh] max-h-[70vh] items-center justify-center overflow-hidden rounded-lg bg-canvas">
-      {!loaded && (
-        <span className="absolute inset-0 flex items-center justify-center">
-          <Spinner />
-        </span>
+    <div className="flex flex-col items-center justify-center gap-3 px-4 text-center" role="status" aria-live="polite">
+      {/* Until the first bytes arrive (the server is fetching from storage) a spinning arc;
+          then the ring fills with the real progress. */}
+      <svg width="56" height="56" viewBox="0 0 56 56" className={loaded ? "-rotate-90" : "animate-spin"} aria-hidden>
+        <circle cx="28" cy="28" r={r} fill="none" strokeWidth="4" className="stroke-line" />
+        <circle
+          cx="28"
+          cy="28"
+          r={r}
+          fill="none"
+          strokeWidth="4"
+          strokeLinecap="round"
+          className="stroke-ink transition-[stroke-dashoffset] duration-200"
+          strokeDasharray={c}
+          strokeDashoffset={loaded ? c * (1 - pct / 100) : c * 0.75}
+        />
+      </svg>
+      <div>
+        <p className="max-w-[min(28rem,80vw)] truncate text-[13px] font-medium text-ink" data-nowrap>Loading {a.file_name}</p>
+        <p className="mt-0.5 text-[12px] tabular-nums text-ink-subtle">{loaded ? `${pct}% · ${fmtBytes(loaded)} of ${fmtBytes(size)}` : `Preparing ${fmtBytes(size)}…`}</p>
+      </div>
+    </div>
+  );
+}
+
+function LoadFailed({ src, a }: { src: string; a: TaskAttachment }) {
+  return (
+    <div className="flex flex-col items-center gap-3 px-4 text-center">
+      <p className="text-[13px] text-ink-muted">Couldn&rsquo;t load {a.file_name}. Check the connection, or download it instead.</p>
+      <a href={`${src}?download=1`} className={buttonClass("secondary", "sm")} download={a.file_name}>
+        <IconDownload size={14} /> Download
+      </a>
+    </div>
+  );
+}
+
+function ImageView({ src, a }: { src: string; a: TaskAttachment }) {
+  const f = useFileBytes(src);
+  return (
+    <div className="flex min-h-[40vh] max-h-[70vh] items-center justify-center overflow-hidden rounded-lg bg-canvas">
+      {f.url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={f.url} alt={a.file_name} className="max-h-[70vh] max-w-full object-contain animate-fade-in" />
+      ) : f.error ? (
+        <LoadFailed src={src} a={a} />
+      ) : (
+        <FileLoading a={a} loaded={f.loaded} total={f.total} />
       )}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} className={`max-h-[70vh] max-w-full object-contain transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} />
+    </div>
+  );
+}
+
+function PdfView({ src, a }: { src: string; a: TaskAttachment }) {
+  const f = useFileBytes(src);
+  return f.url ? (
+    <iframe src={f.url} title={a.file_name} className="h-[70vh] w-full rounded-lg border border-line bg-white" />
+  ) : (
+    <div className="flex h-[70vh] items-center justify-center rounded-lg border border-line bg-canvas">{f.error ? <LoadFailed src={src} a={a} /> : <FileLoading a={a} loaded={f.loaded} total={f.total} />}</div>
+  );
+}
+
+/** Video streams as it plays (seeking works), so it gets a spinner until it can start, not a download ring. */
+function VideoView({ src, a }: { src: string; a: TaskAttachment }) {
+  const [ready, setReady] = useState(false);
+  return (
+    <div className="relative">
+      {!ready && (
+        <div className="absolute inset-0 z-[1] flex items-center justify-center rounded-lg bg-black/70 text-white">
+          <div className="flex flex-col items-center gap-2 text-[12.5px]">
+            <Spinner />
+            Loading {a.file_name}
+          </div>
+        </div>
+      )}
+      <video src={src} controls autoPlay playsInline preload="metadata" onCanPlay={() => setReady(true)} onError={() => setReady(true)} className="aspect-video w-full rounded-lg bg-black" />
     </div>
   );
 }

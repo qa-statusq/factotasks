@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose/jwt/verify";
 import type { JWTPayload } from "jose";
 
+/** A task attachment's file: /api/tasks/<task>/attachments/<attachment>. */
+const ATTACHMENT_FILE = /^\/api\/tasks\/[^/]+\/attachments\/[^/]+$/;
+
 const COOKIE = "ft_session";
 
 // Hoisted: same key bytes every request; no need to re-encode per call.
@@ -95,7 +98,9 @@ export async function proxy(req: NextRequest) {
     // press from repainting an authed page out of the HTTP/bfcache.
     // The store-icon relay (/api/icon) sets its own long-lived cache header;
     // everything else dynamic is personal and must not be cached.
-    if (!pathname.startsWith("/api/icon")) res.headers.set("Cache-Control", "no-store, must-revalidate");
+    // (Also exempt: a task attachment's file. It never changes under its id, so the route marks it
+    // privately cacheable — opened once, then instant; signing out clears it with Clear-Site-Data.)
+    if (!pathname.startsWith("/api/icon") && !ATTACHMENT_FILE.test(pathname)) res.headers.set("Cache-Control", "no-store, must-revalidate");
     res.headers.delete("x-powered-by");
     res.headers.delete("x-nextjs-cache");
     res.headers.delete("x-nextjs-prerender");
