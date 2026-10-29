@@ -30,6 +30,8 @@ interface UploadRow {
   thumb?: string;
 }
 
+const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
 // Files upload this many at a time (one at a time made a batch of screenshots crawl).
 const PARALLEL_UPLOADS = 3;
 
@@ -80,7 +82,12 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
       toast("Still uploading — add more files once this batch finishes", "error");
       return;
     }
-    const list = Array.from(files).slice(0, LIMITS.attachmentsPerTask - task.attachments.length);
+    // In name order, numbers counted as numbers (2 before 10), as Explorer and Finder list them.
+    // The order a picker hands over is not the order of the clicks — Windows moves the
+    // first-clicked file to the end — so name order is the one people actually see.
+    const list = Array.from(files)
+      .sort((x, y) => byName.compare(x.name, y.name))
+      .slice(0, LIMITS.attachmentsPerTask - task.attachments.length);
     if (!list.length) {
       toast(`A task can hold up to ${LIMITS.attachmentsPerTask} attachments`, "error");
       return;
