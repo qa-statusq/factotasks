@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button, buttonClass } from "@/components/ui/button";
-import { Sheet } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/misc";
 import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
@@ -16,26 +15,9 @@ import { fmtBytes } from "@/lib/format";
 import { LIMITS } from "@/lib/domain";
 import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
-import { IconPaperclip, IconUpload, IconFile, IconTrash, IconDownload, IconImage, IconVideo, IconMic, IconX } from "@/components/ui/icons";
+import { IconPaperclip, IconUpload, IconFile, IconTrash, IconDownload, IconVideo, IconMic, IconX } from "@/components/ui/icons";
 import type { TaskAttachment, TaskDetail } from "@/lib/types";
-
-type Kind = "image" | "pdf" | "video" | "audio" | "text" | "other";
-function kindOf(mime: string, name: string): Kind {
-  if (/^image\/(png|jpeg|webp|gif)$/.test(mime)) return "image";
-  if (mime === "application/pdf") return "pdf";
-  if (mime.startsWith("video/")) return "video";
-  if (mime.startsWith("audio/")) return "audio";
-  if (mime.startsWith("text/") || mime === "application/json" || /\.(md|log|txt|csv|json)$/i.test(name)) return "text";
-  return "other";
-}
-const KIND_LABEL: Record<Kind, string> = { image: "image", pdf: "PDF", video: "video", audio: "audio", text: "text", other: "file" };
-function fileLabel(a: TaskAttachment): string {
-  const ext = a.file_name.split(".").pop()?.toUpperCase();
-  if (/apk|aab|ipa/i.test(ext ?? "")) return `${ext} build`;
-  if (/docx?|xlsx?|pptx?/i.test(ext ?? "")) return `${ext} document`;
-  if (ext === "ZIP") return "archive";
-  return KIND_LABEL[kindOf(a.mime, a.file_name)];
-}
+import { AttachmentViewer, kindOf, fileLabel } from "@/components/attachment-viewer";
 
 interface UploadRow {
   name: string;
@@ -83,6 +65,7 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<UploadRow[]>([]);
   const [dragging, setDragging] = useState(false);
+  // The viewer walks the files in the order they are shown (pictures, then other files).
   const [preview, setPreview] = useState<TaskAttachment | null>(null);
   const [gone, setGone] = useState<Set<string>>(new Set());
   const base = `/api/tasks/${task.id}/attachments`;
@@ -266,80 +249,9 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
         </ul>
       )}
 
-      {preview && <AttachmentPreview a={preview} base={base} onClose={() => setPreview(null)} />}
+      {preview && (
+        <AttachmentViewer items={[...images, ...files]} startId={preview.id} base={base} onClose={() => setPreview(null)} />
+      )}
     </Card>
-  );
-}
-
-/** One sheet, one file: an image, a PDF, a video or audio clip, a text file, or a card with a download for everything else. */
-function AttachmentPreview({ a, base, onClose }: { a: TaskAttachment; base: string; onClose: () => void }) {
-  const kind = kindOf(a.mime, a.file_name);
-  const src = `${base}/${a.id}`;
-  const [text, setText] = useState<string | null>(null);
-  const [loading, setLoading] = useState(kind === "text");
-  useEffect(() => {
-    if (kind !== "text") return;
-    let alive = true;
-    fetch(`${src}?proxy=1`, { credentials: "same-origin" })
-      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
-      .then((t) => {
-        if (alive) setText(t.length > 200_000 ? `${t.slice(0, 200_000)}\n… (truncated — download for the full file)` : t);
-      })
-      .catch(() => {
-        if (alive) setText("Couldn't load the file.");
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [kind, src]);
-
-  return (
-    <Sheet
-      title={a.file_name}
-      description={`${fmtBytes(a.size_bytes)}${a.width ? ` · ${a.width}×${a.height}` : ""} · ${fileLabel(a)}${a.uploaded_by ? ` · ${a.uploaded_by.name}` : ""}`}
-      onClose={onClose}
-      wide={kind !== "other" && kind !== "audio"}
-      footer={
-        <div className="flex items-center justify-end gap-2">
-          <a href={`${src}?download=1`} className={buttonClass("secondary", "sm")} download={a.file_name}>
-            <IconDownload size={14} /> Download
-          </a>
-          <Button size="sm" onClick={onClose}>Close</Button>
-        </div>
-      }
-    >
-      {kind === "image" && (
-        <div className="flex max-h-[70vh] items-center justify-center overflow-hidden rounded-lg bg-canvas">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt={a.file_name} className="max-h-[70vh] max-w-full object-contain" />
-        </div>
-      )}
-      {kind === "pdf" && <iframe src={src} title={a.file_name} className="h-[70vh] w-full rounded-lg border border-line bg-white" />}
-      {kind === "video" && <video src={src} controls autoPlay playsInline preload="metadata" className="aspect-video w-full rounded-lg bg-black" />}
-      {kind === "audio" && (
-        <div className="flex flex-col items-center gap-4 rounded-lg bg-canvas px-4 py-8">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-ink text-white">
-            <IconMic size={24} />
-          </span>
-          <audio src={src} controls preload="metadata" className="w-full" />
-        </div>
-      )}
-      {kind === "text" && (loading ? <div className="flex justify-center py-10"><Spinner /></div> : <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line bg-canvas p-3 font-mono text-[12.5px] leading-relaxed text-ink">{text}</pre>)}
-      {kind === "other" && (
-        <div className="flex flex-col items-center gap-3 rounded-lg bg-canvas px-4 py-10 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface text-ink-subtle ring-1 ring-inset ring-line">
-            {kind === "other" && /\.(png|jpe?g|webp|gif)$/i.test(a.file_name) ? <IconImage size={24} /> : <IconFile size={24} />}
-          </span>
-          <p className="text-[13.5px] font-medium text-ink">{a.file_name}</p>
-          <p className="max-w-sm text-[12.5px] text-ink-muted">This {fileLabel(a)} can&rsquo;t be shown in the browser. Download it to open it on your computer.</p>
-          <a href={`${src}?download=1`} className={buttonClass("primary", "sm")} download={a.file_name}>
-            <IconDownload size={14} /> Download {fmtBytes(a.size_bytes)}
-          </a>
-        </div>
-      )}
-    </Sheet>
   );
 }

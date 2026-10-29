@@ -48,6 +48,8 @@ export function useDeckKeys(o: {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // An attachment viewer is open over the slides: its keys (← →, Esc) are its own.
+      if (document.querySelector("[data-attachment-viewer]")) return;
       // A focused control keeps Space/Enter for itself ("Show more", the jump grid, the toolbar).
       const el = e.target as HTMLElement | null;
       if (e.key === " " && el && el.closest("button, a, input, textarea, select, [role=button]")) return;

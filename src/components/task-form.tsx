@@ -186,7 +186,13 @@ export function TaskFormSheet({
 
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [targets, setTargets] = useState<TargetRef[]>(initial?.targets ?? []);
+  const [rawTargets, setTargets] = useState<TargetRef[]>(initial?.targets ?? []);
+  // Only platforms the app really has: a form opened with an app pre-selected (a meeting's or
+  // an app page's "New task") may name both, and the server refuses a platform the app lacks.
+  const targets = useMemo(
+    () => (apps.length ? rawTargets.filter((t) => apps.some((a) => a.id === t.app_id && (t.platform === "android" ? a.has_android : a.has_ios))) : rawTargets),
+    [apps, rawTargets]
+  );
   const [type, setType] = useState<TaskType>(initial?.type ?? "feature");
   const [priority, setPriority] = useState<Priority>(initial?.priority ?? "medium");
   const [assignees, setAssignees] = useState<string[]>(initial?.assignee_ids ?? []);
@@ -285,7 +291,7 @@ export function TaskFormSheet({
   const dirty =
     !same(title, base.title) ||
     !same(description, base.description) ||
-    !same(targets.map((t) => `${t.app_id}:${t.platform}`), base.targets.map((t) => `${t.app_id}:${t.platform}`)) ||
+    !same(rawTargets.map((t) => `${t.app_id}:${t.platform}`), base.targets.map((t) => `${t.app_id}:${t.platform}`)) ||
     type !== base.type ||
     priority !== base.priority ||
     !same(assignees, base.assignees) ||
@@ -314,7 +320,7 @@ export function TaskFormSheet({
       setTitle("");
       setDescription("");
       setLabelDraft("");
-      setBase({ targets, type, priority, assignees, due, labels: values.labels, estimate, seriesId, title: "", description: "" });
+      setBase({ targets: rawTargets, type, priority, assignees, due, labels: values.labels, estimate, seriesId, title: "", description: "" });
       setLabels(values.labels);
       setBusy(false);
       titleRef.current?.focus();
