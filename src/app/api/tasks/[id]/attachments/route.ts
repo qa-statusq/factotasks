@@ -57,22 +57,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (u instanceof NextResponse) return u;
   const { id } = await params;
   if (!isUuid(id)) return fail("Task not found", 404);
-  const limited = await rateLimited(u.uid, "upload", 40, 60);
-  if (limited) return limited;
-
+  const t0 = performance.now();
   // Cheap pre-check on the declared length before reading the body.
   const declaredLen = Number(req.headers.get("content-length") || 0);
   if (declaredLen > MAX_ATTACHMENT_BYTES + 64 * 1024) return fail(`Files must be under ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`, 413);
 
-  const own = await loadOwnership(id);
-  if (!own) return fail("Task not found", 404);
-  if (!(await canSeeTask(u, id))) return fail("Task not found", 404);
   const sb = getSupabase();
-  const { count } = await sb.from("task_attachments").select("id", { count: "exact", head: true }).eq("task_id", id);
-  if ((count ?? 0) >= LIMITS.attachmentsPerTask) return fail(`A task can hold up to ${LIMITS.attachmentsPerTask} attachments`);
-
-  // Read at most the size limit (plus the form's own framing), whatever the request declares.
-  const raw = await readCappedBody(req, MAX_ATTACHMENT_BYTES + 64 * 1024);
+  // The four checks run together, AND while the file is still arriving (they used to run one
+  // after another, and only then was the body read): one database round trip instead of four,
+  // hidden behind the upload itself. Read at most the size limit (plus the form's framing).
+  const [limited, own, visible, counted, raw] = await Promise.all([
+    rateLimited(u.uid, "upload", 40, 60),
+    loadOwnership(id),
+    canSeeTask(u, id),
+    sb.from("task_attachments").select("id", { count: "exact", head: true }).eq("task_id", id),
+    readCappedBody(req, MAX_ATTACHMENT_BYTES + 64 * 1024),
+  ]);
+  const tReceived = performance.now();
+  if (limited) return limited;
+  if (!own || !visible) return fail("Task not found", 404);
+  if ((counted.count ?? 0) >= LIMITS.attachmentsPerTask) return fail(`A task can hold up to ${LIMITS.attachmentsPerTask} attachments`);
   if (!raw) return fail(`Files must be under ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`, 413);
   let form: FormData;
   try {
@@ -96,6 +100,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const toDrive = driveConfigured();
   let key: string | null = null;
   let driveFileId: string | null = null;
+  const tStore = performance.now();
   if (toDrive) {
     try {
       const folder = await ensureFolder(ATTACHMENTS_FOLDER);
@@ -112,6 +117,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   }
 
+  const tStored = performance.now();
   const { data, error } = await sb
     .from("task_attachments")
     .insert({ task_id: id, uploaded_by: u.uid, file_name: originalName, mime, size_bytes: bytes.length, storage_path: key, ...(toDrive ? { drive_file_id: driveFileId } : {}), width: dims?.width ?? null, height: dims?.height ?? null })
@@ -129,6 +135,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await logActivity({ action: "task.attach", entityType: "task", entityId: id, summary: `Attached “${originalName}” to ${taskRef(own.number)}`, metadata: { number: own.number, bytes: bytes.length } });
     await notifyUsers({ userIds: involved(own), kind: "task.attachment", taskId: id, actorId: u.uid, message: `${actor} attached “${originalName}” to ${taskRef(own.number)}` });
   });
+  // Where the time went, readable in the browser's network panel (standard Server-Timing).
+  const tDone = performance.now();
+  const timing = `receive;desc="file + checks";dur=${Math.round(tReceived - t0)}, store;desc="${toDrive ? "Google Drive" : "storage"}";dur=${Math.round(tStored - tStore)}, record;desc="database";dur=${Math.round(tDone - tStored)}`;
   return NextResponse.json({
     attachment: {
       id: data.id,
@@ -140,5 +149,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       created_at: data.created_at,
       uploaded_by: embeddedUser(data.uploader),
     },
-  });
+  }, { headers: { "Server-Timing": timing } });
 }

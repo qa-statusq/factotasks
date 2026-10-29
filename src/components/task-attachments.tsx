@@ -24,9 +24,14 @@ interface UploadRow {
   size: number;
   /** 0..1 sent to the panel; then "saving" while the panel hands it to Drive. */
   progress: number;
-  phase: "sending" | "saving" | "done" | "error";
+  phase: "waiting" | "sending" | "saving" | "done" | "error";
   error?: string;
+  /** A picture's local preview while it uploads (object URL, revoked when the row goes). */
+  thumb?: string;
 }
+
+// Files upload this many at a time (one at a time made a batch of screenshots crawl).
+const PARALLEL_UPLOADS = 3;
 
 /** PUT/POST with upload progress (XHR is the only browser API that reports it). */
 function postWithProgress(url: string, body: FormData, onProgress: (ratio: number) => void): Promise<{ ok: boolean; data: { error?: string } | null }> {
@@ -71,7 +76,7 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
   const base = `/api/tasks/${task.id}/attachments`;
 
   async function upload(files: FileList | File[]) {
-    if (uploading.some((u) => u.phase === "sending" || u.phase === "saving")) {
+    if (uploading.some((u) => u.phase === "waiting" || u.phase === "sending" || u.phase === "saving")) {
       toast("Still uploading — add more files once this batch finishes", "error");
       return;
     }
@@ -80,11 +85,14 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
       toast(`A task can hold up to ${LIMITS.attachmentsPerTask} attachments`, "error");
       return;
     }
-    setUploading(list.map((f) => ({ name: f.name, size: f.size, progress: 0, phase: "sending" })));
+    // A picture shows at once from the device (no waiting for the upload to see what is going up).
+    const thumbs = list.map((f) => (/^image\/(png|jpeg|webp|gif)$/.test(f.type) ? URL.createObjectURL(f) : undefined));
+    setUploading(list.map((f, i) => ({ name: f.name, size: f.size, progress: 0, phase: "waiting", thumb: thumbs[i] })));
     const set = (i: number, p: Partial<UploadRow>) => setUploading((cur) => cur.map((x, j) => (j === i ? { ...x, ...p } : x)));
     let added = 0;
-    for (let i = 0; i < list.length; i++) {
-      const original = list[i];
+    const queue = list.map((f, i) => [f, i] as const);
+    const one = async (original: File, i: number) => {
+      set(i, { phase: "sending" });
       try {
         const file = await compressImage(original);
         if (file.size > LIMITS.attachmentBytes) throw new Error(`${original.name} is over ${Math.round(LIMITS.attachmentBytes / 1024 / 1024)} MB`);
@@ -99,9 +107,16 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
       } catch (e) {
         set(i, { phase: "error", error: (e as Error).message });
       }
-    }
+    };
+    const worker = async () => {
+      for (let next = queue.shift(); next; next = queue.shift()) await one(next[0], next[1]);
+    };
+    await Promise.all(Array.from({ length: Math.min(PARALLEL_UPLOADS, list.length) }, worker));
     if (added) toast(added === 1 ? "File attached" : `${added} files attached`);
-    window.setTimeout(() => setUploading((cur) => cur.filter((x) => x.phase === "error")), 1500);
+    window.setTimeout(() => {
+      setUploading((cur) => cur.filter((x) => x.phase === "error"));
+      thumbs.forEach((t) => t && URL.revokeObjectURL(t));
+    }, 1500);
   }
 
   async function remove(a: TaskAttachment) {
@@ -235,9 +250,13 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
           {uploading.map((u, i) => (
             <li key={i} className="py-1.5 text-xs">
               <div className={cn("flex items-center gap-2", u.phase === "error" ? "text-red-600" : "text-ink-muted")}>
+                {u.thumb ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={u.thumb} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover ring-1 ring-line" />
+                ) : null}
                 {u.phase === "done" ? <span className="text-emerald-600">✓</span> : u.phase === "error" ? <IconX size={12} /> : <Spinner className="h-3 w-3" />}
                 <span className="min-w-0 flex-1 truncate">{u.name}</span>
-                <span className="shrink-0 tabular-nums">{u.phase === "sending" ? `${Math.round(u.progress * 100)}% · ${fmtBytes(u.size)}` : u.phase === "saving" ? "Saving…" : u.phase === "done" ? "Attached" : u.error}</span>
+                <span className="shrink-0 tabular-nums">{u.phase === "waiting" ? "Waiting…" : u.phase === "sending" ? `${Math.round(u.progress * 100)}% · ${fmtBytes(u.size)}` : u.phase === "saving" ? "Saving to Drive…" : u.phase === "done" ? "Attached" : u.error}</span>
               </div>
               {(u.phase === "sending" || u.phase === "saving") && (
                 <div className="mt-1 h-1 overflow-hidden rounded-full bg-line/70">
