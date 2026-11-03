@@ -84,37 +84,26 @@ numbers restart at T-1) and empty the `attachments` bucket under Storage.
 - Add an app, a teammate, a task; request Done as the teammate; approve as admin; open
   **Meetings → Start this week's meeting → Present**.
 
-## 7. Daily job — Cloud Scheduler (needed)
-App Hosting has no built-in cron. The daily job sends due-date reminders (09:00 IST) and is
-what keeps the Activity log at 14 days and the inbox at 60 days — without it they grow
-without bound. Replace `<APP_URL>` and `<CRON_SECRET>`:
-```powershell
-gcloud scheduler jobs create http factotasks-daily `
-  --location=asia-southeast1 `
-  --schedule="0 9 * * *" `
-  --time-zone="Asia/Kolkata" `
-  --uri="<APP_URL>/api/cron/daily" `
-  --http-method=GET `
-  --headers="Authorization=Bearer <CRON_SECRET>"
-```
-The route rejects any request without the correct bearer token, so it is safe to be public.
+## 7. Scheduled jobs — cron-job.org (needed)
+App Hosting has no built-in cron, so two free jobs on https://cron-job.org call the panel.
+Both send `Authorization: Bearer <CRON_SECRET>` (the value of the `FACTOTASKS_CRON_SECRET`
+secret, same as `CRON_SECRET` in `.env.local`); without it the routes answer 401, so they are
+safe to be public. Account time zone: **Asia/Kolkata**. Request method **GET**.
 
-**Store check (every 30 minutes).** Marks a version released as soon as Google Play / the
-App Store shows it (dated when the store published it), and tells admins when a store has a
-newer version than anything in Releases. With no version waiting, it contacts no store.
-```powershell
-gcloud scheduler jobs create http factotasks-store-check `
-  --location=asia-southeast1 `
-  --schedule="*/30 * * * *" `
-  --time-zone="Asia/Kolkata" `
-  --uri="<APP_URL>/api/cron/store-check" `
-  --http-method=GET `
-  --headers="Authorization=Bearer <CRON_SECRET>"
-```
-Without gcloud: Google Cloud console → Cloud Scheduler → **Create job** with the same name,
-region, frequency `*/30 * * * *`, time zone India Standard Time, target **HTTP**, URL and
-method as above, and a header `Authorization: Bearer <CRON_SECRET>`.
-Preview without changing anything: the same request with `?dry=1` lists what it would do.
+| Job | URL | Schedule |
+|---|---|---|
+| FactoTasks daily | `<APP_URL>/api/cron/daily` | every day 09:00 |
+| FactoTasks store check | `<APP_URL>/api/cron/store-check` | every 30 minutes |
+
+- **Daily**: due-date reminders, closes overdue meetings, trims the Activity log (90 d), the
+  inbox (60 d) and old sign-in records — without it they grow without bound.
+- **Store check**: marks a version released as soon as Google Play / the App Store shows it
+  (dated when the store published it) and tells admins when a store is ahead of Releases.
+  With no version waiting, it contacts no store.
+- Under **Advanced**: add the header `Authorization` = `Bearer <CRON_SECRET>`; keep the
+  30 s timeout; turn on "notify on failure".
+- Check the secret first with **Test run** on `<APP_URL>/api/cron/store-check?dry=1` — it
+  changes nothing: 200 = right secret, 401 = wrong one.
 
 ## 8. Custom domain (optional)
 App Hosting → backend → **Add custom domain**, follow the DNS steps. HSTS is already on.

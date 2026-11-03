@@ -41,7 +41,7 @@ architecture, data model, permissions and phase plan.
 | App + API      | Next.js 16 on **Firebase App Hosting** (Cloud Run, scale-to-zero) | $0*  |
 | Database       | **Supabase** Postgres — aggregation in SQL functions         | $0   |
 | Attachments    | **Supabase Storage** private bucket, signed URLs            | $0   |
-| Reminders      | **Cloud Scheduler** → `/api/cron/daily` (optional)          | $0*  |
+| Scheduled jobs | **cron-job.org** → `/api/cron/daily`, `/api/cron/store-check` | $0   |
 
 > \* App Hosting requires the Firebase **Blaze** plan, but with `minInstances: 0` the service
 > scales to zero and a 50-person team stays within the free allowances.
@@ -85,8 +85,8 @@ npm run dev                     # http://localhost:3000
 then remove `APP_PASSWORD`.)
 
 ### 4. Deploy
-See [`DEPLOY.md`](DEPLOY.md) — GitHub → Firebase App Hosting, three secrets, optional
-Cloud Scheduler job.
+See [`DEPLOY.md`](DEPLOY.md) — GitHub → Firebase App Hosting, three secrets, two
+cron-job.org jobs.
 
 ## Scripts
 

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Store check, called by Cloud Scheduler every 30 minutes with `Authorization:
+ * Store check, called by cron-job.org every 30 minutes with `Authorization:
  * Bearer <CRON_SECRET>` (see DEPLOY.md). A version that isn't released yet but
  * is already live on Google Play / the App Store is marked released, dated when
  * the store published it. With no version pending, no store is contacted.

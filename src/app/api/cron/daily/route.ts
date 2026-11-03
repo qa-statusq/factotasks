@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Daily housekeeping, called by Cloud Scheduler with `Authorization: Bearer
+ * Daily housekeeping, called by cron-job.org at 09:00 IST with `Authorization: Bearer
  * <CRON_SECRET>` (see DEPLOY.md). Idempotent for a given day:
  *  - "due tomorrow" / "overdue" reminders to assignees (one per task per day)
  *  - trims the activity log (14 d) and notifications (60 d)
