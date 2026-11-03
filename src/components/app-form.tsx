@@ -91,12 +91,20 @@ export function AppFormSheet({ app, onClose, onSaved }: { app?: AppOverview | nu
         </Field>
         <div className="flex flex-col gap-3 rounded-xl border border-line p-3.5">
           <Switch checked={android} onChange={setAndroid} label="Android" description="Ships on Google Play" />
-          {android && <Input value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="Package id — com.example.app" aria-label="Android package id" />}
+          {android && (
+            <Field label="Package id (optional)" hint="Fill in once the app is live on Google Play — it brings in the store icon and lets the panel mark versions released when they appear there. Leave it empty until then.">
+              <Input value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="com.example.app" />
+            </Field>
+          )}
           <Switch checked={ios} onChange={setIos} label="iOS" description="Ships on the App Store" />
           {ios && (
             <>
-              <Input value={bundle} onChange={(e) => setBundle(e.target.value)} placeholder="Bundle id — com.example.app" aria-label="iOS bundle id" />
-              <Input value={storeUrl} onChange={(e) => setStoreUrl(e.target.value)} placeholder="App Store link (https://apps.apple.com/…)" aria-label="App Store link" />
+              <Field label="Bundle id (optional)" hint="Fill in once the app is live on the App Store — same use as the package id. Leave it empty until then.">
+                <Input value={bundle} onChange={(e) => setBundle(e.target.value)} placeholder="com.example.app" />
+              </Field>
+              <Field label="App Store link (optional)">
+                <Input value={storeUrl} onChange={(e) => setStoreUrl(e.target.value)} placeholder="https://apps.apple.com/…" />
+              </Field>
             </>
           )}
         </div>
