@@ -99,6 +99,23 @@ gcloud scheduler jobs create http factotasks-daily `
 ```
 The route rejects any request without the correct bearer token, so it is safe to be public.
 
+**Store check (every 30 minutes).** Marks a version released as soon as Google Play / the
+App Store shows it (dated when the store published it), and tells admins when a store has a
+newer version than anything in Releases. With no version waiting, it contacts no store.
+```powershell
+gcloud scheduler jobs create http factotasks-store-check `
+  --location=asia-southeast1 `
+  --schedule="*/30 * * * *" `
+  --time-zone="Asia/Kolkata" `
+  --uri="<APP_URL>/api/cron/store-check" `
+  --http-method=GET `
+  --headers="Authorization=Bearer <CRON_SECRET>"
+```
+Without gcloud: Google Cloud console → Cloud Scheduler → **Create job** with the same name,
+region, frequency `*/30 * * * *`, time zone India Standard Time, target **HTTP**, URL and
+method as above, and a header `Authorization: Bearer <CRON_SECRET>`.
+Preview without changing anything: the same request with `?dry=1` lists what it would do.
+
 ## 8. Custom domain (optional)
 App Hosting → backend → **Add custom domain**, follow the DNS steps. HSTS is already on.
 

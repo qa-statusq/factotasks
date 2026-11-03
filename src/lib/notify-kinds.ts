@@ -10,7 +10,7 @@ export const NOTIFY_CATEGORIES = [
   { key: "comments", label: "Comments and meeting notes", hint: "Someone comments, attaches a file or notes something on your task", kinds: ["task.comment", "task.attachment", "task.mom", "meeting.note"], urgent: true },
   { key: "reminders", label: "Due-date reminders", hint: "Your open task is due tomorrow or overdue", kinds: ["task.due"], urgent: true },
   { key: "status", label: "Status changes on my tasks", hint: "Someone else moves or removes a task you are on", kinds: ["task.status", "task.deleted"], urgent: false },
-  { key: "releases", label: "Releases of my apps", hint: "A version of an app you work on ships", kinds: ["release.released"], urgent: false },
+  { key: "releases", label: "Releases of my apps", hint: "A version of an app you work on ships, or the store has one that isn't logged yet", kinds: ["release.released", "release.store_ahead"], urgent: false },
 ] as const;
 
 const BY_KIND = new Map<string, (typeof NOTIFY_CATEGORIES)[number]>();

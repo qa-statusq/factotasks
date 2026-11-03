@@ -590,7 +590,8 @@ function Timeline({ task }: { task: TaskDetail }) {
           <li key={e.id} className="flex items-start gap-2.5 py-1.5 text-[13px]">
             <Avatar user={e.actor} size="xs" className="mt-0.5" />
             <div className="min-w-0 flex-1 break-words text-ink-muted">
-              <span className="font-medium text-ink">{e.actor?.name ?? "Someone"}</span> {KIND_LABEL[e.kind]}{" "}
+              {/* No person: the store check found the version live and settled the task. */}
+              <span className="font-medium text-ink">{e.actor?.name ?? "Store check"}</span> {KIND_LABEL[e.kind]}{" "}
               {e.to_status && <span className="font-medium text-ink">{STATUS_META[e.to_status].label}</span>}
               {e.note && <span> — “{e.note}”</span>}
               <span className="text-ink-subtle">

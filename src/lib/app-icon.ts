@@ -5,21 +5,11 @@
  * Best-effort with short timeouts; a failure simply leaves the coloured
  * letter tile in place.
  */
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36";
-
-async function get(url: string, ms = 6000): Promise<string | null> {
-  try {
-    const r = await fetch(url, { headers: { "user-agent": UA, "accept-language": "en" }, signal: AbortSignal.timeout(ms), cache: "no-store" });
-    if (!r.ok) return null;
-    return await r.text();
-  } catch {
-    return null;
-  }
-}
+import { storeGet, playUrl } from "./store-listing";
 
 async function fetchPlayIcon(packageName: string): Promise<string | null> {
   if (!/^[a-zA-Z][\w.]*$/.test(packageName)) return null;
-  const html = await get(`https://play.google.com/store/apps/details?id=${encodeURIComponent(packageName)}&hl=en&gl=in`);
+  const html = await storeGet(playUrl(packageName));
   if (!html) return null;
   const m = /<meta\s+property="og:image"\s+content="([^"]+)"/i.exec(html) || /<meta\s+content="([^"]+)"\s+property="og:image"/i.exec(html);
   if (!m) return null;
@@ -31,7 +21,7 @@ async function fetchPlayIcon(packageName: string): Promise<string | null> {
 
 async function fetchAppStoreIcon(bundleId: string): Promise<string | null> {
   if (!/^[a-zA-Z][\w.-]*$/.test(bundleId)) return null;
-  const json = await get(`https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(bundleId)}&country=in`);
+  const json = await storeGet(`https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(bundleId)}&country=in`);
   if (!json) return null;
   try {
     const data = JSON.parse(json) as { results?: { artworkUrl512?: string; artworkUrl100?: string }[] };

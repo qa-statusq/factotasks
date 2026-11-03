@@ -168,7 +168,7 @@ export class AlreadyReleased extends Error {
   }
 }
 
-export async function applyReleased(rel: ReleaseCore, actor: SessionUser, opts: { kind: "change" | "approve"; note?: string | null; completedAt?: string | null }): Promise<{ released_at: string; closed: { id: string; number: number; title: string }[]; partial: { id: string; number: number; title: string }[] }> {
+export async function applyReleased(rel: ReleaseCore, actor: SessionUser | null, opts: { kind: "change" | "approve"; note?: string | null; completedAt?: string | null }): Promise<{ released_at: string; closed: { id: string; number: number; title: string }[]; partial: { id: string; number: number; title: string }[] }> {
   const sb = getSupabase();
   const released_at = rel.released_at ?? releasedAtFor(rel.planned_date);
   // Conditional: two admins approving at once release it ONCE. The loser
@@ -197,7 +197,8 @@ export async function applyReleased(rel: ReleaseCore, actor: SessionUser, opts: 
  */
 export async function settleShippedTasks(
   tasks: { id: string; number: number; title: string }[],
-  actor: SessionUser,
+  /** null: the store check found the version live — no person did it. */
+  actor: SessionUser | null,
   label: string,
   opts: { note?: string | null; completedAt?: string | null } = {}
 ): Promise<{ closed: { id: string; number: number; title: string }[]; partial: { id: string; number: number; title: string }[] }> {
@@ -236,7 +237,7 @@ export async function settleShippedTasks(
       const { error: e } = await sb.rpc("task_apply_status", {
         p_task: t.id,
         p_to: allDone ? "done" : "partial",
-        p_actor: actor.uid,
+        p_actor: actor?.uid ?? null,
         p_kind: "change",
         p_note: `${allDone ? "Shipped" : `Shipped on ${shipped} of ${total} targets`} — ${label}${opts.note ? ` — ${opts.note}` : ""}`,
         p_completed_at: allDone ? (opts.completedAt ?? last) : null,
@@ -253,7 +254,7 @@ export async function settleShippedTasks(
   partial.sort((a, b) => a.number - b.number);
   const touched = [...closed, ...partial];
   if (touched.length) {
-    const actorName = displayName(actor.firstName, actor.lastName) || actor.email;
+    const actorName = actor ? displayName(actor.firstName, actor.lastName) || actor.email : null;
     // After the response, a few at a time: never waits for (or bursts) one inbox row + push per task.
     after(async () => {
       const { data: who } = await sb.from("task_assignees").select("task_id, user_id").in("task_id", touched.map((t) => t.id));
@@ -266,8 +267,8 @@ export async function settleShippedTasks(
             userIds: byTask.get(t.id) || [],
             kind: "task.status",
             taskId: t.id,
-            actorId: actor.uid,
-            message: closed.includes(t) ? `${actorName} marked ${taskRef(t.number)} “${t.title}” done — shipped in ${label}` : `${taskRef(t.number)} “${t.title}” shipped in ${label} — other targets still pending`,
+            actorId: actor?.uid ?? null,
+            message: closed.includes(t) ? (actorName ? `${actorName} marked ${taskRef(t.number)} “${t.title}” done — shipped in ${label}` : `${taskRef(t.number)} “${t.title}” is done — ${label} is live on the store`) : `${taskRef(t.number)} “${t.title}” shipped in ${label} — other targets still pending`,
           });
         }
       };
