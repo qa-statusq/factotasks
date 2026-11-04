@@ -91,6 +91,8 @@ function ReleaseTaskPicker({ appId, platform, releaseId, value, onChange }: { ap
       // Already in THIS version (shipped or not): always listed, so an edit
       // shows the full contents. Otherwise only unreleased, unassigned targets.
       if (target.release?.id === releaseId) return true;
+      // A cancelled task ships nowhere, so it is never offered for a version.
+      if (t.status === "cancelled") return false;
       return !target.released_at && !target.release;
     });
     const list = eligible.sort((a, b) => a.number - b.number);

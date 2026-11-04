@@ -125,8 +125,12 @@ export async function setReleaseTasks(releaseId: string, appId: string, platform
   const current = new Set((cur || []).map((t) => t.task_id as string));
   const wanted = new Set(ids);
   const toClear = [...current].filter((id) => !wanted.has(id));
-  const toSet = ids.filter((id) => !current.has(id));
+  let toSet = ids.filter((id) => !current.has(id));
   if (toClear.length) await sb.from("task_targets").update({ release_id: null }).eq("release_id", releaseId).in("task_id", toClear).is("released_at", null);
+  if (!toSet.length) return [];
+  // A cancelled task is never newly put into a version (one already in it stays until unticked).
+  const { data: live } = await sb.from("tasks").select("id").in("id", toSet).neq("status", "cancelled");
+  toSet = (live || []).map((t) => t.id as string);
   if (!toSet.length) return [];
   const { data: linked } = await sb.from("task_targets").update({ release_id: releaseId }).in("task_id", toSet).eq("app_id", appId).eq("platform", platform).is("released_at", null).select("task:tasks(id, number, title)");
   return (linked || []).map((r) => embedded<{ id: string; number: number; title: string }>(r.task)).filter((t): t is { id: string; number: number; title: string } => !!t);
