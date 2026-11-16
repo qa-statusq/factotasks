@@ -75,7 +75,7 @@ export function ScopeLabel({ scope, apps, className, size = "sm" }: { scope: Par
 export function AppScopePicker({ apps, value, onChange }: { apps: AppOverview[]; value: Scope; onChange: (s: Scope) => void }) {
   const all = value.app_ids.length === 0;
   const chip = "inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium ring-1 ring-inset transition-colors";
-  const on = "bg-ink text-white ring-ink";
+  const on = "bg-ink text-on-ink ring-ink";
   const off = "bg-surface text-ink-muted ring-line hover:text-ink";
   const toggleApp = (id: string) => {
     const app_ids = value.app_ids.includes(id) ? value.app_ids.filter((x) => x !== id) : [...value.app_ids, id];

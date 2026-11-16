@@ -77,7 +77,7 @@ function RecordingRow({ r, cacheKey, showMeeting, canManage, onPlay, onShare, on
 
   return (
     <li className="group flex items-start gap-3 py-2.5">
-      <button type="button" onClick={onPlay} disabled={!ready} className={cn("mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", ready ? "bg-ink text-white hover:bg-black" : "bg-canvas text-ink-subtle")} aria-label={ready ? "Play" : r.status === "uploading" ? "Still being recorded" : "Upload failed"} title={ready ? "Play" : r.status === "uploading" ? "Still being recorded — it can be played once it is saved" : "Upload failed"}>
+      <button type="button" onClick={onPlay} disabled={!ready} className={cn("mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", ready ? "bg-ink text-on-ink hover:bg-ink-hover" : "bg-canvas text-ink-subtle")} aria-label={ready ? "Play" : r.status === "uploading" ? "Still being recorded" : "Upload failed"} title={ready ? "Play" : r.status === "uploading" ? "Still being recorded — it can be played once it is saved" : "Upload failed"}>
         {ready ? <IconPlay size={15} /> : r.status === "uploading" ? <Spinner className="h-4 w-4" /> : <IconX size={15} />}
       </button>
       <div className="min-w-0 flex-1">
@@ -165,7 +165,7 @@ export function PlayerSheet({ r, onClose }: { r: Recording; onClose: () => void 
     >
       {isAudioRecording(r) ? (
         <div className="flex flex-col items-center gap-4 rounded-lg bg-canvas px-4 py-8">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-ink text-white">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-ink text-on-ink">
             <IconMic size={24} />
           </span>
           <audio src={`/api/recordings/${r.id}/stream`} controls autoPlay preload="metadata" className="w-full" />

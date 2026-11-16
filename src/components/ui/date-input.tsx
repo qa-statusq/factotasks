@@ -195,7 +195,7 @@ export function MonthGrid({ view, onView, selected, range, hover, onHover, focus
                 onMouseEnter={() => onHover?.(c.key)}
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-full text-[13px] tabular-nums transition-colors",
-                  isSel || isStart || isEnd ? "bg-ink font-semibold text-white" : inRange ? "text-ink hover:bg-ink/10" : "hover:bg-canvas",
+                  isSel || isStart || isEnd ? "bg-ink font-semibold text-on-ink" : inRange ? "text-ink hover:bg-ink/10" : "hover:bg-canvas",
                   !(isSel || isStart || isEnd) && (c.inMonth ? "text-ink" : "text-ink-subtle/70"),
                   !(isSel || isStart || isEnd) && isToday && "font-semibold ring-1 ring-inset ring-ink/40",
                   dis && "cursor-not-allowed opacity-30 hover:bg-transparent"
@@ -298,7 +298,7 @@ export function DateInput({ value, onChange, min, max, withTime, placeholder, cl
                     setOpen(false);
                     btnRef.current?.focus();
                   }}
-                  className="rounded-lg bg-ink px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-black"
+                  className="rounded-lg bg-ink px-3 py-1.5 text-[12.5px] font-semibold text-on-ink hover:bg-ink-hover"
                 >
                   Done
                 </button>
@@ -313,7 +313,7 @@ export function DateInput({ value, onChange, min, max, withTime, placeholder, cl
 
 export function Quick({ label, onClick, active }: { label: string; onClick: () => void; active?: boolean }) {
   return (
-    <button type="button" onClick={onClick} className={cn("rounded-md px-2 py-1 text-[11.5px] font-medium ring-1 ring-inset", active ? "bg-ink text-white ring-ink" : "bg-canvas text-ink-muted ring-line hover:text-ink")}>
+    <button type="button" onClick={onClick} className={cn("rounded-md px-2 py-1 text-[11.5px] font-medium ring-1 ring-inset", active ? "bg-ink text-on-ink ring-ink" : "bg-canvas text-ink-muted ring-line hover:text-ink")}>
       {label}
     </button>
   );

@@ -53,7 +53,7 @@ function PrintDoc() {
       <Shell>
         <span className="flex flex-col items-center gap-3">
           Couldn&rsquo;t load this meeting.
-          <button type="button" onClick={() => refresh()} className="rounded-lg bg-ink px-3 py-1.5 text-[13px] font-semibold text-white">Try again</button>
+          <button type="button" onClick={() => refresh()} className="rounded-lg bg-ink px-3 py-1.5 text-[13px] font-semibold text-on-ink">Try again</button>
         </span>
       </Shell>
     );

@@ -10,6 +10,8 @@ import { useModalChrome } from "@/components/ui/use-modal-chrome";
 import { ToastProvider, useToast } from "@/components/ui/toast";
 import { DialogProvider } from "@/components/ui/dialog";
 import { SessionProvider, useSession } from "@/components/providers/session-provider";
+import { ThemeSync } from "@/lib/theme";
+import { ThemeQuick } from "@/components/theme-picker";
 import { RecorderProvider } from "@/lib/use-recorder";
 import { RecorderOverlay } from "@/components/recording-controls";
 import { ClockProvider } from "@/components/providers/clock-provider";
@@ -465,6 +467,9 @@ function ProfileMenu({
               <IconUser size={16} />
               View profile
             </Link>
+            <div className="my-1 border-t border-line" />
+            <ThemeQuick />
+            <div className="my-1 border-t border-line" />
             <button
               role="menuitem"
               onClick={() => {
@@ -540,6 +545,7 @@ export default function AppShell({ children, navHint }: { children: React.ReactN
     <ToastProvider>
       <DialogProvider>
         <SessionProvider>
+          <ThemeSync />
           <ClockProvider>
             <RecorderProvider>
               <TaskComposerProvider>{presenting ? children : <Shell navHint={navHint}>{children}</Shell>}</TaskComposerProvider>
@@ -662,7 +668,7 @@ function Shell({ children, navHint }: { children: React.ReactNode; navHint?: Nav
         title={String(n)}
         className={cn(
           "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums ring-1 ring-inset",
-          tone === "amber" ? "bg-amber-100 text-amber-800 ring-amber-600/15" : "bg-ink text-white ring-ink"
+          tone === "amber" ? "bg-amber-100 text-amber-800 ring-amber-600/15" : "bg-ink text-on-ink ring-ink"
         )}
       >
         {compactCount(n)}

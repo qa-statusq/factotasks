@@ -17,7 +17,8 @@ import { signOut } from "@/lib/signout";
 import { NAME_MAX, displayName } from "@/lib/name";
 import { DEPARTMENT_META, LIMITS } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
-import { IconUser, IconLock, IconEye, IconEyeOff, IconBell } from "@/components/ui/icons";
+import { IconUser, IconLock, IconEye, IconEyeOff, IconBell, IconSun } from "@/components/ui/icons";
+import { ThemeTiles } from "@/components/theme-picker";
 import { pushSupported, currentSubscription, enablePush, disablePush, needsHomeScreen, syncPush } from "@/lib/push-client";
 import { NOTIFY_CATEGORIES, notifyPrefKey } from "@/lib/notify-kinds";
 import { usePref } from "@/lib/use-pref";
@@ -28,12 +29,13 @@ export default function ProfilePage() {
   const { loading } = useSession();
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      <PageHeader title="Profile" description="How you appear to the team, your notifications, where you are signed in, and your password." />
+      <PageHeader title="Profile" description="How you appear to the team, how the panel looks, your notifications, where you are signed in, and your password." />
       {loading ? (
         <PageLoader />
       ) : (
         <>
           <AccountCard />
+          <AppearanceCard />
           <NotificationsCard />
           <SessionsCard />
           <ChangePasswordCard />
@@ -113,6 +115,25 @@ function AccountCard() {
             <Button disabled={!dirty || busy}>{busy ? <Spinner /> : "Save"}</Button>
           </div>
         </form>
+      </CardBody>
+    </Card>
+  );
+}
+
+/** Light, dark or follow the device — saved on the account, so every device signs in to the same look. */
+function AppearanceCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <span className="inline-flex items-center gap-2">
+            <IconSun size={16} className="text-ink-subtle" /> Appearance
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-3">
+        <p className="text-[13px] text-ink-muted">Choose how FactoTasks looks for you. It applies right away and follows you to every device you sign in on.</p>
+        <ThemeTiles />
       </CardBody>
     </Card>
   );

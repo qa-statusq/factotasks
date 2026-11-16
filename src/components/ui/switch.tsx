@@ -38,13 +38,14 @@ export function Switch({
         onClick={() => onChange(!checked)}
         className={cn(
           "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2",
-          checked ? "bg-brand-600" : "bg-slate-300",
-          disabled ? "cursor-not-allowed opacity-50" : !checked && "hover:bg-slate-400/70"
+          checked ? "bg-brand-600" : "bg-slate-300 dark:bg-brand-300",
+          disabled ? "cursor-not-allowed opacity-50" : !checked && "hover:bg-slate-400/70 dark:hover:bg-brand-400/70"
         )}
       >
         <span
           className={cn(
             "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200",
+            checked && "dark:bg-on-ink",
             checked ? "translate-x-[22px]" : "translate-x-0.5"
           )}
         />

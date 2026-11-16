@@ -133,7 +133,7 @@ export default function LoginPage() {
 
       {/* ── Brand panel (desktop) ────────────────────────────────────── */}
       <div className="hidden flex-1 p-5 lg:flex">
-        <div className="relative flex flex-1 flex-col justify-center overflow-hidden rounded-2xl bg-brand-900 px-14 xl:px-20">
+        <div className="theme-light relative flex flex-1 flex-col justify-center overflow-hidden rounded-2xl bg-brand-900 ring-1 ring-white/5 px-14 xl:px-20">
           <div className="pointer-events-none absolute -right-40 -top-40 h-[30rem] w-[30rem] rounded-full bg-brand-700/30 blur-3xl" />
           <div className="relative max-w-sm">
             <h2 className="text-3xl font-semibold leading-snug tracking-tight text-white xl:text-[34px]">

@@ -79,7 +79,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={t.id}
             role={t.type === "error" ? "alert" : "status"}
-            className={cn("pointer-events-auto relative w-full overflow-hidden rounded-xl bg-[#1c1c1a] text-white shadow-[0_18px_40px_-12px_rgba(0,0,0,0.45),0_0_0_1px_rgba(255,255,255,0.06)]", t.leaving ? "animate-toast-out" : "animate-toast-in")}
+            className={cn("pointer-events-auto relative w-full overflow-hidden rounded-xl bg-toast text-white shadow-[0_18px_40px_-12px_rgba(0,0,0,0.45),0_0_0_1px_rgba(255,255,255,0.06)]", t.leaving ? "animate-toast-out" : "animate-toast-in")}
           >
             <div className="flex items-start gap-3 py-3 pl-3.5 pr-2">
               <span className={cn("mt-px flex h-7 w-7 shrink-0 items-center justify-center rounded-full", t.type === "success" && "bg-emerald-400/20 text-emerald-300", t.type === "error" && "bg-red-400/20 text-red-300", t.type === "info" && "bg-white/10 text-white/80")}>

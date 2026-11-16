@@ -31,7 +31,7 @@ export function MinutesDoc({ pack, onBack }: { pack: DeckPack; onBack: () => voi
   const footerText = `${p.workspace_name} · ${m.title}`.split('"').join("").split("\\").join("");
 
   return (
-    <div className="print-root min-h-svh bg-[#e9e8e4] py-8 print:bg-white print:py-0">
+    <div className="print-root min-h-svh bg-[#e9e8e4] dark:bg-canvas py-8 print:bg-white print:py-0">
       {/* The page's own margin boxes carry the footer (title left, "Page x of y" right) and leave the
           browser's URL/date header nothing to draw — Chrome 131+ honours them. */}
       <style>{`@media print { @page { size: A4 portrait; margin: 14mm 14mm 16mm;
@@ -45,13 +45,13 @@ export function MinutesDoc({ pack, onBack }: { pack: DeckPack; onBack: () => voi
           <IconBack size={14} /> Back to meeting
         </button>
         <span className="text-[12.5px] text-ink-muted">A4 · prints or saves as PDF from the browser dialog.</span>
-        <button type="button" onClick={() => window.print()} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-black">
+        <button type="button" onClick={() => window.print()} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[13px] font-semibold text-on-ink hover:bg-ink-hover">
           <IconPrint size={14} /> Print
         </button>
       </div>
 
       <EagerIconsContext.Provider value={true}>
-      <article className="print-doc mx-auto w-[210mm] max-w-[96vw] bg-white px-[16mm] py-[14mm] text-[10.5pt] leading-[1.4] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08),0_12px_40px_rgba(0,0,0,0.12)] print:max-w-none print:px-0 print:py-0 print:shadow-none">
+      <article className="print-doc theme-light mx-auto w-[210mm] max-w-[96vw] bg-white px-[16mm] py-[14mm] text-[10.5pt] leading-[1.4] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08),0_12px_40px_rgba(0,0,0,0.12)] print:max-w-none print:px-0 print:py-0 print:shadow-none">
         {/* Masthead */}
         <header className="border-b-2 border-ink pb-3">
           <div className="flex items-center justify-between gap-4 text-[8.5pt] font-semibold uppercase tracking-[0.18em] text-ink-muted">

@@ -197,7 +197,7 @@ function Deck() {
       {/* 16:9 stage */}
       <EagerIconsContext.Provider value={true}>
       <DeckTaskContext.Provider value={taskActions}>
-      <div className="deck-stage relative overflow-hidden bg-canvas text-ink shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_30px_80px_rgba(0,0,0,0.6)]" style={{ width: "min(100vw, calc(100vh * 16 / 9))", height: "min(100vh, calc(100vw * 9 / 16))" }}>
+      <div className="deck-stage theme-light relative overflow-hidden bg-canvas text-ink shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_30px_80px_rgba(0,0,0,0.6)]" style={{ width: "min(100vw, calc(100vh * 16 / 9))", height: "min(100vh, calc(100vw * 9 / 16))" }}>
         {/* The title band lives once, above every slide, so it never blinks on a slide change. Each slide keeps an invisible copy for print. */}
         <div className="deck-chrome absolute inset-x-0 top-0 flex items-center bg-[#1c1c1a] px-[4cqw] text-[1.05cqw] text-white/60" style={{ height: "9.6%", containerType: "inline-size" }}>
           <span className="inline-flex min-w-0 items-center gap-[0.8cqw]" style={{ maxWidth: `${titleMax}cqw` }}>

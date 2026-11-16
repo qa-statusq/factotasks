@@ -463,8 +463,8 @@ function PeriodChart({ periods, bucket }: { periods: Period[]; bucket: "week" | 
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block max-w-full" role="img" aria-label="Tasks done and created per period">
         {ticks.map((v) => (
           <g key={v}>
-            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#e7e5e4" strokeWidth={1} strokeDasharray={v === 0 ? undefined : "3 4"} />
-            <text x={padL - 8} y={y(v) + 4} textAnchor="end" fontSize={11} fill="#8a8781">{v}</text>
+            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} className="stroke-line" strokeWidth={1} strokeDasharray={v === 0 ? undefined : "3 4"} />
+            <text x={padL - 8} y={y(v) + 4} textAnchor="end" fontSize={11} className="fill-ink-subtle">{v}</text>
           </g>
         ))}
         {periods.map((p, i) => {
@@ -475,16 +475,16 @@ function PeriodChart({ periods, bucket }: { periods: Period[]; bucket: "week" | 
               <title>{`${periodLabel(p.key, bucket)}: ${p.done} done · ${p.created} created${p.released ? ` · ${p.released} release${p.released === 1 ? "" : "s"}` : ""}`}</title>
               <rect x={cx - bw - 2} y={y(p.done)} width={bw} height={Math.max(0, y(0) - y(p.done))} rx={4} fill="#10b981" />
               <rect x={cx + 2} y={y(p.created)} width={bw} height={Math.max(0, y(0) - y(p.created))} rx={4} fill="#a5b4fc" />
-              {roomy && p.done > 0 && <text x={cx - bw / 2 - 2} y={y(p.done) - 5} textAnchor="middle" fontSize={11} fontWeight={600} fill="#047857">{p.done}</text>}
-              {roomy && p.created > 0 && <text x={cx + bw / 2 + 2} y={y(p.created) - 5} textAnchor="middle" fontSize={11} fontWeight={600} fill="#4f46e5">{p.created}</text>}
-              {(n - 1 - i) % every === 0 && <text x={cx} y={H - padB + 20} textAnchor="middle" fontSize={11.5} fontWeight={500} fill="#5f5c57">{label}</text>}
+              {roomy && p.done > 0 && <text x={cx - bw / 2 - 2} y={y(p.done) - 5} textAnchor="middle" fontSize={11} fontWeight={600} className="fill-emerald-700">{p.done}</text>}
+              {roomy && p.created > 0 && <text x={cx + bw / 2 + 2} y={y(p.created) - 5} textAnchor="middle" fontSize={11} fontWeight={600} className="fill-indigo-600 dark:fill-indigo-300">{p.created}</text>}
+              {(n - 1 - i) % every === 0 && <text x={cx} y={H - padB + 20} textAnchor="middle" fontSize={11.5} fontWeight={500} className="fill-ink-muted">{label}</text>}
               {p.released > 0 &&
                 (roomy ? (
-                  <text x={cx} y={H - padB + 38} textAnchor="middle" fontSize={10.5} fill="#8a8781">
+                  <text x={cx} y={H - padB + 38} textAnchor="middle" fontSize={10.5} className="fill-ink-subtle">
                     {p.released} rel.
                   </text>
                 ) : (
-                  <circle cx={cx} cy={H - padB + 34} r={2.5} fill="#8a8781" />
+                  <circle cx={cx} cy={H - padB + 34} r={2.5} className="fill-ink-subtle" />
                 ))}
             </g>
           );

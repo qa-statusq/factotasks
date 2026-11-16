@@ -162,7 +162,7 @@ function FileView({ a, base }: { a: TaskAttachment; base: string }) {
       {kind === "video" && <VideoView src={src} a={a} />}
       {kind === "audio" && (
         <div className="flex flex-col items-center gap-4 rounded-lg bg-canvas px-4 py-8">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-ink text-white">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-ink text-on-ink">
             <IconMic size={24} />
           </span>
           <audio src={src} controls preload="metadata" className="w-full" />

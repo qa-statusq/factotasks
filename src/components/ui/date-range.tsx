@@ -143,7 +143,7 @@ export function DateRangeInput({ value, onChange, placeholder = "Any dates", cla
                       onChange(p.range);
                       close();
                     }}
-                    className={cn("flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors", active ? "bg-ink font-medium text-white" : "text-ink-muted hover:bg-canvas hover:text-ink")}
+                    className={cn("flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors", active ? "bg-ink font-medium text-on-ink" : "text-ink-muted hover:bg-canvas hover:text-ink")}
                   >
                     <span>{p.label}</span>
                     {active && <IconCheck size={13} />}

@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import AppShell, { type NavHint } from "@/components/app-shell";
 import { getSessionUser } from "@/lib/auth";
 import SwRegister from "@/components/sw-register";
+import { THEME_COOKIE, THEME_COLORS, isTheme, type Theme } from "@/lib/theme-shared";
 
 // Variable font: ONE woff2 covering every weight (no weight array, or next/font
 // would emit and preload several static files ahead of first text paint).
@@ -35,14 +36,30 @@ export const metadata: Metadata = {
   },
 };
 
+/** This device's theme as last chosen by whoever signed in here (the account
+ * preference is mirrored into this cookie), so the first frame is already right. */
+async function themeHint(): Promise<Theme> {
+  const v = (await cookies()).get(THEME_COOKIE)?.value;
+  return isTheme(v) ? v : "light";
+}
+
 // Mobile browser chrome tints to match the canvas, so the panel reads as one
-// continuous surface on phones.
-export const viewport: Viewport = {
-  themeColor: "#f7f7f5",
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
-};
+// continuous surface on phones — in the light or the dark palette.
+export async function generateViewport(): Promise<Viewport> {
+  const theme = await themeHint();
+  return {
+    themeColor:
+      theme === "system"
+        ? [
+            { media: "(prefers-color-scheme: light)", color: THEME_COLORS.light },
+            { media: "(prefers-color-scheme: dark)", color: THEME_COLORS.dark },
+          ]
+        : THEME_COLORS[theme],
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+  };
+}
 
 // Render every route per-request so the proxy's one-time CSP nonce is stamped
 // onto Next's scripts. This panel is auth-gated and fetches data client-side,
@@ -61,7 +78,7 @@ async function navHint(): Promise<NavHint> {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={manrope.variable}>
+    <html lang="en" className={manrope.variable} data-theme={await themeHint()} suppressHydrationWarning>
       <body>
         <SwRegister />
         <AppShell navHint={await navHint()}>{children}</AppShell>

@@ -128,6 +128,23 @@ export const IconKeyboard = (p: IconProps) => (
     <path d="M6.5 10h.01M10.25 10h.01M14 10h.01M17.75 10h.01M6.5 14h.01M17.75 14h.01M9.5 14h5" />
   </Svg>
 );
+export const IconSun = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+  </Svg>
+);
+export const IconMoon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" />
+  </Svg>
+);
+export const IconMonitor = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="12" rx="2" />
+    <path d="M8 20h8M12 16v4" />
+  </Svg>
+);
 export const IconUser = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="8" r="4" />

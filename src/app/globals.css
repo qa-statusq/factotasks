@@ -1,4 +1,19 @@
 @import "tailwindcss";
+/* Dark theme: token + palette overrides keyed on html[data-theme]. */
+@import "./theme-dark.css";
+
+/* \`dark:\` for the rare spot the tokens can't cover: an explicit Dark choice,
+   or System while the OS is dark. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media screen and (prefers-color-scheme: dark) {
+    &:where([data-theme="system"], [data-theme="system"] *) {
+      @slot;
+    }
+  }
+}
 
 /* ---------------------------------------------------------------------------
    THEME — Tailwind v4 is configured in CSS, not tailwind.config.ts (which the
@@ -18,6 +33,16 @@
   --color-ink: #1c1c1a;
   --color-ink-muted: #5c5c57;
   --color-ink-subtle: #8c8c85;
+  /* Text/icons ON an ink fill (primary buttons, selected chips) and that
+     fill's hover — they swap in the dark theme, where ink is the light tone. */
+  --color-on-ink: #ffffff;
+  --color-ink-hover: #2a2a27;
+  /* Toast body, the sticky header wash, text selection, scrollbar thumb. */
+  --color-toast: #1c1c1a;
+  --color-chrome: rgba(247, 247, 245, 0.96);
+  --color-select: rgba(28, 28, 26, 0.12);
+  --color-scroll: #cbd5e1;
+  --color-scroll-hover: #94a3b8;
 
   /* Brand = ink. Primary actions are near-black, selection is a soft warm
      grey, links are ink underlined — the calm, professional register of a
@@ -173,13 +198,13 @@ textarea,
    clean surface fill so the login form never flashes amber. */
 input,
 textarea {
-  caret-color: #1c1c1a;
+  caret-color: var(--color-ink);
 }
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #1c1c1a;
-  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  -webkit-text-fill-color: var(--color-ink);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-surface) inset;
   transition: background-color 9999s ease-out;
 }
 
@@ -203,7 +228,7 @@ body {
 
 /* Teal text selection */
 ::selection {
-  background-color: rgba(28, 28, 26, 0.12);
+  background-color: var(--color-select);
 }
 
 /* Keyboard-only focus ring (accessibility): visible when tabbing, never on
@@ -216,14 +241,14 @@ body {
    ring via :focus-visible. Without the fallback, old browsers had NO visible
    keyboard focus at all. */
 :focus {
-  outline: 2px solid #1c1c1a;
+  outline: 2px solid var(--color-ink);
   outline-offset: 2px;
 }
 :focus:not(:focus-visible) {
   outline: none;
 }
 :focus-visible {
-  outline: 2px solid #1c1c1a;
+  outline: 2px solid var(--color-ink);
   outline-offset: 2px;
 }
 /* An input that lives INSIDE a composite control (the label-chips field, a
@@ -318,7 +343,7 @@ body {
    cost on mid-range phones), and at 56px tall a near-opaque solid reads the
    same. Matches the quiet-solid design language (and Play Console). */
 .glass {
-  background-color: rgba(247, 247, 245, 0.96);
+  background-color: var(--color-chrome);
 }
 
 /* Long review lists (dialogs, dashboard, app page, reports): offscreen cards
@@ -364,20 +389,20 @@ body {
 /* Thin, unobtrusive scrollbars */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: var(--color-scroll) transparent;
 }
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
+  background-color: var(--color-scroll);
   border-radius: 9999px;
   border: 3px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #94a3b8;
+  background-color: var(--color-scroll-hover);
 }
 
 /* ---------------------------------------------------------------------------

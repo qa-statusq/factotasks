@@ -199,7 +199,7 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
           <SortableList items={ordered} keyOf={(a) => a.id} onChange={(next) => setOrder(next.map((a) => a.id))}>
             {(a) => (
               <>
-                {a.shared ? <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-teal-700 text-[10px] font-bold text-white" aria-hidden>⇄</span> : <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />}
+                {a.shared ? <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-teal-600 text-[10px] font-bold text-white" aria-hidden>⇄</span> : <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />}
                 {/* Phones: the note goes under the name, so the name keeps the row's width. */}
                 <span className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:gap-2">
                   <span className="min-w-0 truncate text-ink sm:flex-1">{a.name}</span>

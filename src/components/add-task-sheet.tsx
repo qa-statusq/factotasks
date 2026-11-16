@@ -77,7 +77,7 @@ export function AddTaskSheet({ meetingId, cacheKey, pinned, onClose }: { meeting
         </div>
         <div className="flex items-center gap-1 text-[12px]">
           {(["open", "all"] as const).map((s) => (
-            <button key={s} type="button" onClick={() => setScope(s)} className={cn("rounded-md px-2 py-1 font-medium", scope === s ? "bg-ink text-white" : "text-ink-muted hover:bg-canvas hover:text-ink")}>
+            <button key={s} type="button" onClick={() => setScope(s)} className={cn("rounded-md px-2 py-1 font-medium", scope === s ? "bg-ink text-on-ink" : "text-ink-muted hover:bg-canvas hover:text-ink")}>
               {s === "open" ? "Open tasks" : "All tasks"}
             </button>
           ))}

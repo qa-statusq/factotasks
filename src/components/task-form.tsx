@@ -70,7 +70,7 @@ function TargetPicker({ apps, value, onChange }: { apps: AppOverview[]; value: T
   const needle = q.trim().toLowerCase();
   const list = needle ? live.filter((a) => a.name.toLowerCase().includes(needle)) : live;
   const appCount = new Set(value.map((t) => t.app_id)).size;
-  const chip = (on: boolean, disabled?: boolean) => cn("inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-semibold ring-1 ring-inset transition-colors", on ? "bg-ink text-white ring-ink" : "bg-surface text-ink-muted ring-line hover:text-ink", disabled && "cursor-not-allowed opacity-40 hover:text-ink-muted");
+  const chip = (on: boolean, disabled?: boolean) => cn("inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-semibold ring-1 ring-inset transition-colors", on ? "bg-ink text-on-ink ring-ink" : "bg-surface text-ink-muted ring-line hover:text-ink", disabled && "cursor-not-allowed opacity-40 hover:text-ink-muted");
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -332,7 +332,7 @@ export function TaskFormSheet({
     <div className="flex flex-wrap items-center justify-end gap-2">
       {mode === "create" && (
         <label className="mr-auto flex cursor-pointer select-none items-center gap-2 text-[12.5px] text-ink-muted" title="After saving, keep the form open for the next task">
-          <input type="checkbox" checked={another} onChange={(e) => setAnother(e.target.checked)} className="h-4 w-4 accent-[var(--color-brand-600,#1c1c1a)]" />
+          <input type="checkbox" checked={another} onChange={(e) => setAnother(e.target.checked)} className="h-4 w-4 accent-ink" />
           Create another
         </label>
       )}
