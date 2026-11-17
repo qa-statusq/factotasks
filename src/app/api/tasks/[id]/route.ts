@@ -7,7 +7,7 @@ import { isUuid } from "@/lib/validate";
 import { taskRef } from "@/lib/domain";
 import { taskPatch, validateTaskRefs, syncTargets, loadOwnership, loadCard, involved } from "@/lib/tasks";
 import { canSeeTask, visibleAppIds } from "@/lib/visibility";
-import { trashFile } from "@/lib/google-drive";
+import { deleteFile } from "@/lib/google-drive";
 import { canApprove, canChangeStatus, canDeleteTask, canEditTask } from "@/lib/task-access";
 import { notifyUsers } from "@/lib/notify";
 import { displayName } from "@/lib/name";
@@ -179,7 +179,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const sb = getSupabase();
   const { data: files, error: fErr } = await sb.from("task_attachments").select("storage_path, drive_file_id").eq("task_id", id);
   if (fErr) return serverError(fErr);
-  for (const f of (files ?? []) as { drive_file_id?: string | null }[]) if (f.drive_file_id) await trashFile(f.drive_file_id).catch(() => undefined);
+  for (const f of (files ?? []) as { drive_file_id?: string | null }[]) if (f.drive_file_id) await deleteFile(f.drive_file_id).catch(() => undefined);
   if (files?.length) {
     const { error: sErr } = await sb.storage.from("attachments").remove(files.map((f) => f.storage_path as string));
     if (sErr) console.error("[tasks] attachment cleanup failed:", sErr);

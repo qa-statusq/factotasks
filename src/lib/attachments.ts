@@ -6,7 +6,11 @@
  */
 import { LIMITS } from "./domain";
 
-export const MAX_ATTACHMENT_BYTES = LIMITS.attachmentBytes;
+/** The Shared Drive folder task files live in. */
+export const ATTACHMENTS_FOLDER = "Task attachments";
+
+/** What one request through the panel may carry; larger files go straight to the Shared Drive. */
+export const MAX_INLINE_BYTES = LIMITS.attachmentInlineBytes;
 
 /** Extension → MIME for the types we accept (used when sniffing can't tell). */
 const BY_EXT: Record<string, string> = {
@@ -36,6 +40,15 @@ const BY_EXT: Record<string, string> = {
   aab: "application/octet-stream",
   ipa: "application/octet-stream",
 };
+
+/**
+ * The type a LARGE upload is announced with, from its name alone (the bytes go
+ * straight to the Shared Drive, then the panel sniffs the start of the stored
+ * file before recording it). Null when the extension isn't one we accept.
+ */
+export function mimeByName(fileName: string): string | null {
+  return BY_EXT[(fileName.split(".").pop() || "").toLowerCase()] ?? null;
+}
 
 /** Sniff the real type from magic bytes. Returns null when unrecognised. */
 function sniffMime(bytes: Uint8Array): string | null {

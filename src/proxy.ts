@@ -5,8 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose/jwt/verify";
 import type { JWTPayload } from "jose";
 
-/** A task attachment's file: /api/tasks/<task>/attachments/<attachment>. */
-const ATTACHMENT_FILE = /^\/api\/tasks\/[^/]+\/attachments\/[^/]+$/;
+/** A task attachment's file: /api/tasks/<task>/attachments/<attachment> (not the large-upload endpoint beside it). */
+const ATTACHMENT_FILE = /^\/api\/tasks\/[^/]+\/attachments\/(?!upload$)[^/]+$/;
 
 const COOKIE = "ft_session";
 
@@ -54,10 +54,11 @@ function buildCsp(nonce: string): string {
     "font-src 'self' data:",
     "style-src 'self' 'unsafe-inline'",
     scriptSrc,
-    // The browser only ever talks to our own API routes — Supabase is reached
-    // server-side — so even a successful XSS couldn't exfiltrate data to an
-    // attacker origin.
-    "connect-src 'self'",
+    // The browser talks to our own API routes — Supabase is reached server-side
+    // — and to ONE Google path: a large attachment's bytes go straight to the
+    // Shared Drive upload session the panel opened (Drive's upload endpoint
+    // only; nothing else at Google is reachable from a page).
+    "connect-src 'self' https://www.googleapis.com/upload/drive/",
     "object-src 'none'",
     "worker-src 'self'",
   ].join("; ");

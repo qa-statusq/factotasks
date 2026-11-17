@@ -42,7 +42,7 @@ const nextConfig = {
       // rule would stamp both the same).
       {
         // (and a task attachment's file, which never changes under its id — see proxy.ts)
-        source: "/api/:path((?!icon$|tasks/[^/]+/attachments/[^/]+$).*)",
+        source: "/api/:path((?!icon$|tasks/[^/]+/attachments/(?!upload$)[^/]+$).*)",
         headers: [{ key: "Cache-Control", value: "no-store, no-cache, must-revalidate, max-age=0" }],
       },
       // Brand assets are public, unhashed and effectively immutable.

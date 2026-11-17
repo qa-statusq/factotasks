@@ -4,7 +4,7 @@ import { getSupabase } from "@/lib/supabase";
 import { ok, fail, serverError, readJsonObject, memberJson, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUuid } from "@/lib/validate";
-import { renameFile, trashFile, unshareFile } from "@/lib/google-drive";
+import { renameFile, deleteFile, unshareFile } from "@/lib/google-drive";
 import { loadRecording, loadShares, canManage, canUpload, publicRecording, recordingFileName } from "@/lib/recordings";
 import { canAccessSeries } from "@/lib/series-access";
 
@@ -48,7 +48,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return ok({ name });
 }
 
-/** Remove: the Drive file goes to the Shared Drive's bin, the row disappears. */
+/** Remove: the Drive file is deleted for good (not binned), the row disappears. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const u = await requireAccessUser();
   if (u instanceof NextResponse) return u;
@@ -60,10 +60,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!canManage(u) && !(rec.status !== "ready" && canUpload(u, rec))) return fail("Only an admin can delete a recording", 403);
   if (rec.drive_file_id) {
     try {
-      // Shares first: a binned file stays readable to anyone still holding a permission on it.
+      // Shares first, so nobody keeps access even if the delete falls back to the bin.
       const { data: shares } = await getSupabase().from("recording_shares").select("permission_id").eq("recording_id", id);
       for (const s of shares ?? []) if (s.permission_id) await unshareFile(rec.drive_file_id, s.permission_id as string).catch(() => undefined);
-      await trashFile(rec.drive_file_id);
+      await deleteFile(rec.drive_file_id);
     } catch (e) {
       return storageFail(e, "Couldn't delete the recording");
     }

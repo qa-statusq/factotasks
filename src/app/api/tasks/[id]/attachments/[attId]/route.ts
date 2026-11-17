@@ -5,7 +5,7 @@ import { ok, fail, serverError, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { canSeeTask } from "@/lib/visibility";
-import { streamFile, trashFile } from "@/lib/google-drive";
+import { streamFile, deleteFile } from "@/lib/google-drive";
 
 export const dynamic = "force-dynamic";
 
@@ -105,7 +105,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const sb = getSupabase();
   if (att.drive_file_id) {
     try {
-      await trashFile(att.drive_file_id as string);
+      await deleteFile(att.drive_file_id as string);
     } catch (e) {
       return storageFail(e, "Couldn't remove the file");
     }

@@ -61,8 +61,8 @@ function RecordingRow({ r, cacheKey, showMeeting, canManage, onPlay, onShare, on
     } else toast(data?.error || "Couldn't rename", "error");
   }
   async function remove() {
-    if (!(await confirm({ title: "Delete this recording?", message: "It disappears from the panel, and people it was shared with lose access.", confirmLabel: "Delete", tone: "danger" }))) return;
-    // The row goes at once; Google moves the file to the bin in the background and the row only returns if that fails.
+    if (!(await confirm({ title: "Delete this recording?", message: "It is deleted permanently — it can't be recovered — and people it was shared with lose access.", confirmLabel: "Delete", tone: "danger" }))) return;
+    // The row goes at once; the file is deleted for good in the background and the row only returns if that fails.
     onGone(false);
     toast("Recording deleted");
     const { ok, data } = await deleteJson(`/api/recordings/${r.id}`);

@@ -16,16 +16,17 @@ export function applyTheme(theme: Theme) {
   const root = document.documentElement;
   if (root.dataset.theme !== theme) root.dataset.theme = theme;
   document.cookie = `${THEME_COOKIE}=${theme}; path=/; max-age=31536000; samesite=lax`;
-  // The phone status bar follows too: one tint for an explicit choice, a
-  // light/dark pair (by media query) for System — the same tags the server renders.
-  for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.remove();
-  const tints: [string, string | null][] = theme === "system" ? [[THEME_COLORS.light, "(prefers-color-scheme: light)"], [THEME_COLORS.dark, "(prefers-color-scheme: dark)"]] : [[THEME_COLORS[theme], null]];
-  for (const [color, media] of tints) {
-    const m = document.createElement("meta");
-    m.name = "theme-color";
-    m.content = color;
-    if (media) m.media = media;
-    document.head.appendChild(m);
+  // The phone status bar follows too. The theme-color tags belong to Next.js
+  // (rendered from generateViewport), so they are ONLY retinted in place —
+  // never removed or added: React keeps references to them, and a node pulled
+  // out from under it crashed the next page change ("removeChild" of null),
+  // leaving the clicked screen stuck until a refresh. The next server render
+  // (which reads the cookie set above) brings back the exact tags.
+  const osDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+    const tagDark = m.media ? m.media.includes("dark") : theme === "dark" || (theme === "system" && osDark);
+    const color = theme === "system" ? (tagDark ? THEME_COLORS.dark : THEME_COLORS.light) : THEME_COLORS[theme];
+    if (m.content !== color) m.content = color;
   }
 }
 

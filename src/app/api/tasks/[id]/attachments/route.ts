@@ -10,11 +10,10 @@ import { loadOwnership, involved } from "@/lib/tasks";
 import { notifyUsers } from "@/lib/notify";
 import { displayName } from "@/lib/name";
 import { rateLimited } from "@/lib/rate-limit";
-import { MAX_ATTACHMENT_BYTES, cleanFileName, extFor, imageSize, isImageMime, resolveMime } from "@/lib/attachments";
+import { ATTACHMENTS_FOLDER, MAX_INLINE_BYTES, cleanFileName, extFor, imageSize, isImageMime, resolveMime } from "@/lib/attachments";
 import { USER_BRIEF_COLS, embeddedUser } from "@/lib/users";
-import { driveConfigured, ensureFolder, uploadBytes, trashFile } from "@/lib/google-drive";
+import { driveConfigured, ensureFolder, uploadBytes, deleteFile } from "@/lib/google-drive";
 
-const ATTACHMENTS_FOLDER = "Task attachments";
 
 /** Just this task's attachments (the presentation's paperclip) — one round trip, not the whole task. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -60,7 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const t0 = performance.now();
   // Cheap pre-check on the declared length before reading the body.
   const declaredLen = Number(req.headers.get("content-length") || 0);
-  if (declaredLen > MAX_ATTACHMENT_BYTES + 64 * 1024) return fail(`Files must be under ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`, 413);
+  if (declaredLen > MAX_INLINE_BYTES + 64 * 1024) return fail(`Files must be under ${Math.round(MAX_INLINE_BYTES / 1024 / 1024)} MB`, 413);
 
   const sb = getSupabase();
   // The four checks run together, AND while the file is still arriving (they used to run one
@@ -71,13 +70,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     loadOwnership(id),
     canSeeTask(u, id),
     sb.from("task_attachments").select("id", { count: "exact", head: true }).eq("task_id", id),
-    readCappedBody(req, MAX_ATTACHMENT_BYTES + 64 * 1024),
+    readCappedBody(req, MAX_INLINE_BYTES + 64 * 1024),
   ]);
   const tReceived = performance.now();
   if (limited) return limited;
   if (!own || !visible) return fail("Task not found", 404);
   if ((counted.count ?? 0) >= LIMITS.attachmentsPerTask) return fail(`A task can hold up to ${LIMITS.attachmentsPerTask} attachments`);
-  if (!raw) return fail(`Files must be under ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`, 413);
+  if (!raw) return fail(`Files must be under ${Math.round(MAX_INLINE_BYTES / 1024 / 1024)} MB`, 413);
   let form: FormData;
   try {
     form = await new Response(raw, { headers: { "content-type": req.headers.get("content-type") || "" } }).formData();
@@ -87,7 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const file = form.get("file");
   if (!(file instanceof Blob)) return fail("No file received");
   if (file.size === 0) return fail("That file is empty");
-  if (file.size > MAX_ATTACHMENT_BYTES) return fail(`Files must be under ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`, 413);
+  if (file.size > MAX_INLINE_BYTES) return fail(`Files must be under ${Math.round(MAX_INLINE_BYTES / 1024 / 1024)} MB`, 413);
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const originalName = cleanFileName((file as File).name || "file");
@@ -125,7 +124,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .single();
   if (error) {
     if (key) await sb.storage.from("attachments").remove([key]);
-    if (driveFileId) await trashFile(driveFileId).catch(() => undefined);
+    if (driveFileId) await deleteFile(driveFileId).catch(() => undefined);
     if ((error as { code?: string }).code === "P0006") return fail(`A task can hold up to ${LIMITS.attachmentsPerTask} attachments`);
     return serverError(error);
   }

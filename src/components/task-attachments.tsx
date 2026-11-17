@@ -60,6 +60,61 @@ function postWithProgress(url: string, body: FormData, onProgress: (ratio: numbe
   });
 }
 
+/** One PUT of a piece of a large file to its storage upload session, with progress. */
+function putPiece(url: string, body: Blob | null, range: string, onProgress: (loaded: number) => void): Promise<{ status: number; range: string | null }> {
+  return new Promise((resolve) => {
+    const x = new XMLHttpRequest();
+    x.open("PUT", url);
+    x.setRequestHeader("Content-Range", range);
+    x.upload.onprogress = (e) => onProgress(e.loaded);
+    x.onload = () => resolve({ status: x.status, range: x.getResponseHeader("range") });
+    x.onerror = () => resolve({ status: 0, range: null });
+    x.ontimeout = () => resolve({ status: 0, range: null });
+    x.timeout = 10 * 60_000;
+    x.send(body);
+  });
+}
+
+/**
+ * A file over the one-request size (up to 500 MB): the panel opens a resumable
+ * session in the team storage, the browser sends the file there itself in
+ * pieces — a dropped connection resumes from the last piece the storage
+ * confirmed — and the panel then checks and records it.
+ */
+async function uploadLarge(base: string, file: File, onProgress: (ratio: number) => void, onSaving: () => void): Promise<TaskAttachment> {
+  const start = await postJson<{ url?: string; token?: string; chunk?: number; error?: string }>(`${base}/upload`, { name: file.name, size: file.size });
+  if (!start.ok || !start.data?.url || !start.data.token) throw new Error(start.data?.error || "Couldn't start the upload");
+  const { url, token } = start.data;
+  const piece = start.data.chunk || 32 * 1024 * 1024;
+  const total = file.size;
+  // Where the storage says it stands: the next byte it wants (or `total` when it has everything).
+  const next = (range: string | null) => (range ? Number(range.split("-")[1]) + 1 : 0);
+  let offset = 0;
+  let tries = 0;
+  for (;;) {
+    const end = Math.min(offset + piece, total);
+    const r = await putPiece(url, file.slice(offset, end), `bytes ${offset}-${end - 1}/${total}`, (loaded) => onProgress(Math.min(0.999, (offset + loaded) / total)));
+    if (r.status === 200 || r.status === 201) break;
+    if (r.status === 308) {
+      offset = next(r.range);
+      tries = 0;
+      onProgress(offset / total);
+      continue;
+    }
+    // Network drop or a server hiccup: ask where it stands, then carry on from there.
+    if (++tries > 4 || (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429)) throw new Error(r.status === 404 || r.status === 410 ? "The upload expired — add the file again" : "Upload failed — check the connection and add the file again");
+    await new Promise((res) => setTimeout(res, 1000 * tries));
+    const s = await putPiece(url, null, `bytes */${total}`, () => undefined);
+    if (s.status === 200 || s.status === 201) break;
+    if (s.status === 308) offset = next(s.range);
+  }
+  onProgress(1);
+  onSaving();
+  const done = await postJson<{ attachment?: TaskAttachment; error?: string }>(`${base}/upload`, { token }, "PUT");
+  if (!done.ok || !done.data?.attachment) throw new Error(done.data?.error || "Couldn't save the file");
+  return done.data.attachment;
+}
+
 /**
  * Files on a task, kept in the team's Google Shared Drive: images in a grid,
  * everything else as a list, each with a preview sheet that fits its type.
@@ -117,13 +172,19 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
         const file = await compressImage(original);
         if (file.size > LIMITS.attachmentBytes) throw new Error(`${original.name} is over ${Math.round(LIMITS.attachmentBytes / 1024 / 1024)} MB`);
         set(i, { size: file.size });
-        const fd = new FormData();
-        fd.append("file", file, file.name);
-        const { ok, data } = await postWithProgress(base, fd, (ratio) => set(i, { progress: ratio, phase: ratio >= 0.999 ? "saving" : "sending" }));
-        if (!ok || !data?.attachment) throw new Error(data?.error || "Upload failed");
+        let attachment: TaskAttachment;
+        if (file.size > LIMITS.attachmentInlineBytes) {
+          attachment = await uploadLarge(base, file, (ratio) => set(i, { progress: ratio, phase: "sending" }), () => set(i, { phase: "saving" }));
+        } else {
+          const fd = new FormData();
+          fd.append("file", file, file.name);
+          const { ok, data } = await postWithProgress(base, fd, (ratio) => set(i, { progress: ratio, phase: ratio >= 0.999 ? "saving" : "sending" }));
+          if (!ok || !data?.attachment) throw new Error(data?.error || "Upload failed");
+          attachment = data.attachment;
+        }
         added++;
-        landed[i] = data.attachment;
-        finished.push(data.attachment.id);
+        landed[i] = attachment;
+        finished.push(attachment.id);
         place();
         set(i, { progress: 1, phase: "done" });
       } catch (e) {
@@ -147,8 +208,8 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
   }
 
   async function remove(a: TaskAttachment) {
-    if (!(await confirm({ title: `Remove “${a.file_name}”?`, confirmLabel: "Remove", tone: "danger" }))) return;
-    // The row goes at once; the file is binned in the background and only returns if that fails.
+    if (!(await confirm({ title: `Remove “${a.file_name}”?`, message: "The file is deleted permanently — it can't be recovered.", confirmLabel: "Remove", tone: "danger" }))) return;
+    // The row goes at once; the file is deleted for good in the background and only returns if that fails.
     setGone((prev) => new Set(prev).add(a.id));
     const { ok, data } = await deleteJson(`${base}/${a.id}`);
     if (ok) mutate(cacheKey);
@@ -204,7 +265,7 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
       {visible.length === 0 && uploading.length === 0 && (
         <CardBody>
           <p className="text-sm text-ink-subtle">
-            Screenshots, screen recordings, logs, designs, builds — drop files here or click <b>Add files</b>. Images are downscaled before upload.
+            Screenshots, screen recordings, logs, designs, builds — drop files here or click <b>Add files</b>. Up to {Math.round(LIMITS.attachmentBytes / 1024 / 1024)} MB per file; images are downscaled before upload.
           </p>
         </CardBody>
       )}

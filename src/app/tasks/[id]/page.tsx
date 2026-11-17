@@ -154,7 +154,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
   }
 
   async function remove() {
-    if (!(await confirm({ title: `Delete ${taskRef(task.number)}?`, message: "Removes the task, its comments and attachments.", confirmLabel: "Delete", tone: "danger" }))) return;
+    if (!(await confirm({ title: `Delete ${taskRef(task.number)}?`, message: "Removes the task and its comments, and deletes its attachments permanently.", confirmLabel: "Delete", tone: "danger" }))) return;
     // Goes at once from every list; the server catches up in the background and the task
     // comes back only if that fails.
     const ref = taskRef(task.number);

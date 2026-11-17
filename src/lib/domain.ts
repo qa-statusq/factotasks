@@ -177,7 +177,10 @@ export const LIMITS = {
   meetingTitle: 120,
   meetingNotes: 20000,
   userTitle: 80,
-  attachmentBytes: 15 * 1024 * 1024,
+  /** Largest attachment: big ones go from the browser straight to the Shared Drive in pieces. */
+  attachmentBytes: 500 * 1024 * 1024,
+  /** Up to this size a file is sent through the panel in one request (the host caps a request at 32 MiB). */
+  attachmentInlineBytes: 24 * 1024 * 1024,
   attachmentsPerTask: 25,
 } as const;
 

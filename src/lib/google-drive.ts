@@ -129,14 +129,19 @@ export async function uploadBytes(name: string, mime: string, bytes: Uint8Array,
   return ((await r.json()) as { id: string }).id;
 }
 
-/** Open a resumable upload session in the Shared Drive; returns the session URI (valid for a week). */
-export async function createUploadSession(name: string, mime: string, totalBytes: number | null): Promise<string> {
-  const parent = driveId();
+/**
+ * Open a resumable upload session in the Shared Drive; returns the session URI (valid for a week).
+ * `origin` lets that browser origin PUT the bytes to the session itself (Google answers it with
+ * CORS headers) — the URI is the only credential, so it is handed to the uploader alone.
+ * No file exists until the last byte arrives: an abandoned session leaves nothing behind.
+ */
+export async function createUploadSession(name: string, mime: string, totalBytes: number | null, opts: { parent?: string; origin?: string; appProperties?: Record<string, string> } = {}): Promise<string> {
+  const parent = opts.parent ?? driveId();
   if (!parent) throw new Error("Recording storage is not configured");
   const r = await fetch(`${UPLOAD}/files?uploadType=resumable&supportsAllDrives=true`, {
     method: "POST",
-    headers: await authHeaders({ "content-type": "application/json; charset=UTF-8", "x-upload-content-type": mime, ...(totalBytes ? { "x-upload-content-length": String(totalBytes) } : {}) }),
-    body: JSON.stringify({ name, parents: [parent], mimeType: mime }),
+    headers: await authHeaders({ "content-type": "application/json; charset=UTF-8", "x-upload-content-type": mime, ...(totalBytes ? { "x-upload-content-length": String(totalBytes) } : {}), ...(opts.origin ? { origin: opts.origin } : {}) }),
+    body: JSON.stringify({ name, parents: [parent], mimeType: mime, ...(opts.appProperties ? { appProperties: opts.appProperties } : {}) }),
   });
   if (!r.ok) throw await driveErr(r, "Starting the upload");
   const uri = r.headers.get("location");
@@ -200,10 +205,38 @@ export async function renameFile(fileId: string, name: string): Promise<void> {
   if (!r.ok) throw await driveErr(r, "Renaming");
 }
 
-/** Move to the Shared Drive's bin (one call; a Content manager may not delete outright, and the bin empties itself after 30 days). */
+/** Move to the Shared Drive's bin (the bin empties itself after 30 days). */
 export async function trashFile(fileId: string): Promise<void> {
   const r = await fetch(`${DRIVE}/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`, { method: "PATCH", headers: await authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ trashed: true }) });
   if (!r.ok && r.status !== 404) throw await driveErr(r, "Deleting");
+}
+
+/**
+ * Delete for good — the file never reaches the Shared Drive's bin. That needs the
+ * panel's robot to be a MANAGER of the Shared Drive (a Content manager may only
+ * bin); until it is, Google answers 403 and the file is binned instead, so a
+ * delete never fails because of the role.
+ */
+export async function deleteFile(fileId: string): Promise<"deleted" | "binned"> {
+  const r = await fetch(`${DRIVE}/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`, { method: "DELETE", headers: await authHeaders() });
+  if (r.ok || r.status === 404) return "deleted";
+  if (r.status === 403) {
+    console.warn("[storage] permanent delete refused (robot is not a Manager of the Shared Drive) — binned instead");
+    await trashFile(fileId);
+    return "binned";
+  }
+  throw await driveErr(r, "Deleting");
+}
+
+/** The (not binned) file in the Shared Drive carrying this app property, with what the panel checks before recording it. */
+export async function findByAppProperty(key: string, value: string): Promise<{ id: string; name: string; size: number; mimeType: string } | null> {
+  const parent = driveId();
+  if (!parent) throw new Error("Recording storage is not configured");
+  const q = `appProperties has { key='${key}' and value='${value.replace(/'/g, "")}' } and trashed = false`;
+  const r = await fetch(`${DRIVE}/files?q=${encodeURIComponent(q)}&corpora=drive&driveId=${encodeURIComponent(parent)}&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,size,mimeType)`, { headers: await authHeaders() });
+  if (!r.ok) throw await driveErr(r, "Looking up the upload");
+  const f = ((await r.json()) as { files?: { id: string; name: string; size?: string; mimeType: string }[] }).files?.[0];
+  return f ? { id: f.id, name: f.name, size: Number(f.size ?? 0), mimeType: f.mimeType } : null;
 }
 
 /** Give one e-mail address read access; Google e-mails the invitation (with the message). Returns the permission id. */
