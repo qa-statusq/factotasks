@@ -8,7 +8,7 @@ import { LIMITS } from "@/lib/domain";
 import { rateLimited } from "@/lib/rate-limit";
 import { MAX_INLINE_BYTES, cleanFileName, imageSize, isImageMime, resolveMime } from "@/lib/attachments";
 import { driveConfigured, ensureFolder, uploadBytes, deleteFile } from "@/lib/google-drive";
-import { MEETING_FILES_FOLDER, MEETING_FILE_SELECT, countMeetingFiles, meetingForUser, shapeMeetingFile } from "@/lib/meeting-files";
+import { MEETING_FILES_FOLDER, MEETING_FILE_SELECT, cleanMeetingNote, countMeetingFiles, meetingForUser, meetingGroup, shapeMeetingFile } from "@/lib/meeting-files";
 
 export const dynamic = "force-dynamic";
 // A file of up to 24 MB over a slow mobile connection needs more than the default budget.
@@ -31,7 +31,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 /**
  * Add ONE file (multipart field `file`, up to 24 MB — bigger ones use
- * ./upload). The type is sniffed from the bytes, never taken from the name.
+ * ./upload), with `note` (the item's title) and `group` (the upload it is part
+ * of). The type is sniffed from the bytes, never taken from the name.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const u = await requireAccessUser();
@@ -54,6 +55,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   const file = form.get("file");
   if (!(file instanceof Blob)) return fail("No file received");
+  const note = cleanMeetingNote(form.get("note"));
+  const group = meetingGroup(form.get("group"));
   if (file.size === 0) return fail("That file is empty");
   if (file.size > MAX_INLINE_BYTES) return fail(`Files must be under ${Math.round(MAX_INLINE_BYTES / MB)} MB`, 413);
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -71,7 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   const { data, error } = await getSupabase()
     .from("meeting_attachments")
-    .insert({ meeting_id: id, uploaded_by: u.uid, file_name: name, mime, size_bytes: bytes.length, drive_file_id: driveFileId, width: dims?.width ?? null, height: dims?.height ?? null })
+    .insert({ meeting_id: id, uploaded_by: u.uid, file_name: name, mime, size_bytes: bytes.length, drive_file_id: driveFileId, width: dims?.width ?? null, height: dims?.height ?? null, note, group_id: group })
     .select(MEETING_FILE_SELECT)
     .single();
   if (error) {

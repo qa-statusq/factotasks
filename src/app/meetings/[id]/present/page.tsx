@@ -15,8 +15,9 @@ import { IconCircleDot, IconX, IconMaximize, IconChevronLeft, IconChevronRight, 
 import { buildSlides, Mark, DeckTaskContext, type Slide } from "./deck-slides";
 import { CommentsViewer } from "@/components/comments-viewer";
 import { AttachmentViewer, kindOf } from "@/components/attachment-viewer";
+import { meetingItems } from "@/components/task-attachments";
 import { istDate } from "@/lib/time";
-import type { DeckPack, TaskAttachment, TaskCard, TaskComment } from "@/lib/types";
+import type { DeckPack, TaskAttachment, TaskCard, TaskComment, MeetingFile } from "@/lib/types";
 import { useDeckKeys, useIdleChrome } from "./use-deck-controls";
 
 /**
@@ -83,11 +84,8 @@ function Deck() {
   // icon starts that request early, and each list is fetched once per task.
   const [viewing, setViewing] = useState<{ taskId: string; items: TaskAttachment[] | null } | null>(null);
   // Files added to the meeting itself: their own slide, each opening full screen.
-  const { data: filesData } = useCachedFetch<{ attachments: TaskAttachment[] }>(`/api/meetings/${id}/attachments`);
-  const meetingFiles = useMemo(() => {
-    const list = filesData?.attachments ?? [];
-    return [...list.filter((a) => kindOf(a.mime, a.file_name) === "image"), ...list.filter((a) => kindOf(a.mime, a.file_name) !== "image")];
-  }, [filesData]);
+  const { data: filesData } = useCachedFetch<{ attachments: MeetingFile[] }>(`/api/meetings/${id}/attachments`);
+  const meetingFiles = useMemo(() => meetingItems(filesData?.attachments ?? []), [filesData]);
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   const [reading, setReading] = useState<{ task: TaskCard; comments: TaskComment[] | null } | null>(null);
   const lists = useRef(new Map<string, Promise<unknown>>());
@@ -276,7 +274,7 @@ function Deck() {
           onClose={() => setViewing(null)}
         />
       )}
-      {viewingFile && <AttachmentViewer items={meetingFiles} startId={viewingFile} base={`/api/meetings/${id}/attachments`} onClose={() => setViewingFile(null)} />}
+      {viewingFile && <AttachmentViewer items={meetingFiles.find((it) => it.id === viewingFile)?.files ?? []} base={`/api/meetings/${id}/attachments`} onClose={() => setViewingFile(null)} />}
       {reading && <CommentsViewer task={reading.task} comments={reading.comments} onClose={() => setReading(null)} />}
 
       {jumpOpen && (

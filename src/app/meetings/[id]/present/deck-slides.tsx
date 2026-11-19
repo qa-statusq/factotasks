@@ -66,7 +66,15 @@ export interface Slide {
   jump?: { label: string; icon?: { name: string; color: string; iconUrl: string | null }; sub?: string; short?: string; kind?: "cover" | "general" | "shared" | "approvals" | "files" | "minutes" | "next" };
 }
 
-export function buildSlides(p: DeckPack, files: TaskAttachment[] = []): Slide[] {
+/** A meeting attachment item as the deck needs it (see meetingItems). */
+export interface DeckFileItem {
+  id: string;
+  title: string;
+  note: string | null;
+  files: TaskAttachment[];
+}
+
+export function buildSlides(p: DeckPack, files: DeckFileItem[] = []): Slide[] {
   const slides: Slide[] = [];
   const m = p.meeting;
   const agenda = buildAgenda(p, { dedupe: true });
@@ -187,14 +195,15 @@ export function buildSlides(p: DeckPack, files: TaskAttachment[] = []): Slide[] 
     });
   }
 
-  /* Files added to the meeting: pictures as thumbnails, the rest as cards; each opens full screen. */
+  /* Attachments added to the meeting: one row per upload — its note as the title, a paperclip that opens its files full screen. */
   if (files.length) {
+    const count = files.reduce((n, it) => n + it.files.length, 0);
     slides.push({
       key: "files",
-      jump: { label: "Files", short: "Files", kind: "files", sub: `${files.length} file${files.length === 1 ? "" : "s"}` },
+      jump: { label: "Attachments", short: "Attachments", kind: "files", sub: `${files.length} item${files.length === 1 ? "" : "s"}` },
       render: (n, total) => (
-        <Frame {...frame(n, total)} title="Files" subtitle="Shared for this meeting — open any of them full screen" part={`${files.length} file${files.length === 1 ? "" : "s"}`}>
-          <MeetingFilesGrid meetingId={m.id} files={files} />
+        <Frame {...frame(n, total)} title="Attachments" subtitle="Shared for this meeting — open any of them full screen" part={`${count} file${count === 1 ? "" : "s"}`}>
+          <AttachmentsTable items={files} labels={labels} />
         </Frame>
       ),
     });
@@ -779,32 +788,51 @@ function NoteKind({ kind, label }: { kind: MeetingNote["kind"]; label?: string }
 /** Opens a task's attachments or comments from a slide; the deck page supplies the viewers. */
 export const DeckTaskContext = createContext<{ attachments: (t: TaskCard) => void; comments: (t: TaskCard) => void; prefetch: (t: TaskCard, kind: "attachments" | "comments") => void; openFile?: (id: string) => void } | null>(null);
 
-/** The Files slide: a grid that always fits the slide (more files → more, smaller columns). */
-function MeetingFilesGrid({ meetingId, files }: { meetingId: string; files: TaskAttachment[] }) {
+/** The Attachments slide: like the task tables — number, title (the note), who added it, and the paperclip that opens the files. */
+function AttachmentsTable({ items, labels }: { items: DeckFileItem[]; labels: Map<string, string> }) {
   const ctx = useContext(DeckTaskContext);
-  const n = files.length;
-  const cols = n <= 3 ? n : n <= 8 ? 4 : n <= 15 ? 5 : 6;
   return (
-    <div className="grid min-h-0 gap-[1.2cqw]" style={{ gridTemplateColumns: `repeat(${Math.max(1, cols)}, minmax(0, 1fr))` }}>
-      {files.map((f) => {
-        const kind = /^image\/(png|jpeg|webp|gif)$/.test(f.mime) ? "image" : f.mime === "application/pdf" ? "PDF" : f.mime.startsWith("video/") ? "Video" : (f.file_name.split(".").pop() || "file").toUpperCase();
-        return (
-          <button key={f.id} type="button" onClick={() => ctx?.openFile?.(f.id)} className={cn(PANEL, "group flex flex-col text-left transition-shadow hover:shadow-[0_0_0_0.2cqw_rgba(28,28,26,0.25)]")} title={`Open ${f.file_name}`}>
-            <span className="relative block aspect-[4/3] w-full overflow-hidden bg-canvas">
-              {kind === "image" ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={`/api/meetings/${meetingId}/attachments/${f.id}`} alt={f.file_name} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" />
-              ) : (
-                <span className="flex h-full w-full flex-col items-center justify-center gap-[0.6cqw] text-ink-subtle">
-                  <IconPaperclip className="h-[2.6cqw] w-[2.6cqw]" />
-                  <span className="rounded-[0.4cqw] bg-surface px-[0.7cqw] py-[0.2cqw] text-[0.95cqw] font-semibold tracking-wide text-ink-muted ring-1 ring-inset ring-line">{kind}</span>
-                </span>
-              )}
-            </span>
-            <span className="block truncate px-[0.9cqw] py-[0.6cqw] text-[1.05cqw] font-medium text-ink" data-nowrap>{f.file_name}</span>
-          </button>
-        );
-      })}
+    <div className={PANEL_SCROLL} data-deck-scroll>
+      <table className="w-full border-collapse">
+        <colgroup>
+          <col style={{ width: "5%" }} />
+          <col />
+          <col style={{ width: "18%" }} />
+          <col style={{ width: "10%" }} />
+        </colgroup>
+        <thead className="sticky top-0 z-[1] bg-surface shadow-[0_1px_0_rgba(0,0,0,0.06)]">
+          <tr>
+            <th className={TH}>#</th>
+            <th className={TH}>Attachment</th>
+            <th className={TH}>Added by</th>
+            <th className={cn(TH, "text-right")}>Files</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((it, i) => {
+            const by = it.files[0]?.uploaded_by;
+            const names = it.files.map((f) => f.file_name).join(" · ");
+            return (
+              <tr key={it.id} className="border-b border-line/70 last:border-b-0">
+                <td className={cn(TD, "tabular-nums text-ink-subtle")}>{i + 1}</td>
+                <td className={TD}>
+                  <button type="button" onClick={() => ctx?.openFile?.(it.id)} className="deck-chrome block max-w-full text-left">
+                    <span className="block break-words font-medium text-ink hover:underline">{it.title}</span>
+                    {it.note && <span className="mt-[0.2cqw] block truncate text-[0.95cqw] text-ink-subtle" data-nowrap>{names}</span>}
+                  </button>
+                </td>
+                <td className={cn(TD, "text-ink-muted")}>{by ? ownerText([by], labels) : "—"}</td>
+                <td className={cn(TD, "text-right")}>
+                  <button type="button" onClick={() => ctx?.openFile?.(it.id)} className={CHIP} title={`${it.files.length} attachment${it.files.length === 1 ? "" : "s"} — open full screen`} aria-label={`Open ${it.title} full screen`}>
+                    <IconPaperclip className="h-[1.05cqw] w-[1.05cqw]" />
+                    {it.files.length}
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

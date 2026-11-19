@@ -9,7 +9,7 @@ import { rateLimited } from "@/lib/rate-limit";
 import { cleanFileName, imageSize, isImageMime, mimeByName, resolveMime } from "@/lib/attachments";
 import { createUploadSession, deleteFile, driveConfigured, ensureFolder, findByAppProperty, streamFile } from "@/lib/google-drive";
 import { issueTicket, readTicket } from "@/lib/upload-ticket";
-import { MEETING_FILES_FOLDER, MEETING_FILE_SELECT, countMeetingFiles, meetingForUser, shapeMeetingFile } from "@/lib/meeting-files";
+import { MEETING_FILES_FOLDER, MEETING_FILE_SELECT, cleanMeetingNote, countMeetingFiles, meetingForUser, meetingGroup, shapeMeetingFile } from "@/lib/meeting-files";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ function sameOrigin(req: NextRequest): string | null {
 }
 
 /**
- * Start a LARGE upload to a meeting (over 24 MB, up to 500 MB). Body {name, size}.
+ * Start a LARGE upload to a meeting (over 24 MB, up to 500 MB). Body {name, size, note?, group?}.
  * Same flow as task files (see /api/tasks/[id]/attachments/upload): a resumable
  * session in the Shared Drive the browser sends the bytes to itself, and a signed
  * ticket to finish with. Replies { url, token, chunk }.
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (limited) return limited;
   if (!m) return fail("Meeting not found", 404);
   if (count >= LIMITS.attachmentsPerMeeting) return fail(`A meeting can hold up to ${LIMITS.attachmentsPerMeeting} files`);
-  const { token, nonce } = issueTicket({ t: id, u: u.uid, s: size, f: name });
+  const { token, nonce } = issueTicket({ t: id, u: u.uid, s: size, f: name, m: cleanMeetingNote(b.note), g: meetingGroup(b.group) });
   try {
     const folder = await ensureFolder(MEETING_FILES_FOLDER);
     const url = await createUploadSession(`${m.title} — ${name}`, mime, size, { parent: folder, origin, appProperties: { [STAMP]: nonce } });
@@ -100,7 +100,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const dims = isImageMime(mime) ? imageSize(head, mime) : null;
   const { data, error } = await sb
     .from("meeting_attachments")
-    .insert({ meeting_id: id, uploaded_by: u.uid, file_name: ticket.f, mime, size_bytes: file.size, drive_file_id: file.id, width: dims?.width ?? null, height: dims?.height ?? null })
+    .insert({ meeting_id: id, uploaded_by: u.uid, file_name: ticket.f, mime, size_bytes: file.size, drive_file_id: file.id, width: dims?.width ?? null, height: dims?.height ?? null, note: ticket.m ?? null, group_id: meetingGroup(ticket.g) })
     .select(MEETING_FILE_SELECT)
     .single();
   if (error) {

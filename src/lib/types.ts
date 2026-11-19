@@ -101,6 +101,12 @@ export interface TaskComment {
   author: UserBrief | null;
 }
 
+/** A meeting's file: a task-style attachment plus the note asked when it was added, and its upload (item). */
+export interface MeetingFile extends TaskAttachment {
+  note: string | null;
+  group_id: string;
+}
+
 export interface TaskAttachment {
   id: string;
   file_name: string;

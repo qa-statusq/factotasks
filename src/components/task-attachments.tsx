@@ -17,7 +17,7 @@ import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
 import { IconPaperclip, IconUpload, IconFile, IconTrash, IconVideo, IconMic, IconX } from "@/components/ui/icons";
 import { DownloadButton } from "@/components/ui/download-button";
-import type { TaskAttachment, TaskDetail } from "@/lib/types";
+import type { MeetingFile, TaskAttachment, TaskDetail } from "@/lib/types";
 import { AttachmentViewer, kindOf, fileLabel } from "@/components/attachment-viewer";
 
 interface UploadRow {
@@ -82,8 +82,8 @@ function putPiece(url: string, body: Blob | null, range: string, onProgress: (lo
  * pieces — a dropped connection resumes from the last piece the storage
  * confirmed — and the panel then checks and records it.
  */
-async function uploadLarge(base: string, file: File, onProgress: (ratio: number) => void, onSaving: () => void): Promise<TaskAttachment> {
-  const start = await postJson<{ url?: string; token?: string; chunk?: number; error?: string }>(`${base}/upload`, { name: file.name, size: file.size });
+async function uploadLarge<T extends TaskAttachment>(base: string, file: File, extra: Record<string, string>, onProgress: (ratio: number) => void, onSaving: () => void): Promise<T> {
+  const start = await postJson<{ url?: string; token?: string; chunk?: number; error?: string }>(`${base}/upload`, { name: file.name, size: file.size, ...extra });
   if (!start.ok || !start.data?.url || !start.data.token) throw new Error(start.data?.error || "Couldn't start the upload");
   const { url, token } = start.data;
   const piece = start.data.chunk || 32 * 1024 * 1024;
@@ -111,9 +111,119 @@ async function uploadLarge(base: string, file: File, onProgress: (ratio: number)
   }
   onProgress(1);
   onSaving();
-  const done = await postJson<{ attachment?: TaskAttachment; error?: string }>(`${base}/upload`, { token }, "PUT");
+  const done = await postJson<{ attachment?: T; error?: string }>(`${base}/upload`, { token }, "PUT");
   if (!done.ok || !done.data?.attachment) throw new Error(done.data?.error || "Couldn't save the file");
   return done.data.attachment;
+}
+
+/**
+ * Adding files, shared by every files card: name order, three at a time, a real
+ * progress bar per file (one request up to 24 MB, straight to storage in pieces
+ * above that), each placed in the owner's cached data as it lands, and the
+ * picked order sent once at the end. `extra` goes with every file (a meeting
+ * file's note and upload group).
+ */
+function useAttachmentUpload<T extends TaskAttachment>({ base, max, count, cacheKey, onLanded, limitText }: { base: string; max: number; count: number; cacheKey: string; onLanded: (mine: T[]) => void; limitText: string }) {
+  const { toast } = useToast();
+  const [uploading, setUploading] = useState<UploadRow[]>([]);
+  async function upload(files: FileList | File[], extra: Record<string, string> = {}) {
+    if (uploading.some((u) => u.phase === "waiting" || u.phase === "sending" || u.phase === "saving")) {
+      toast("Still uploading — add more files once this batch finishes", "error");
+      return;
+    }
+    // In name order, numbers counted as numbers (2 before 10), as Explorer and Finder list them.
+    // The order a picker hands over is not the order of the clicks — Windows moves the
+    // first-clicked file to the end — so name order is the one people actually see.
+    const list = Array.from(files)
+      .sort((x, y) => byName.compare(x.name, y.name))
+      .slice(0, max - count);
+    if (!list.length) {
+      toast(limitText, "error");
+      return;
+    }
+    // A picture shows at once from the device (no waiting for the upload to see what is going up).
+    const thumbs = list.map((f) => (/^image\/(png|jpeg|webp|gif)$/.test(f.type) ? URL.createObjectURL(f) : undefined));
+    setUploading(list.map((f, i) => ({ name: f.name, size: f.size, progress: 0, phase: "waiting", thumb: thumbs[i] })));
+    const set = (i: number, p: Partial<UploadRow>) => setUploading((cur) => cur.map((x, j) => (j === i ? { ...x, ...p } : x)));
+    let added = 0;
+    // Files upload several at a time and so FINISH in any order; the task still lists
+    // them in the order they were picked — placed locally as each one lands, then
+    // the server is told the order once, at the end (one request, only if needed).
+    const landed: (T | undefined)[] = [];
+    const finished: string[] = [];
+    const place = () => onLanded(landed.filter((a): a is T => !!a));
+    const queue = list.map((f, i) => [f, i] as const);
+    const one = async (original: File, i: number) => {
+      set(i, { phase: "sending" });
+      try {
+        const file = await compressImage(original);
+        if (file.size > LIMITS.attachmentBytes) throw new Error(`${original.name} is over ${Math.round(LIMITS.attachmentBytes / 1024 / 1024)} MB`);
+        set(i, { size: file.size });
+        let attachment: T;
+        if (file.size > LIMITS.attachmentInlineBytes) {
+          attachment = await uploadLarge<T>(base, file, extra, (ratio) => set(i, { progress: ratio, phase: "sending" }), () => set(i, { phase: "saving" }));
+        } else {
+          const fd = new FormData();
+          fd.append("file", file, file.name);
+          for (const [k, v] of Object.entries(extra)) fd.append(k, v);
+          const { ok, data } = await postWithProgress(base, fd, (ratio) => set(i, { progress: ratio, phase: ratio >= 0.999 ? "saving" : "sending" }));
+          if (!ok || !data?.attachment) throw new Error(data?.error || "Upload failed");
+          attachment = data.attachment as T;
+        }
+        added++;
+        landed[i] = attachment;
+        finished.push(attachment.id);
+        place();
+        set(i, { progress: 1, phase: "done" });
+      } catch (e) {
+        set(i, { phase: "error", error: (e as Error).message });
+      }
+    };
+    const worker = async () => {
+      for (let next = queue.shift(); next; next = queue.shift()) await one(next[0], next[1]);
+    };
+    await Promise.all(Array.from({ length: Math.min(PARALLEL_UPLOADS, list.length) }, worker));
+    if (added) {
+      toast(added === 1 ? "File attached" : `${added} files attached`);
+      const picked = landed.filter((a): a is T => !!a).map((a) => a.id);
+      if (picked.join() !== finished.join()) await postJson(base, { order: picked }, "PATCH");
+      mutate(cacheKey);
+    }
+    window.setTimeout(() => {
+      setUploading((cur) => cur.filter((x) => x.phase === "error"));
+      thumbs.forEach((t) => t && URL.revokeObjectURL(t));
+    }, 1500);
+  }
+
+  const busy = uploading.some((u) => u.phase === "waiting" || u.phase === "sending" || u.phase === "saving");
+  return { uploading, upload, busy };
+}
+
+/** The progress rows under a files card while a batch goes up. */
+function UploadRows({ uploading }: { uploading: UploadRow[] }) {
+  if (!uploading.length) return null;
+  return (
+    <ul className="border-t border-line/80 px-4 py-2 sm:px-5">
+      {uploading.map((u, i) => (
+        <li key={i} className="py-1.5 text-xs">
+          <div className={cn("flex items-center gap-2", u.phase === "error" ? "text-red-600" : "text-ink-muted")}>
+            {u.thumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={u.thumb} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover ring-1 ring-line" />
+            ) : null}
+            {u.phase === "done" ? <span className="text-emerald-600">✓</span> : u.phase === "error" ? <IconX size={12} /> : <Spinner className="h-3 w-3" />}
+            <span className="min-w-0 flex-1 truncate">{u.name}</span>
+            <span className="shrink-0 tabular-nums">{u.phase === "waiting" ? "Waiting…" : u.phase === "sending" ? `${Math.round(u.progress * 100)}% · ${fmtBytes(u.size)}` : u.phase === "saving" ? "Saving…" : u.phase === "done" ? "Attached" : u.error}</span>
+          </div>
+          {(u.phase === "sending" || u.phase === "saving") && (
+            <div className="mt-1 h-1 overflow-hidden rounded-full bg-line/70">
+              <div className={cn("h-full rounded-full bg-brand-600 transition-[width] duration-200", u.phase === "saving" && "animate-pulse")} style={{ width: `${Math.max(3, Math.round(u.progress * 100))}%` }} />
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /**
@@ -167,79 +277,11 @@ export function AttachmentsCard({ base, items, max, cacheKey, onLanded, limitTex
   const { confirm } = useDialog();
   const { me, isAdmin } = useSession();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState<UploadRow[]>([]);
+  const { uploading, upload } = useAttachmentUpload<TaskAttachment>({ base, max, count: items.length, cacheKey, onLanded, limitText });
   const [dragging, setDragging] = useState(false);
   // The viewer walks the files in the order they are shown (pictures, then other files).
   const [preview, setPreview] = useState<TaskAttachment | null>(null);
   const [gone, setGone] = useState<Set<string>>(new Set());
-  async function upload(files: FileList | File[]) {
-    if (uploading.some((u) => u.phase === "waiting" || u.phase === "sending" || u.phase === "saving")) {
-      toast("Still uploading — add more files once this batch finishes", "error");
-      return;
-    }
-    // In name order, numbers counted as numbers (2 before 10), as Explorer and Finder list them.
-    // The order a picker hands over is not the order of the clicks — Windows moves the
-    // first-clicked file to the end — so name order is the one people actually see.
-    const list = Array.from(files)
-      .sort((x, y) => byName.compare(x.name, y.name))
-      .slice(0, max - items.length);
-    if (!list.length) {
-      toast(limitText, "error");
-      return;
-    }
-    // A picture shows at once from the device (no waiting for the upload to see what is going up).
-    const thumbs = list.map((f) => (/^image\/(png|jpeg|webp|gif)$/.test(f.type) ? URL.createObjectURL(f) : undefined));
-    setUploading(list.map((f, i) => ({ name: f.name, size: f.size, progress: 0, phase: "waiting", thumb: thumbs[i] })));
-    const set = (i: number, p: Partial<UploadRow>) => setUploading((cur) => cur.map((x, j) => (j === i ? { ...x, ...p } : x)));
-    let added = 0;
-    // Files upload several at a time and so FINISH in any order; the task still lists
-    // them in the order they were picked — placed locally as each one lands, then
-    // the server is told the order once, at the end (one request, only if needed).
-    const landed: (TaskAttachment | undefined)[] = [];
-    const finished: string[] = [];
-    const place = () => onLanded(landed.filter((a): a is TaskAttachment => !!a));
-    const queue = list.map((f, i) => [f, i] as const);
-    const one = async (original: File, i: number) => {
-      set(i, { phase: "sending" });
-      try {
-        const file = await compressImage(original);
-        if (file.size > LIMITS.attachmentBytes) throw new Error(`${original.name} is over ${Math.round(LIMITS.attachmentBytes / 1024 / 1024)} MB`);
-        set(i, { size: file.size });
-        let attachment: TaskAttachment;
-        if (file.size > LIMITS.attachmentInlineBytes) {
-          attachment = await uploadLarge(base, file, (ratio) => set(i, { progress: ratio, phase: "sending" }), () => set(i, { phase: "saving" }));
-        } else {
-          const fd = new FormData();
-          fd.append("file", file, file.name);
-          const { ok, data } = await postWithProgress(base, fd, (ratio) => set(i, { progress: ratio, phase: ratio >= 0.999 ? "saving" : "sending" }));
-          if (!ok || !data?.attachment) throw new Error(data?.error || "Upload failed");
-          attachment = data.attachment;
-        }
-        added++;
-        landed[i] = attachment;
-        finished.push(attachment.id);
-        place();
-        set(i, { progress: 1, phase: "done" });
-      } catch (e) {
-        set(i, { phase: "error", error: (e as Error).message });
-      }
-    };
-    const worker = async () => {
-      for (let next = queue.shift(); next; next = queue.shift()) await one(next[0], next[1]);
-    };
-    await Promise.all(Array.from({ length: Math.min(PARALLEL_UPLOADS, list.length) }, worker));
-    if (added) {
-      toast(added === 1 ? "File attached" : `${added} files attached`);
-      const picked = landed.filter((a): a is TaskAttachment => !!a).map((a) => a.id);
-      if (picked.join() !== finished.join()) await postJson(base, { order: picked }, "PATCH");
-      mutate(cacheKey);
-    }
-    window.setTimeout(() => {
-      setUploading((cur) => cur.filter((x) => x.phase === "error"));
-      thumbs.forEach((t) => t && URL.revokeObjectURL(t));
-    }, 1500);
-  }
-
   async function remove(a: TaskAttachment) {
     if (!(await confirm({ title: `Remove “${a.file_name}”?`, message: "The file is deleted permanently — it can't be recovered.", confirmLabel: "Remove", tone: "danger" }))) return;
     // The row goes at once; the file is deleted for good in the background and only returns if that fails.
@@ -370,28 +412,7 @@ export function AttachmentsCard({ base, items, max, cacheKey, onLanded, limitTex
         </ul>
       )}
 
-      {uploading.length > 0 && (
-        <ul className="border-t border-line/80 px-4 py-2 sm:px-5">
-          {uploading.map((u, i) => (
-            <li key={i} className="py-1.5 text-xs">
-              <div className={cn("flex items-center gap-2", u.phase === "error" ? "text-red-600" : "text-ink-muted")}>
-                {u.thumb ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={u.thumb} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover ring-1 ring-line" />
-                ) : null}
-                {u.phase === "done" ? <span className="text-emerald-600">✓</span> : u.phase === "error" ? <IconX size={12} /> : <Spinner className="h-3 w-3" />}
-                <span className="min-w-0 flex-1 truncate">{u.name}</span>
-                <span className="shrink-0 tabular-nums">{u.phase === "waiting" ? "Waiting…" : u.phase === "sending" ? `${Math.round(u.progress * 100)}% · ${fmtBytes(u.size)}` : u.phase === "saving" ? "Saving…" : u.phase === "done" ? "Attached" : u.error}</span>
-              </div>
-              {(u.phase === "sending" || u.phase === "saving") && (
-                <div className="mt-1 h-1 overflow-hidden rounded-full bg-line/70">
-                  <div className={cn("h-full rounded-full bg-brand-600 transition-[width] duration-200", u.phase === "saving" && "animate-pulse")} style={{ width: `${Math.max(3, Math.round(u.progress * 100))}%` }} />
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      <UploadRows uploading={uploading} />
 
       {preview && (
         <AttachmentViewer items={[...images, ...files]} startId={preview.id} base={base} onClose={() => setPreview(null)} />
@@ -400,30 +421,186 @@ export function AttachmentsCard({ base, items, max, cacheKey, onLanded, limitTex
   );
 }
 
-/** The meeting page's files card: what was shared for this meeting (also shown as a slide in its presentation). */
+/** A meeting's files as items: one per upload, titled by the note asked when it was added (in the order added). */
+export interface MeetingItem {
+  id: string;
+  title: string;
+  note: string | null;
+  files: MeetingFile[];
+}
+export function meetingItems(files: MeetingFile[]): MeetingItem[] {
+  const byGroup = new Map<string, MeetingFile[]>();
+  for (const f of files) byGroup.set(f.group_id, [...(byGroup.get(f.group_id) ?? []), f]);
+  return [...byGroup.entries()].map(([id, list]) => {
+    // Pictures first inside an item, like a task's attachments.
+    const ordered = [...list.filter((f) => kindOf(f.mime, f.file_name) === "image"), ...list.filter((f) => kindOf(f.mime, f.file_name) !== "image")];
+    const note = list.find((f) => f.note)?.note ?? null;
+    return { id, title: note || list[0].file_name, note, files: ordered };
+  });
+}
+
+/**
+ * The meeting page's attachments: each upload is an item — the note asked when
+ * it was added as its title, and a paperclip with the count that opens its files
+ * full screen (zoom, previous / next), like a task's attachments. The same items
+ * are a slide in the meeting's presentation.
+ */
 export function MeetingFilesCard({ meetingId }: { meetingId: string }) {
   const key = `/api/meetings/${meetingId}/attachments`;
-  const { data } = useCachedFetch<{ attachments: TaskAttachment[]; enabled: boolean }>(key);
-  const items = data?.attachments ?? [];
+  const { data } = useCachedFetch<{ attachments: MeetingFile[]; enabled: boolean }>(key);
+  const files = data?.attachments ?? [];
+  const { toast } = useToast();
+  const { confirm, prompt } = useDialog();
+  const { me, isAdmin } = useSession();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [open, setOpen] = useState<MeetingItem | null>(null);
+  const [gone, setGone] = useState<Set<string>>(new Set());
+  const { uploading, upload, busy } = useAttachmentUpload<MeetingFile>({
+    base: key,
+    max: LIMITS.attachmentsPerMeeting,
+    count: files.length,
+    cacheKey: key,
+    limitText: `A meeting can hold up to ${LIMITS.attachmentsPerMeeting} files`,
+    onLanded: (mine) =>
+      mutateWhere(key, (d, k) => {
+        if (k !== key) return undefined;
+        const cur = d as { attachments?: MeetingFile[]; enabled?: boolean } | undefined;
+        const ids = new Set(mine.map((a) => a.id));
+        return { enabled: cur?.enabled ?? true, attachments: [...(cur?.attachments ?? []).filter((a) => !ids.has(a.id)), ...mine] };
+      }),
+  });
+  const disabled = !!data && !data.enabled;
+  const items = meetingItems(files.filter((f) => !gone.has(f.id)));
+
+  /** Ask for the note (the item's title), then upload the picked files as one item. */
+  async function add(list: FileList | File[]) {
+    const picked = Array.from(list);
+    if (!picked.length) return;
+    if (busy) return toast("Still uploading — add more once this finishes", "error");
+    const one = picked.length === 1 ? picked[0].name.replace(/\.[^.]+$/, "") : "";
+    const note = await prompt({
+      title: picked.length === 1 ? "Add a note for this file" : `Add a note for these ${picked.length} files`,
+      message: "It is the title people see on the meeting and in its presentation.",
+      placeholder: "e.g. New onboarding screens to review",
+      defaultValue: one,
+      confirmLabel: "Upload",
+    });
+    if (note === null) return; // cancelled: nothing is uploaded
+    void upload(picked, { note: note.trim() || one || picked[0].name, group: crypto.randomUUID() });
+  }
+
+  async function remove(item: MeetingItem) {
+    const n = item.files.length;
+    if (!(await confirm({ title: `Remove “${item.title}”?`, message: `${n === 1 ? "Its file is" : `Its ${n} files are`} deleted permanently — ${n === 1 ? "it" : "they"} can’t be recovered.`, confirmLabel: "Remove", tone: "danger" }))) return;
+    // The item goes at once; its files are deleted for good in the background and come back only if that fails.
+    setGone((prev) => new Set([...prev, ...item.files.map((f) => f.id)]));
+    const results = await Promise.all(item.files.map((f) => deleteJson(`${key}/${f.id}`)));
+    const failed = item.files.filter((_, i) => !results[i].ok);
+    mutate(key);
+    if (failed.length) {
+      setGone((prev) => {
+        const next = new Set(prev);
+        for (const f of failed) next.delete(f.id);
+        return next;
+      });
+      toast(results.find((r) => !r.ok)?.data?.error || "Couldn’t remove every file", "error");
+    }
+  }
+  const canRemove = (item: MeetingItem) => isAdmin || item.files.every((f) => f.uploaded_by?.id === me?.id);
+
   return (
-    <AttachmentsCard
-      base={key}
-      items={items}
-      max={LIMITS.attachmentsPerMeeting}
-      cacheKey={key}
-      compact
-      title="Files"
-      onLanded={(mine) =>
-        mutateWhere(key, (d, k) => {
-          if (k !== key) return undefined;
-          const cur = d as { attachments?: TaskAttachment[]; enabled?: boolean } | undefined;
-          const ids = new Set(mine.map((a) => a.id));
-          return { enabled: cur?.enabled ?? true, attachments: [...(cur?.attachments ?? []).filter((a) => !ids.has(a.id)), ...mine] };
-        })
-      }
-      limitText={`A meeting can hold up to ${LIMITS.attachmentsPerMeeting} files`}
-      emptyHint="Slides, specs, designs, screenshots for this meeting — shown in its presentation too"
-      disabledText={data && !data.enabled ? "File storage isn't set up on this server yet." : undefined}
-    />
+    <Card
+      className={cn("transition-colors", dragging && "border-brand-300 bg-brand-50/40")}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        if (e.dataTransfer.files?.length && !disabled) void add(e.dataTransfer.files);
+      }}
+    >
+      <CardHeader className="flex items-center justify-between gap-3">
+        <CardTitle className="inline-flex items-center gap-2">
+          <IconPaperclip size={16} className="text-ink-subtle" /> Attachments
+          {items.length > 0 && <span className="text-sm font-normal text-ink-subtle">{items.length}</span>}
+        </CardTitle>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) void add(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        {!disabled && (
+          <Button size="sm" variant="secondary" onClick={() => inputRef.current?.click()}>
+            <IconUpload size={14} /> Add
+          </Button>
+        )}
+      </CardHeader>
+
+      {items.length === 0 && uploading.length === 0 && (
+        <CardBody>
+          <p className="text-[12.5px] text-ink-subtle">
+            {disabled ? "File storage isn’t set up on this server yet." : <>Slides, specs, designs, screenshots — with a note each. Shown in the presentation too. Up to {Math.round(LIMITS.attachmentBytes / 1024 / 1024)} MB per file.</>}
+          </p>
+        </CardBody>
+      )}
+
+      {items.length > 0 && (
+        <ul className="divide-y divide-line/80">
+          {items.map((item) => {
+            const first = item.files[0];
+            const pic = kindOf(first.mime, first.file_name) === "image";
+            const by = first.uploaded_by;
+            return (
+              <li key={item.id} className="flex items-center gap-3 px-4 py-2.5">
+                <button type="button" onClick={() => setOpen(item)} className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-canvas text-ink-subtle ring-1 ring-inset ring-line hover:text-ink" aria-label={`Open ${item.title}`}>
+                  {pic ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={`${key}/${first.id}`} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                  ) : (
+                    <IconFile size={17} />
+                  )}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <button type="button" onClick={() => setOpen(item)} title={item.title} className="line-clamp-2 block max-w-full break-words text-left text-[13.5px] font-medium leading-snug text-ink hover:text-brand-700">
+                    {item.title}
+                  </button>
+                  <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-ink-subtle">
+                    <span className="truncate" title={item.files.map((f) => f.file_name).join(", ")}>
+                      {item.files.length === 1 ? `${fileLabel(first)} · ${fmtBytes(first.size_bytes)}` : `${item.files.length} files`}
+                    </span>
+                    {by && <span>· {by.name}</span>}
+                    <span>
+                      · <When iso={first.created_at} />
+                    </span>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setOpen(item)} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-canvas px-2 py-0.5 text-[12px] font-semibold text-ink-muted ring-1 ring-inset ring-line hover:text-ink hover:ring-ink/40" title={`${item.files.length} attachment${item.files.length === 1 ? "" : "s"} — open full screen`} aria-label={`Open ${item.files.length} attachment${item.files.length === 1 ? "" : "s"} full screen`}>
+                  <IconPaperclip size={12} />
+                  {item.files.length}
+                </button>
+                {canRemove(item) && (
+                  <button type="button" onClick={() => remove(item)} className="tap shrink-0 rounded-md p-1 text-ink-subtle hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${item.title}`} title="Remove">
+                    <IconTrash size={14} />
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <UploadRows uploading={uploading} />
+
+      {open && <AttachmentViewer items={open.files} base={key} onClose={() => setOpen(null)} />}
+    </Card>
   );
 }

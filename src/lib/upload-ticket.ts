@@ -20,6 +20,9 @@ export interface UploadTicket {
   f: string;
   /** Expiry (ms since epoch). */
   x: number;
+  /** Meeting files: the note asked when they were added, and the upload (item) they belong to. */
+  m?: string | null;
+  g?: string;
 }
 
 const key = () => {

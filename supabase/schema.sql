@@ -490,6 +490,11 @@ create table if not exists meeting_attachments (
   created_at    timestamptz not null default now()
 );
 create index if not exists meeting_attachments_meeting_idx on meeting_attachments (meeting_id, created_at);
+-- (035) The note asked when files are added (the item's title), and which upload they came in.
+alter table meeting_attachments add column if not exists note text;
+alter table meeting_attachments add column if not exists group_id uuid;
+update meeting_attachments set group_id = id where group_id is null;
+create index if not exists meeting_attachments_group_idx on meeting_attachments (meeting_id, group_id);
 drop trigger if exists meeting_attachments_rev on meeting_attachments;
 create trigger meeting_attachments_rev after insert or update or delete on meeting_attachments for each statement execute function bump_rev();
 
