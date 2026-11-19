@@ -5,7 +5,8 @@ import { ok, fail, serverError, storageFail } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { canSeeTask } from "@/lib/visibility";
-import { streamFile, deleteFile } from "@/lib/google-drive";
+import { deleteFile } from "@/lib/google-drive";
+import { serveDriveFile } from "@/lib/serve-file";
 
 export const dynamic = "force-dynamic";
 
@@ -17,15 +18,6 @@ async function load(taskId: string, attId: string) {
   return { att: data as (Record<string, unknown> & { drive_file_id?: string | null }) | null, error };
 }
 
-/** Printable ASCII only — what the plain filename= parameter may carry. */
-function asciiName(name: string): string {
-  let out = "";
-  for (const ch of name) {
-    const c = ch.charCodeAt(0);
-    out += c >= 0x20 && c <= 0x7e && ch !== '"' && ch !== "\\" ? ch : "_";
-  }
-  return out;
-}
 
 /**
  * Download / preview. Default: 302 to a short-lived signed URL (works for
@@ -46,23 +38,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // from the storage origin.
   const asDownload = !!sp.get("download") || att.mime === "image/svg+xml";
   if (att.drive_file_id) {
-    // On the Shared Drive: streamed through the panel (Range passes through, so video can seek).
+    // On the Shared Drive: streamed through the panel by byte range, in pieces of at most 16 MiB (lib/serve-file).
     if (sp.get("json")) return NextResponse.json({ url: `/api/tasks/${id}/attachments/${attId}${asDownload ? "?download=1" : ""}`, expires_in: null });
     try {
-      const up = await streamFile(att.drive_file_id as string, asDownload ? null : req.headers.get("range"));
-      const headers = new Headers();
-      headers.set("content-type", (att.mime as string) || "application/octet-stream");
-      for (const h of ["content-length", "content-range", "etag"]) {
-        const v = up.headers.get(h);
-        if (v) headers.set(h, v);
-      }
-      headers.set("accept-ranges", "bytes");
-      // A stored attachment never changes under its id: the browser keeps it (fetched once, then instant).
-      headers.set("cache-control", "private, max-age=604800, immutable");
-      headers.set("x-content-type-options", "nosniff");
-      const name = att.file_name as string;
-      headers.set("content-disposition", `${asDownload ? "attachment" : "inline"}; filename="${asciiName(name)}"; filename*=UTF-8''${encodeURIComponent(name)}`);
-      return new Response(up.body, { status: up.status, headers });
+      return await serveDriveFile(req.headers.get("range"), {
+        fileId: att.drive_file_id as string,
+        size: Number(att.size_bytes),
+        mime: (att.mime as string) || "application/octet-stream",
+        name: att.file_name as string,
+        download: asDownload,
+        // A stored attachment never changes under its id: the browser keeps it (fetched once, then instant).
+        cacheControl: "private, max-age=604800, immutable",
+        extra: { "x-content-type-options": "nosniff" },
+      });
     } catch (e) {
       return storageFail(e, "Couldn't read the file");
     }

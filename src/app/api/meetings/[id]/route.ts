@@ -7,6 +7,7 @@ import { cleanLine, cleanText, isUuid, parseUuidList } from "@/lib/validate";
 import { LIMITS } from "@/lib/domain";
 import { getSettings } from "@/lib/settings";
 import { loadMeeting } from "@/lib/meetings";
+import { deleteFile } from "@/lib/google-drive";
 import { canAccessMeeting, closeOverdueMeetings } from "@/lib/series-access";
 
 export const dynamic = "force-dynamic";
@@ -105,8 +106,16 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (u.role !== "admin") return NextResponse.json({ error: "Meetings are managed by admins" }, { status: 403 });
   const { id } = await params;
   if (!isUuid(id)) return fail("Meeting not found", 404);
+  // Its files and recordings leave storage for good first (their rows go with the meeting).
+  const sb = getSupabase();
+  const [files, recs] = await Promise.all([
+    sb.from("meeting_attachments").select("drive_file_id").eq("meeting_id", id),
+    sb.from("meeting_recordings").select("drive_file_id").eq("meeting_id", id),
+  ]);
+  const driveIds = [...((files.data ?? []) as { drive_file_id: string | null }[]), ...((recs.data ?? []) as { drive_file_id: string | null }[])].map((f) => f.drive_file_id).filter((x): x is string => !!x);
+  for (const f of driveIds) await deleteFile(f).catch(() => undefined);
   // One round trip: delete and read back the title for the activity log.
-  const { data: gone, error } = await getSupabase().from("meetings").delete().eq("id", id).select("title").maybeSingle();
+  const { data: gone, error } = await sb.from("meetings").delete().eq("id", id).select("title").maybeSingle();
   if (error) return serverError(error);
   if (!gone) return fail("Meeting not found", 404);
   after(() => logActivity({ action: "meeting.delete", entityType: "meeting", entityId: id, summary: `Deleted meeting “${gone.title}”` }));

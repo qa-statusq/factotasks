@@ -237,6 +237,8 @@ export function RecorderProvider({ children }: { children: React.ReactNode }) {
         patch({ recordedBytes: recorded, finishProgress: left > 0 ? Math.min(0.95, (offset.current - finishBase.current) / left) : 0.95 });
         if (r.done) {
           patch({ phase: "done", saved: r.recording ?? null, blob: null });
+          // Make it seekable now (its seek index is built once, server side) so the first person to open it jumps around at once.
+          if (r.recording) void fetch(`/api/recordings/${r.recording.id}/index`, { method: "POST", credentials: "same-origin", keepalive: true }).catch(() => undefined);
           all.current = [];
           allBytes.current = 0;
           recordingId.current = null;

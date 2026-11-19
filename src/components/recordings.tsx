@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Button, buttonClass } from "@/components/ui/button";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { DownloadButton } from "@/components/ui/download-button";
 import { Input, Textarea } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/misc";
@@ -17,7 +18,7 @@ import { When } from "@/components/ui/live-time";
 import { fmtDuration, recordingLabel } from "@/lib/recordings";
 import { fmtBytes } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { IconPlay, IconDownload, IconSend, IconTrash, IconEdit, IconX, IconMic, IconVideo } from "@/components/ui/icons";
+import { IconPlay, IconSend, IconTrash, IconEdit, IconX, IconMic, IconVideo } from "@/components/ui/icons";
 import type { Recording, RecordingShare } from "@/lib/types";
 
 /** The recordings of one meeting (sidebar card) or of every meeting (the Recordings screen). */
@@ -113,11 +114,7 @@ function RecordingRow({ r, cacheKey, showMeeting, canManage, onPlay, onShare, on
         </div>
         {ready && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {canManage && (
-              <a href={`/api/recordings/${r.id}/stream?download=1`} className={buttonClass("secondary", "sm", "h-7 px-2 text-[12px]")} download={r.name}>
-                <IconDownload size={13} /> Download
-              </a>
-            )}
+            {canManage && <DownloadButton url={`/api/recordings/${r.id}/stream`} name={recordingFileName(r)} size={r.size_bytes} className="h-7 px-2 text-[12px] [&_span]:inline" />}
             {canManage && (
               <>
                 <Button variant="secondary" size="sm" onClick={onShare} className="h-7 px-2 text-[12px]">
@@ -147,32 +144,97 @@ function RecordingRow({ r, cacheKey, showMeeting, canManage, onPlay, onShare, on
 
 export const isAudioRecording = (r: Pick<Recording, "mime">) => r.mime.startsWith("audio/");
 
-/** Inline player — the file streams through the panel, no Google sign-in. */
+/** The file name a download gets: the recording's name with its type's extension. */
+export function recordingFileName(r: Pick<Recording, "name" | "mime">): string {
+  const ext = r.mime.includes("mp4") ? "mp4" : r.mime.includes("ogg") ? "ogg" : "webm";
+  return /\.[a-z0-9]{2,4}$/i.test(r.name) ? r.name : `${r.name}.${ext}`;
+}
+
+/**
+ * Make a recording seekable for good (its seek index, built once — see
+ * /api/recordings/[id]/index). Resolves true when it was built just now, so a
+ * player that is already open reloads the video to use it.
+ */
+export async function prepareRecording(id: string): Promise<boolean> {
+  try {
+    const r = await fetch(`/api/recordings/${id}/index`, { method: "POST", credentials: "same-origin", keepalive: false });
+    const j = (await r.json().catch(() => null)) as { built?: boolean } | null;
+    return !!j?.built;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Inline player — the file streams through the panel, no Google sign-in. A
+ * recording opened for the first time ever is made seekable in the
+ * background while it plays; then the player switches over to that version
+ * without losing the place (or the play / pause state).
+ */
+function MediaPlayer({ r }: { r: Recording }) {
+  const ref = useRef<HTMLVideoElement & HTMLAudioElement>(null);
+  const [rev, setRev] = useState(0);
+  const [preparing, setPreparing] = useState(false);
+  const resume = useRef<{ t: number; playing: boolean } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const slow = window.setTimeout(() => alive && setPreparing(true), 600);
+    void prepareRecording(r.id).then((built) => {
+      window.clearTimeout(slow);
+      if (!alive) return;
+      setPreparing(false);
+      if (!built) return;
+      const el = ref.current;
+      resume.current = el ? { t: el.currentTime, playing: !el.paused } : null;
+      setRev((x) => x + 1);
+    });
+    return () => {
+      alive = false;
+      window.clearTimeout(slow);
+    };
+  }, [r.id]);
+  const src = `/api/recordings/${r.id}/stream${rev ? `?v=${rev}` : ""}`;
+  const onLoaded = () => {
+    const el = ref.current;
+    const back = resume.current;
+    resume.current = null;
+    if (!el || !back) return;
+    el.currentTime = back.t;
+    if (back.playing) void el.play().catch(() => undefined);
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      {isAudioRecording(r) ? (
+        <div className="flex flex-col items-center gap-4 rounded-lg bg-canvas px-4 py-8">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-ink text-on-ink">
+            <IconMic size={24} />
+          </span>
+          <audio ref={ref} key={src} src={src} controls autoPlay={!rev} preload="metadata" onLoadedMetadata={onLoaded} className="w-full" />
+        </div>
+      ) : (
+        <video ref={ref} key={src} src={src} controls autoPlay={!rev} playsInline preload="metadata" onLoadedMetadata={onLoaded} className="aspect-video w-full rounded-lg bg-black" />
+      )}
+      {preparing && (
+        <p className="flex items-center gap-2 text-[12px] text-ink-subtle" role="status">
+          <Spinner className="h-3.5 w-3.5" /> Preparing quick jumping for this recording (first time only)…
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function PlayerSheet({ r, onClose }: { r: Recording; onClose: () => void }) {
   const { isAdmin } = useSession();
   return (
     <Sheet title={r.meeting ? r.meeting.title : recordingLabel(r)} description={`${recordingLabel(r)} · ${fmtDuration(r.duration_sec)} · ${fmtBytes(r.size_bytes)}`} onClose={onClose} wide
       footer={
         <div className="flex items-center justify-end gap-2">
-          {isAdmin && (
-            <a href={`/api/recordings/${r.id}/stream?download=1`} className={buttonClass("secondary", "sm")} download={r.name}>
-              <IconDownload size={14} /> Download
-            </a>
-          )}
+          {isAdmin && <DownloadButton url={`/api/recordings/${r.id}/stream`} name={recordingFileName(r)} size={r.size_bytes} />}
           <Button size="sm" onClick={onClose}>Close</Button>
         </div>
       }
     >
-      {isAudioRecording(r) ? (
-        <div className="flex flex-col items-center gap-4 rounded-lg bg-canvas px-4 py-8">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-ink text-on-ink">
-            <IconMic size={24} />
-          </span>
-          <audio src={`/api/recordings/${r.id}/stream`} controls autoPlay preload="metadata" className="w-full" />
-        </div>
-      ) : (
-        <video src={`/api/recordings/${r.id}/stream`} controls autoPlay playsInline preload="metadata" className="aspect-video w-full rounded-lg bg-black" />
-      )}
+      <MediaPlayer r={r} />
     </Sheet>
   );
 }

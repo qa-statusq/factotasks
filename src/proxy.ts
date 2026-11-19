@@ -5,8 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose/jwt/verify";
 import type { JWTPayload } from "jose";
 
-/** A task attachment's file: /api/tasks/<task>/attachments/<attachment> (not the large-upload endpoint beside it). */
-const ATTACHMENT_FILE = /^\/api\/tasks\/[^/]+\/attachments\/(?!upload$)[^/]+$/;
+/** A task's or meeting's file: /api/{tasks|meetings}/<id>/attachments/<attachment> (not the large-upload endpoint beside it). */
+const ATTACHMENT_FILE = /^\/api\/(?:tasks|meetings)\/[^/]+\/attachments\/(?!upload$)[^/]+$/;
 
 const COOKIE = "ft_session";
 

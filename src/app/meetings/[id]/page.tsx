@@ -15,6 +15,7 @@ import { StatusMenu } from "@/components/status-menu";
 import { DueChip, PILL_WIDTH } from "@/components/task-list";
 import { NoteComposer, NoteList } from "@/components/meeting-notes";
 import { MeetingRecordingsCard } from "@/components/recordings";
+import { MeetingFilesCard } from "@/components/task-attachments";
 import { RecordButton, canRecordMeeting } from "@/components/recording-controls";
 import { AddTaskSheet } from "@/components/add-task-sheet";
 import { SeriesBadge, ScopeLabel, MeetingStatusBadge } from "@/components/meeting-series";
@@ -106,7 +107,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: DeckPack; cacheKey: string })
   }
   const [editing, setEditing] = useState(false);
   async function remove() {
-    if (!(await confirm({ title: "Delete this meeting?", message: "Its minutes are deleted too. Tasks are untouched.", confirmLabel: "Delete", tone: "danger" }))) return;
+    if (!(await confirm({ title: "Delete this meeting?", message: "Its minutes go too, and its files and recordings are deleted permanently. Tasks are untouched.", confirmLabel: "Delete", tone: "danger" }))) return;
     // Goes at once — out of every list, and off this page; the server catches up in the
     // background and the meeting comes back only if that fails.
     dropEverywhere(m.id, ["/api/meetings", "/api/recordings"]);
@@ -233,6 +234,8 @@ function MeetingScreen({ pack, cacheKey }: { pack: DeckPack; cacheKey: string })
           </section>
 
           <GeneralMinutes pack={pack} cacheKey={cacheKey} canEdit={isAdmin} />
+
+          <MeetingFilesCard meetingId={m.id} />
 
           <MeetingRecordingsCard meetingId={m.id} />
 

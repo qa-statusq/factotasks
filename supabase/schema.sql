@@ -467,10 +467,31 @@ create table if not exists meeting_recordings (
   updated_at    timestamptz not null default now()
 );
 create index if not exists meeting_recordings_meeting_idx on meeting_recordings (meeting_id, created_at desc);
+-- (034) A recording's seek index: where each keyframe cluster starts and at what time
+-- (browser-recorded WebM has none; built once per recording by the panel).
+alter table meeting_recordings add column if not exists seek_index jsonb;
 drop trigger if exists meeting_recordings_touch on meeting_recordings;
 create trigger meeting_recordings_touch before update on meeting_recordings for each row execute function touch_updated_at();
 drop trigger if exists meeting_recordings_rev on meeting_recordings;
 create trigger meeting_recordings_rev after insert or update or delete on meeting_recordings for each statement execute function bump_rev();
+
+-- (034) Files attached to a meeting — on the team's Shared Drive like task files,
+-- shown on the meeting page and in its presentation.
+create table if not exists meeting_attachments (
+  id            uuid primary key default gen_random_uuid(),
+  meeting_id    uuid not null references meetings(id) on delete cascade,
+  uploaded_by   uuid references users(id) on delete set null,
+  file_name     text not null,
+  mime          text not null,
+  size_bytes    bigint not null,
+  drive_file_id text not null,
+  width         int,
+  height        int,
+  created_at    timestamptz not null default now()
+);
+create index if not exists meeting_attachments_meeting_idx on meeting_attachments (meeting_id, created_at);
+drop trigger if exists meeting_attachments_rev on meeting_attachments;
+create trigger meeting_attachments_rev after insert or update or delete on meeting_attachments for each statement execute function bump_rev();
 
 create table if not exists recording_shares (
   id            uuid primary key default gen_random_uuid(),
@@ -1111,6 +1132,23 @@ $$;
 drop trigger if exists task_attachments_cap on task_attachments;
 create trigger task_attachments_cap before insert on task_attachments for each row execute function task_attachments_cap();
 
+-- (034) A meeting holds at most 25 files, the same way.
+create or replace function meeting_attachments_cap()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  perform 1 from meetings where id = new.meeting_id for update;
+  if (select count(*) from meeting_attachments where meeting_id = new.meeting_id) >= 25 then
+    raise exception 'attachment limit' using errcode = 'P0006';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists meeting_attachments_cap on meeting_attachments;
+create trigger meeting_attachments_cap before insert on meeting_attachments for each row execute function meeting_attachments_cap();
+
 -- (023) Remove a person unless they are the last active admin — one statement under a lock.
 create or replace function user_delete_guarded(p_id uuid)
 returns boolean
@@ -1636,6 +1674,7 @@ alter table task_assignees   enable row level security;
 alter table task_status_log  enable row level security;
 alter table task_comments    enable row level security;
 alter table task_attachments enable row level security;
+alter table meeting_attachments enable row level security;
 alter table meetings         enable row level security;
 alter table meeting_notes    enable row level security;
 alter table task_targets     enable row level security;

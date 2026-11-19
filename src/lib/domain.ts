@@ -181,6 +181,10 @@ export const LIMITS = {
   attachmentBytes: 500 * 1024 * 1024,
   /** Up to this size a file is sent through the panel in one request (the host caps a request at 32 MiB). */
   attachmentInlineBytes: 24 * 1024 * 1024,
+  /** Largest single answer when the panel serves file bytes (the host cuts one response at 32 MiB); bigger files go in pieces. */
+  servePieceBytes: 16 * 1024 * 1024,
+  /** Files a meeting can hold. */
+  attachmentsPerMeeting: 25,
   attachmentsPerTask: 25,
 } as const;
 

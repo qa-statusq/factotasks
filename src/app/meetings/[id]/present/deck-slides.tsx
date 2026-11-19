@@ -11,7 +11,7 @@ import { ClampedText } from "@/components/ui/clamped-text";
 import { NoteLink } from "@/components/ui/note-link";
 import { IconAndroid, IconApple, IconCheck, IconPaperclip, IconMessage } from "@/components/ui/icons";
 import { createContext, useContext } from "react";
-import type { DeckPack, MeetingNote, MeetingPack, TaskCard, UserBrief } from "@/lib/types";
+import type { DeckPack, MeetingNote, MeetingPack, TaskAttachment, TaskCard, UserBrief } from "@/lib/types";
 
 /**
  * The slides of a meeting deck: what each section shows and the parts it is built from
@@ -63,10 +63,10 @@ export interface Slide {
   key: string;
   render: (n: number, total: number) => React.ReactNode;
   /** Listed in the "jump to" panel and the app strip. */
-  jump?: { label: string; icon?: { name: string; color: string; iconUrl: string | null }; sub?: string; short?: string; kind?: "cover" | "general" | "shared" | "approvals" | "minutes" | "next" };
+  jump?: { label: string; icon?: { name: string; color: string; iconUrl: string | null }; sub?: string; short?: string; kind?: "cover" | "general" | "shared" | "approvals" | "files" | "minutes" | "next" };
 }
 
-export function buildSlides(p: DeckPack): Slide[] {
+export function buildSlides(p: DeckPack, files: TaskAttachment[] = []): Slide[] {
   const slides: Slide[] = [];
   const m = p.meeting;
   const agenda = buildAgenda(p, { dedupe: true });
@@ -182,6 +182,19 @@ export function buildSlides(p: DeckPack): Slide[] {
       render: (n, total) => (
         <Frame {...frame(n, total)} title="Awaiting approval" subtitle={`${p.approvals.length} status change${p.approvals.length === 1 ? "" : "s"} waiting for an admin`}>
           <TaskTable rows={p.approvals.map((t) => ({ t, done: false }))} notes={notes} labels={labels} showApp />
+        </Frame>
+      ),
+    });
+  }
+
+  /* Files added to the meeting: pictures as thumbnails, the rest as cards; each opens full screen. */
+  if (files.length) {
+    slides.push({
+      key: "files",
+      jump: { label: "Files", short: "Files", kind: "files", sub: `${files.length} file${files.length === 1 ? "" : "s"}` },
+      render: (n, total) => (
+        <Frame {...frame(n, total)} title="Files" subtitle="Shared for this meeting — open any of them full screen" part={`${files.length} file${files.length === 1 ? "" : "s"}`}>
+          <MeetingFilesGrid meetingId={m.id} files={files} />
         </Frame>
       ),
     });
@@ -764,7 +777,37 @@ function NoteKind({ kind, label }: { kind: MeetingNote["kind"]; label?: string }
 }
 
 /** Opens a task's attachments or comments from a slide; the deck page supplies the viewers. */
-export const DeckTaskContext = createContext<{ attachments: (t: TaskCard) => void; comments: (t: TaskCard) => void; prefetch: (t: TaskCard, kind: "attachments" | "comments") => void } | null>(null);
+export const DeckTaskContext = createContext<{ attachments: (t: TaskCard) => void; comments: (t: TaskCard) => void; prefetch: (t: TaskCard, kind: "attachments" | "comments") => void; openFile?: (id: string) => void } | null>(null);
+
+/** The Files slide: a grid that always fits the slide (more files → more, smaller columns). */
+function MeetingFilesGrid({ meetingId, files }: { meetingId: string; files: TaskAttachment[] }) {
+  const ctx = useContext(DeckTaskContext);
+  const n = files.length;
+  const cols = n <= 3 ? n : n <= 8 ? 4 : n <= 15 ? 5 : 6;
+  return (
+    <div className="grid min-h-0 gap-[1.2cqw]" style={{ gridTemplateColumns: `repeat(${Math.max(1, cols)}, minmax(0, 1fr))` }}>
+      {files.map((f) => {
+        const kind = /^image\/(png|jpeg|webp|gif)$/.test(f.mime) ? "image" : f.mime === "application/pdf" ? "PDF" : f.mime.startsWith("video/") ? "Video" : (f.file_name.split(".").pop() || "file").toUpperCase();
+        return (
+          <button key={f.id} type="button" onClick={() => ctx?.openFile?.(f.id)} className={cn(PANEL, "group flex flex-col text-left transition-shadow hover:shadow-[0_0_0_0.2cqw_rgba(28,28,26,0.25)]")} title={`Open ${f.file_name}`}>
+            <span className="relative block aspect-[4/3] w-full overflow-hidden bg-canvas">
+              {kind === "image" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`/api/meetings/${meetingId}/attachments/${f.id}`} alt={f.file_name} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" />
+              ) : (
+                <span className="flex h-full w-full flex-col items-center justify-center gap-[0.6cqw] text-ink-subtle">
+                  <IconPaperclip className="h-[2.6cqw] w-[2.6cqw]" />
+                  <span className="rounded-[0.4cqw] bg-surface px-[0.7cqw] py-[0.2cqw] text-[0.95cqw] font-semibold tracking-wide text-ink-muted ring-1 ring-inset ring-line">{kind}</span>
+                </span>
+              )}
+            </span>
+            <span className="block truncate px-[0.9cqw] py-[0.6cqw] text-[1.05cqw] font-medium text-ink" data-nowrap>{f.file_name}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const CHIP = "deck-chrome inline-flex shrink-0 items-center gap-[0.3cqw] rounded-full bg-canvas px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold text-ink-muted ring-1 ring-inset ring-line hover:text-ink hover:ring-ink/40";
 

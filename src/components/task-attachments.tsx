@@ -8,14 +8,15 @@ import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
 import { useDialog } from "@/components/ui/dialog";
 import { useSession } from "@/components/providers/session-provider";
-import { mutate, mutateWhere } from "@/lib/client-cache";
+import { mutate, mutateWhere, useCachedFetch } from "@/lib/client-cache";
 import { deleteJson, postJson } from "@/lib/http";
 import { compressImage } from "@/lib/image-compress";
 import { fmtBytes } from "@/lib/format";
 import { LIMITS } from "@/lib/domain";
 import { When } from "@/components/ui/live-time";
 import { cn } from "@/lib/cn";
-import { IconPaperclip, IconUpload, IconFile, IconTrash, IconDownload, IconVideo, IconMic, IconX } from "@/components/ui/icons";
+import { IconPaperclip, IconUpload, IconFile, IconTrash, IconVideo, IconMic, IconX } from "@/components/ui/icons";
+import { DownloadButton } from "@/components/ui/download-button";
 import type { TaskAttachment, TaskDetail } from "@/lib/types";
 import { AttachmentViewer, kindOf, fileLabel } from "@/components/attachment-viewer";
 
@@ -121,6 +122,47 @@ async function uploadLarge(base: string, file: File, onProgress: (ratio: number)
  * Uploads show a real progress bar, then "Saving…" until it is stored.
  */
 export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) {
+  return (
+    <AttachmentsCard
+      base={`/api/tasks/${task.id}/attachments`}
+      items={task.attachments}
+      max={LIMITS.attachmentsPerTask}
+      cacheKey={cacheKey}
+      // Placed into the open task as each file lands (no refetch per file).
+      onLanded={(mine) =>
+        mutateWhere(cacheKey, (d, key) => {
+          const t = key === cacheKey ? (d as { task?: TaskDetail } | undefined)?.task : undefined;
+          if (!t) return undefined;
+          const ids = new Set(mine.map((a) => a.id));
+          return { ...(d as object), task: { ...t, attachments: [...t.attachments.filter((a) => !ids.has(a.id)), ...mine] } };
+        })
+      }
+      limitText={`A task can hold up to ${LIMITS.attachmentsPerTask} attachments`}
+      emptyHint="Screenshots, screen recordings, logs, designs, builds"
+    />
+  );
+}
+
+/**
+ * The files card itself — shared by tasks and meetings: add (pick, drop),
+ * progress per file, pictures as a grid and other files as a list, the
+ * full-screen viewer, download and remove.
+ */
+export function AttachmentsCard({ base, items, max, cacheKey, onLanded, limitText, emptyHint, title = "Attachments", disabledText, compact }: {
+  base: string;
+  items: TaskAttachment[];
+  max: number;
+  cacheKey: string;
+  /** Put the newly landed files into the owner's cached data (in picked order). */
+  onLanded: (mine: TaskAttachment[]) => void;
+  limitText: string;
+  emptyHint: string;
+  title?: string;
+  /** Shown instead of the add button when files can't be added here (storage not set up). */
+  disabledText?: string;
+  /** A narrow column (the meeting page's side): fewer picture columns. */
+  compact?: boolean;
+}) {
   const { toast } = useToast();
   const { confirm } = useDialog();
   const { me, isAdmin } = useSession();
@@ -130,8 +172,6 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
   // The viewer walks the files in the order they are shown (pictures, then other files).
   const [preview, setPreview] = useState<TaskAttachment | null>(null);
   const [gone, setGone] = useState<Set<string>>(new Set());
-  const base = `/api/tasks/${task.id}/attachments`;
-
   async function upload(files: FileList | File[]) {
     if (uploading.some((u) => u.phase === "waiting" || u.phase === "sending" || u.phase === "saving")) {
       toast("Still uploading — add more files once this batch finishes", "error");
@@ -142,9 +182,9 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
     // first-clicked file to the end — so name order is the one people actually see.
     const list = Array.from(files)
       .sort((x, y) => byName.compare(x.name, y.name))
-      .slice(0, LIMITS.attachmentsPerTask - task.attachments.length);
+      .slice(0, max - items.length);
     if (!list.length) {
-      toast(`A task can hold up to ${LIMITS.attachmentsPerTask} attachments`, "error");
+      toast(limitText, "error");
       return;
     }
     // A picture shows at once from the device (no waiting for the upload to see what is going up).
@@ -157,14 +197,7 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
     // the server is told the order once, at the end (one request, only if needed).
     const landed: (TaskAttachment | undefined)[] = [];
     const finished: string[] = [];
-    const place = () =>
-      mutateWhere(cacheKey, (d, key) => {
-        const t = key === cacheKey ? (d as { task?: TaskDetail } | undefined)?.task : undefined;
-        if (!t) return undefined;
-        const mine = landed.filter((a): a is TaskAttachment => !!a);
-        const ids = new Set(mine.map((a) => a.id));
-        return { ...(d as object), task: { ...t, attachments: [...t.attachments.filter((a) => !ids.has(a.id)), ...mine] } };
-      });
+    const place = () => onLanded(landed.filter((a): a is TaskAttachment => !!a));
     const queue = list.map((f, i) => [f, i] as const);
     const one = async (original: File, i: number) => {
       set(i, { phase: "sending" });
@@ -223,7 +256,7 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
     }
   }
 
-  const visible = task.attachments.filter((a) => !gone.has(a.id));
+  const visible = items.filter((a) => !gone.has(a.id));
   const images = visible.filter((a) => kindOf(a.mime, a.file_name) === "image");
   const files = visible.filter((a) => kindOf(a.mime, a.file_name) !== "image");
   const canRemove = (a: TaskAttachment) => a.uploaded_by?.id === me?.id || isAdmin;
@@ -239,12 +272,12 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
       onDrop={(e) => {
         e.preventDefault();
         setDragging(false);
-        if (e.dataTransfer.files?.length) void upload(e.dataTransfer.files);
+        if (e.dataTransfer.files?.length && !disabledText) void upload(e.dataTransfer.files);
       }}
     >
       <CardHeader className="flex items-center justify-between gap-3">
         <CardTitle className="inline-flex items-center gap-2">
-          <IconPaperclip size={16} className="text-ink-subtle" /> Attachments
+          <IconPaperclip size={16} className="text-ink-subtle" /> {title}
           {visible.length > 0 && <span className="text-sm font-normal text-ink-subtle">{visible.length}</span>}
         </CardTitle>
         <input
@@ -257,21 +290,27 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
             e.target.value = "";
           }}
         />
-        <Button size="sm" variant="secondary" onClick={() => inputRef.current?.click()}>
-          <IconUpload size={14} /> Add files
-        </Button>
+        {!disabledText && (
+          <Button size="sm" variant="secondary" onClick={() => inputRef.current?.click()}>
+            <IconUpload size={14} /> Add files
+          </Button>
+        )}
       </CardHeader>
 
       {visible.length === 0 && uploading.length === 0 && (
         <CardBody>
           <p className="text-sm text-ink-subtle">
-            Screenshots, screen recordings, logs, designs, builds — drop files here or click <b>Add files</b>. Up to {Math.round(LIMITS.attachmentBytes / 1024 / 1024)} MB per file; images are downscaled before upload.
+            {disabledText ?? (
+              <>
+                {emptyHint} — drop files here or click <b>Add files</b>. Up to {Math.round(LIMITS.attachmentBytes / 1024 / 1024)} MB per file; images are downscaled before upload.
+              </>
+            )}
           </p>
         </CardBody>
       )}
 
       {images.length > 0 && (
-        <CardBody className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <CardBody className={cn("grid grid-cols-2 gap-3", compact ? "sm:grid-cols-3 xl:grid-cols-2" : "sm:grid-cols-3 lg:grid-cols-4")}>
           {images.map((a) => (
             <figure key={a.id} className="group relative overflow-hidden rounded-xl border border-line bg-canvas">
               <button type="button" onClick={() => setPreview(a)} className="block aspect-[4/3] w-full" aria-label={`Preview ${a.file_name}`}>
@@ -319,9 +358,7 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
                     </span>
                   </div>
                 </div>
-                <a href={`${base}/${a.id}?download=1`} className="tap rounded-md p-1.5 text-ink-subtle hover:bg-canvas hover:text-ink" aria-label="Download" title="Download">
-                  <IconDownload size={16} />
-                </a>
+                <DownloadButton url={`${base}/${a.id}`} name={a.file_name} size={a.size_bytes} iconOnly plain className="tap h-8 min-w-8 px-1.5 text-ink-subtle hover:bg-canvas hover:text-ink" />
                 {canRemove(a) && (
                   <button type="button" onClick={() => remove(a)} className="tap rounded-md p-1.5 text-ink-subtle hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${a.file_name}`}>
                     <IconTrash size={16} />
@@ -360,5 +397,33 @@ export function TaskAttachments({ task, cacheKey }: { task: TaskDetail; cacheKey
         <AttachmentViewer items={[...images, ...files]} startId={preview.id} base={base} onClose={() => setPreview(null)} />
       )}
     </Card>
+  );
+}
+
+/** The meeting page's files card: what was shared for this meeting (also shown as a slide in its presentation). */
+export function MeetingFilesCard({ meetingId }: { meetingId: string }) {
+  const key = `/api/meetings/${meetingId}/attachments`;
+  const { data } = useCachedFetch<{ attachments: TaskAttachment[]; enabled: boolean }>(key);
+  const items = data?.attachments ?? [];
+  return (
+    <AttachmentsCard
+      base={key}
+      items={items}
+      max={LIMITS.attachmentsPerMeeting}
+      cacheKey={key}
+      compact
+      title="Files"
+      onLanded={(mine) =>
+        mutateWhere(key, (d, k) => {
+          if (k !== key) return undefined;
+          const cur = d as { attachments?: TaskAttachment[]; enabled?: boolean } | undefined;
+          const ids = new Set(mine.map((a) => a.id));
+          return { enabled: cur?.enabled ?? true, attachments: [...(cur?.attachments ?? []).filter((a) => !ids.has(a.id)), ...mine] };
+        })
+      }
+      limitText={`A meeting can hold up to ${LIMITS.attachmentsPerMeeting} files`}
+      emptyHint="Slides, specs, designs, screenshots for this meeting — shown in its presentation too"
+      disabledText={data && !data.enabled ? "File storage isn't set up on this server yet." : undefined}
+    />
   );
 }

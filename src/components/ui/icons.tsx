@@ -128,6 +128,23 @@ export const IconKeyboard = (p: IconProps) => (
     <path d="M6.5 10h.01M10.25 10h.01M14 10h.01M17.75 10h.01M6.5 14h.01M17.75 14h.01M9.5 14h5" />
   </Svg>
 );
+export const IconZoomIn = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.6-3.6M11 8v6M8 11h6" />
+  </Svg>
+);
+export const IconZoomOut = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.6-3.6M8 11h6" />
+  </Svg>
+);
+export const IconMinimize = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+  </Svg>
+);
 export const IconSun = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="4" />
