@@ -198,7 +198,7 @@ function Pages({ doc, sizes }: { doc: Doc; sizes: { w: number; h: number }[] }) 
       <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center pb-[env(safe-area-inset-bottom)]">
         <div className="pointer-events-auto flex items-center gap-0.5 rounded-xl bg-black/75 p-1 text-white shadow-lg ring-1 ring-white/10 backdrop-blur">
           <span className="px-2 text-[12px] tabular-nums text-white/70">
-            {page} / {sizes.length}
+            Page {page} / {sizes.length}
           </span>
           <span className="mx-0.5 h-5 w-px bg-white/15" />
           <button type="button" className={btn} onClick={() => zoomAround(zoomRef.current / 1.25, centre().x, centre().y)} disabled={zoom <= MIN} aria-label="Zoom out">
