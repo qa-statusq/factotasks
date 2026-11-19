@@ -75,6 +75,7 @@ function initialFrom(task: TaskDetail): TaskFormValues {
     title: task.title,
     description: task.description ?? "",
     targets: (task.targets ?? []).map((t) => ({ app_id: t.app.id, platform: t.platform })),
+    general_app_ids: (task.general_apps ?? []).map((a) => a.id),
     type: task.type,
     priority: task.priority,
     assignee_ids: task.assignees.map((a) => a.id),
@@ -195,7 +196,7 @@ function TaskScreen({ task, cacheKey }: { task: TaskDetail; cacheKey: string }) 
         </div>
         <h1 className={cn("break-words text-[20px] font-bold leading-tight tracking-[-0.02em] text-ink sm:text-[24px]", task.status === "cancelled" && "text-ink-muted line-through")}>{task.title}</h1>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px] text-ink-muted">
-          <TargetChips targets={task.targets} />
+          <TargetChips targets={task.targets} general={task.general_apps} />
           <SeriesChip series={task.series} />
           <ReleaseProgress progress={task.release_progress} />
           <TypeBadge type={task.type} />
@@ -357,6 +358,22 @@ function Details({ task }: { task: TaskDetail }) {
 
   return (
     <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6 lg:self-start">
+      {(task.targets?.length ?? 0) === 0 && (task.general_apps?.length ?? 0) > 0 && (
+        <section className="rounded-xl border border-line bg-surface px-4 py-3">
+          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-subtle">General task · about</div>
+          <ul className="flex flex-col gap-1.5">
+            {task.general_apps!.map((a) => (
+              <li key={a.id} className="flex items-center gap-2 text-[12.5px]">
+                <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-5 w-5 rounded-[5px] text-[8px]" />
+                <Link href={`/apps/${a.id}`} className="min-w-0 flex-1 break-words font-medium leading-tight text-ink hover:underline">
+                  {a.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11.5px] text-ink-subtle">Not released per platform — it is done when its status says so.</p>
+        </section>
+      )}
       {(task.targets?.length ?? 0) > 0 && (
         <section className="rounded-xl border border-line bg-surface px-4 py-3">
           <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-subtle">

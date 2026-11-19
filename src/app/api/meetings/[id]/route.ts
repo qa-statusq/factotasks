@@ -109,10 +109,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   // Its files and recordings leave storage for good first (their rows go with the meeting).
   const sb = getSupabase();
   const [files, recs] = await Promise.all([
-    sb.from("meeting_attachments").select("drive_file_id").eq("meeting_id", id),
+    sb.from("meeting_attachments").select("drive_file_id, preview_file_id").eq("meeting_id", id),
     sb.from("meeting_recordings").select("drive_file_id").eq("meeting_id", id),
   ]);
-  const driveIds = [...((files.data ?? []) as { drive_file_id: string | null }[]), ...((recs.data ?? []) as { drive_file_id: string | null }[])].map((f) => f.drive_file_id).filter((x): x is string => !!x);
+  const fileRows = (files.data ?? []) as { drive_file_id: string | null; preview_file_id: string | null }[];
+  const driveIds = [...fileRows.flatMap((f) => [f.drive_file_id, f.preview_file_id]), ...((recs.data ?? []) as { drive_file_id: string | null }[]).map((f) => f.drive_file_id)].filter((x): x is string => !!x);
   for (const f of driveIds) await deleteFile(f).catch(() => undefined);
   // One round trip: delete and read back the title for the activity log.
   const { data: gone, error } = await sb.from("meetings").delete().eq("id", id).select("title").maybeSingle();

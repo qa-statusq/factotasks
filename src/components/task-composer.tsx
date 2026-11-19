@@ -16,6 +16,8 @@ interface ComposerDefaults {
   platform?: Platform | null;
   /** Explicit targets win over app_id/platform. */
   targets?: TargetRef[];
+  /** A general task about these apps (no platforms). */
+  general_app_ids?: string[];
   assignee_ids?: string[];
   type?: TaskType;
   priority?: Priority;
@@ -84,6 +86,7 @@ function Composer({ defaults, onClose }: { defaults: ComposerDefaults; onClose: 
       mode="create"
       initial={{
         targets: initialTargets(defaults),
+        general_app_ids: defaults.general_app_ids ?? [],
         assignee_ids: defaults.assignee_ids ?? [],
         type: defaults.type,
         priority: defaults.priority,

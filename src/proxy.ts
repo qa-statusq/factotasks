@@ -165,11 +165,12 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   // Skip ONLY paths that can actually BE static files: Next internals
-  // (/_next/*), the /brand/* asset folder, and ROOT-level files with a known
+  // (/_next/*), the /brand/* asset folder, the PDF.js runtime (/pdfjs/*: worker, fonts,
+  // decoders — public library files), and ROOT-level files with a known
   // static extension ([^/]+ = no slash, so /robots.txt and /icon.png match but
   // nested paths never do). Dynamic routes must always pass through here
   // regardless of how their URL ends.
   matcher: [
-    "/((?!_next|brand/|[^/]+\\.(?:png|jpg|jpeg|gif|svg|ico|webp|avif|txt|xml|json|webmanifest|js|css|map|woff2?|ttf|html)$).*)",
+    "/((?!_next|brand/|pdfjs/|[^/]+\\.(?:png|jpg|jpeg|gif|svg|ico|webp|avif|txt|xml|json|webmanifest|js|css|map|woff2?|ttf|html)$).*)",
   ],
 };

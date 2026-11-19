@@ -69,6 +69,7 @@ const TITLE_FOR: Record<string, string> = {
   "release.rejected": "Release sent back",
   "release.released": "Released",
   "release.store_ahead": "New version on the store",
+  "meeting.schedule": "Repeating meeting not created",
 };
 
 /** Every admin's id (for "needs your approval" fan-out). */

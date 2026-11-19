@@ -30,6 +30,8 @@ import { useDocumentTitle } from "@/lib/use-document-title";
 import { buildAgenda, notesByTask, nameLabels, packPeople, ownerText, type AgendaGroup } from "@/lib/meeting-agenda";
 import { postJson, deleteJson } from "@/lib/http";
 import { When } from "@/components/ui/live-time";
+import { DateInput, istLocalToIso, isoToIstLocal } from "@/components/ui/date-input";
+import { istDate } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { LIMITS, taskRef } from "@/lib/domain";
 import { useOnChange } from "@/lib/use-on-change";
@@ -273,6 +275,7 @@ function MeetingScreen({ pack, cacheKey }: { pack: DeckPack; cacheKey: string })
       {editing && (
         <EditMeetingSheet
           title={m.title}
+          heldAt={m.held_at}
           autoClose={row?.auto_close ?? null}
           seriesName={pack.series?.name ?? null}
           seriesAutoClose={seriesClose}
@@ -401,11 +404,23 @@ function ReleaseRow({ release: r }: { release: MeetingPack["releases"][number] }
 }
 
 /** Title and closing rule of one meeting. The closing rule follows the series unless set here. */
-function EditMeetingSheet({ title, autoClose, seriesName, seriesAutoClose, busy, onClose, onSave }: { title: string; autoClose: boolean | null; seriesName: string | null; seriesAutoClose: boolean; busy: boolean; onClose: () => void; onSave: (body: Record<string, unknown>) => Promise<void> }) {
+function EditMeetingSheet({ title, heldAt, autoClose, seriesName, seriesAutoClose, busy, onClose, onSave }: { title: string; heldAt: string; autoClose: boolean | null; seriesName: string | null; seriesAutoClose: boolean; busy: boolean; onClose: () => void; onSave: (body: Record<string, unknown>) => Promise<void> }) {
   const [name, setName] = useState(title);
+  // When it is held, as the India wall clock the date picker shows (YYYY-MM-DDTHH:MM).
+  const startWhen = isoToIstLocal(heldAt);
+  const [when, setWhen] = useState(startWhen);
+  // A title that is the automatic "<series> · <date>" follows the new date, unless typed over.
+  const autoTitle = (iso: string) => `${seriesName || "Weekly sync"} · ${istDate(iso)}`;
+  const followsDate = title === autoTitle(heldAt);
+  const changeWhen = (v: string) => {
+    setWhen(v);
+    if (v && followsDate && name === title) setName(autoTitle(istLocalToIso(v)));
+    else if (v && followsDate && name === autoTitle(istLocalToIso(when))) setName(autoTitle(istLocalToIso(v)));
+  };
   const [rule, setRule] = useState<"series" | "auto" | "manual">(autoClose == null ? "series" : autoClose ? "auto" : "manual");
   const next = rule === "series" ? null : rule === "auto";
-  const dirty = name.trim() !== title || next !== autoClose;
+  const timeChanged = !!when && when !== startWhen;
+  const dirty = name.trim() !== title || next !== autoClose || timeChanged;
   const options: { id: "series" | "auto" | "manual"; label: string; hint: string }[] = [
     { id: "series", label: `Follow the series`, hint: `${seriesName ? `${seriesName} closes its meetings ` : "The series closes meetings "}${seriesAutoClose ? "by themselves at the end of their day" : "only when an admin closes them"}.` },
     { id: "auto", label: "Close by itself at the end of its day", hint: "The night after the meeting day it closes on its own, so the next meeting starts clean." },
@@ -420,7 +435,7 @@ function EditMeetingSheet({ title, autoClose, seriesName, seriesAutoClose, busy,
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => void onSave({ ...(name.trim() !== title ? { title: name.trim() } : {}), ...(next !== autoClose ? { auto_close: next } : {}) })} disabled={busy || !dirty || !name.trim()}>
+          <Button onClick={() => void onSave({ ...(name.trim() !== title ? { title: name.trim() } : {}), ...(timeChanged ? { held_at: istLocalToIso(when) } : {}), ...(next !== autoClose ? { auto_close: next } : {}) })} disabled={busy || !dirty || !name.trim() || !when}>
             {busy ? <Spinner /> : <IconCheck size={14} />} Save
           </Button>
         </div>
@@ -431,6 +446,11 @@ function EditMeetingSheet({ title, autoClose, seriesName, seriesAutoClose, busy,
           <span className="text-sm font-medium text-ink">Title</span>
           <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
         </label>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-ink">Date &amp; time</span>
+          <DateInput value={when} onChange={changeWhen} withTime clearable={false} />
+          <span className="text-xs text-ink-subtle">India time. The agenda covers the work since the previous meeting of the series up to this one, so it follows the new time.</span>
+        </div>
         <fieldset className="flex flex-col gap-1.5">
           <legend className="text-sm font-medium text-ink">Closing</legend>
           <p className="mb-1 text-xs text-ink-subtle">How this meeting ends. Closing locks the minutes; open tasks carry into the next meeting either way.</p>
@@ -497,7 +517,7 @@ function AgendaRow({ task: t, notes, labels, cacheKey, readOnly, onNote, meeting
           <ClampedText text={desc} lines={2} className="mt-1 text-[12.5px] leading-relaxed text-ink-muted" />
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-ink-subtle">
             <span>{ownerText(t.assignees, labels) || "unassigned"}</span>
-            {(t.targets?.length ?? 0) > 1 ? <TargetChips targets={t.targets} compact /> : <PlatformBadge platform={t.platform} label={false} />}
+            {(t.targets?.length ?? 0) > 1 || (t.general_apps?.length ?? 0) > 1 ? <TargetChips targets={t.targets} general={t.general_apps} compact /> : (t.general_apps?.length ?? 0) === 1 ? <span className="font-medium text-ink-subtle" title="General task — not released per platform">General</span> : <PlatformBadge platform={t.platform} label={false} />}
             <ReleaseProgress progress={t.release_progress} />
             <DueChip task={t} />
             {t.requested_status && <span className="text-amber-700">awaiting approval</span>}

@@ -48,6 +48,8 @@ export function buildAgenda(pack: MeetingPack, opts: { dedupe?: boolean } = {}):
   const appsOf = (t: TaskCard): AppLike[] => {
     const apps = new Map<string, AppLike>();
     for (const x of t.targets ?? []) apps.set(x.app.id, x.app);
+    // A general task about apps sits with them too (one app: its slide; several: "Across apps").
+    for (const a of t.general_apps ?? []) apps.set(a.id, a);
     if (!apps.size && t.app) apps.set(t.app.id, t.app);
     return [...apps.values()];
   };

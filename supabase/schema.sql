@@ -278,6 +278,18 @@ create table if not exists task_targets (
 );
 create index if not exists task_targets_app_idx     on task_targets (app_id, platform);
 create index if not exists task_targets_release_idx on task_targets (release_id) where release_id is not null;
+
+-- (036) A GENERAL task can still be about apps: "Update the privacy policy" for InOut and
+-- factoTime. Those apps are listed here — no platform, no version, never released — and,
+-- like targets, they put the task on those apps (tasks.app_ids): their members see it,
+-- their meetings carry it, it shows on their slide (one app) or "Across apps" (several).
+-- A task has targets (an app task) OR general apps, never both (the API keeps it so).
+create table if not exists task_general_apps (
+  task_id uuid not null references tasks(id) on delete cascade,
+  app_id  uuid not null references apps(id) on delete cascade,
+  primary key (task_id, app_id)
+);
+create index if not exists task_general_apps_app_idx on task_general_apps (app_id);
 create index if not exists tasks_title_trgm    on tasks using gin (title gin_trgm_ops);
 drop trigger if exists tasks_touch on tasks;
 create trigger tasks_touch before update on tasks for each row execute function touch_updated_at();
@@ -300,7 +312,8 @@ language plpgsql
 set search_path = public
 as $$
 begin
-  update tasks t set app_ids = coalesce((select array_agg(distinct x.app_id order by x.app_id) from task_targets x where x.task_id = t.id), '{}'::uuid[])
+  -- (036) The apps a task is on: where it ships (targets) and the apps a general task is about.
+  update tasks t set app_ids = coalesce((select array_agg(distinct x.app_id order by x.app_id) from (select app_id from task_targets where task_id = t.id union select app_id from task_general_apps where task_id = t.id) x), '{}'::uuid[])
   where t.id in (select task_id from changed_rows);
   return null;
 end;
@@ -312,6 +325,10 @@ drop trigger if exists task_targets_arrays_del on task_targets;
 create trigger task_targets_arrays_ins after insert on task_targets referencing new table as changed_rows for each statement execute function task_sync_app_ids_stmt();
 create trigger task_targets_arrays_upd after update on task_targets referencing new table as changed_rows for each statement execute function task_sync_app_ids_stmt();
 create trigger task_targets_arrays_del after delete on task_targets referencing old table as changed_rows for each statement execute function task_sync_app_ids_stmt();
+drop trigger if exists task_general_apps_arrays_ins on task_general_apps;
+drop trigger if exists task_general_apps_arrays_del on task_general_apps;
+create trigger task_general_apps_arrays_ins after insert on task_general_apps referencing new table as changed_rows for each statement execute function task_sync_app_ids_stmt();
+create trigger task_general_apps_arrays_del after delete on task_general_apps referencing old table as changed_rows for each statement execute function task_sync_app_ids_stmt();
 
 create or replace function task_sync_assignee_ids_stmt()
 returns trigger
@@ -333,8 +350,8 @@ create trigger task_assignees_arrays_upd after update on task_assignees referenc
 create trigger task_assignees_arrays_del after delete on task_assignees referencing old table as changed_rows for each statement execute function task_sync_assignee_ids_stmt();
 
 -- Backfill once (idempotent).
-update tasks t set app_ids = coalesce((select array_agg(distinct x.app_id order by x.app_id) from task_targets x where x.task_id = t.id), '{}'::uuid[])
-where t.app_ids is distinct from coalesce((select array_agg(distinct x.app_id order by x.app_id) from task_targets x where x.task_id = t.id), '{}'::uuid[]);
+update tasks t set app_ids = coalesce((select array_agg(distinct x.app_id order by x.app_id) from (select app_id from task_targets where task_id = t.id union select app_id from task_general_apps where task_id = t.id) x), '{}'::uuid[])
+where t.app_ids is distinct from coalesce((select array_agg(distinct x.app_id order by x.app_id) from (select app_id from task_targets where task_id = t.id union select app_id from task_general_apps where task_id = t.id) x), '{}'::uuid[]);
 update tasks t set assignee_ids = coalesce((select array_agg(distinct x.user_id order by x.user_id) from task_assignees x where x.task_id = t.id), '{}'::uuid[])
 where t.assignee_ids is distinct from coalesce((select array_agg(distinct x.user_id order by x.user_id) from task_assignees x where x.task_id = t.id), '{}'::uuid[]);
 
@@ -375,6 +392,8 @@ create table if not exists task_attachments (
   created_at   timestamptz not null default now()
 );
 create index if not exists task_attachments_task_idx on task_attachments (task_id, created_at);
+-- (036) An office document's PDF preview, made once on first view and kept beside it.
+alter table task_attachments add column if not exists preview_file_id text;
 
 -- ---------------------------------------------------------------------
 -- WEEKLY MEETINGS (MOM)
@@ -393,6 +412,12 @@ create table if not exists meeting_series (
 );
 alter table meeting_series add column if not exists app_order uuid[] not null default '{}';
 alter table meeting_series add column if not exists auto_close boolean not null default true; -- (021) meetings close by themselves after their day
+-- (036) Repeats: a weekly meeting the panel creates by itself the day before.
+-- recur_weekday 1 = Monday … 7 = Sunday (null = not repeating), recur_time 'HH:MM'
+-- India time, recur_last = the latest meeting day it created (never twice).
+alter table meeting_series add column if not exists recur_weekday smallint check (recur_weekday between 1 and 7);
+alter table meeting_series add column if not exists recur_time text check (recur_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$');
+alter table meeting_series add column if not exists recur_last date;
 create unique index if not exists meeting_series_name_idx on meeting_series (lower(name));
 drop trigger if exists meeting_series_touch on meeting_series;
 create trigger meeting_series_touch before update on meeting_series for each row execute function touch_updated_at();
@@ -495,6 +520,7 @@ alter table meeting_attachments add column if not exists note text;
 alter table meeting_attachments add column if not exists group_id uuid;
 update meeting_attachments set group_id = id where group_id is null;
 create index if not exists meeting_attachments_group_idx on meeting_attachments (meeting_id, group_id);
+alter table meeting_attachments add column if not exists preview_file_id text; -- (036) see task_attachments
 drop trigger if exists meeting_attachments_rev on meeting_attachments;
 create trigger meeting_attachments_rev after insert or update or delete on meeting_attachments for each statement execute function bump_rev();
 
@@ -605,6 +631,8 @@ drop trigger if exists task_assignees_rev on task_assignees;
 create trigger task_assignees_rev after insert or update or delete on task_assignees for each statement execute function bump_rev();
 drop trigger if exists task_comments_rev on task_comments;
 create trigger task_comments_rev after insert or update or delete on task_comments for each statement execute function bump_rev();
+drop trigger if exists task_general_apps_rev on task_general_apps;
+create trigger task_general_apps_rev after insert or update or delete on task_general_apps for each statement execute function bump_rev();
 drop trigger if exists task_attachments_rev on task_attachments;
 create trigger task_attachments_rev after insert or update or delete on task_attachments for each statement execute function bump_rev();
 drop trigger if exists releases_rev on releases;
@@ -762,6 +790,11 @@ as $$
     ), '[]'::jsonb),
     'release_progress', (select jsonb_build_object('released', count(*) filter (where tt.released_at is not null), 'total', count(*))
                            from task_targets tt where tt.task_id = t.id),
+    -- (036) A general task's apps (no platforms, never released).
+    'general_apps', coalesce((
+      select jsonb_agg(jsonb_build_object('id', a.id, 'name', a.name, 'color', a.color, 'icon_url', a.icon_url, 'icon_android_url', a.icon_android_url, 'icon_ios_url', a.icon_ios_url) order by a.sort_order, a.name)
+      from task_general_apps g join apps a on a.id = g.app_id where g.task_id = t.id
+    ), '[]'::jsonb),
     'assignees', coalesce((select jsonb_agg(user_brief(u) order by u.first_name, u.email)
                              from task_assignees ta join users u on u.id = ta.user_id
                             where ta.task_id = t.id), '[]'::jsonb),
@@ -1679,6 +1712,7 @@ alter table task_assignees   enable row level security;
 alter table task_status_log  enable row level security;
 alter table task_comments    enable row level security;
 alter table task_attachments enable row level security;
+alter table task_general_apps enable row level security;
 alter table meeting_attachments enable row level security;
 alter table meetings         enable row level security;
 alter table meeting_notes    enable row level security;

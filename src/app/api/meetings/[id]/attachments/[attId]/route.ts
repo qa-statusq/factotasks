@@ -7,12 +7,13 @@ import { isUuid } from "@/lib/validate";
 import { deleteFile } from "@/lib/google-drive";
 import { serveDriveFile } from "@/lib/serve-file";
 import { meetingForUser } from "@/lib/meeting-files";
+import { isOfficeDoc, officePreview } from "@/lib/doc-preview";
 
 export const dynamic = "force-dynamic";
 
 async function load(meetingId: string, attId: string) {
-  const { data, error } = await getSupabase().from("meeting_attachments").select("id, meeting_id, uploaded_by, file_name, mime, size_bytes, drive_file_id").eq("id", attId).eq("meeting_id", meetingId).maybeSingle();
-  return { att: data as { id: string; uploaded_by: string | null; file_name: string; mime: string; size_bytes: number; drive_file_id: string } | null, error };
+  const { data, error } = await getSupabase().from("meeting_attachments").select("id, meeting_id, uploaded_by, file_name, mime, size_bytes, drive_file_id, preview_file_id").eq("id", attId).eq("meeting_id", meetingId).maybeSingle();
+  return { att: data as { id: string; uploaded_by: string | null; file_name: string; mime: string; size_bytes: number; drive_file_id: string; preview_file_id: string | null } | null, error };
 }
 
 /** The file, by byte range in pieces of at most 16 MiB (lib/serve-file). `?download=1` saves it with its name. */
@@ -25,6 +26,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (error) return serverError(error);
   if (!att || !m) return fail("File not found", 404);
   const sp = new URL(req.url).searchParams;
+  // `?preview=1` on a Word / Excel / PowerPoint file: its PDF (made by Google once, then kept).
+  if (sp.get("preview") && isOfficeDoc(att.mime)) {
+    try {
+      const pv = await officePreview("meeting_attachments", att);
+      return await serveDriveFile(req.headers.get("range"), { fileId: pv.id, size: pv.size, mime: "application/pdf", name: `${att.file_name.replace(/\.[^.]+$/, "")}.pdf`, cacheControl: "private, max-age=604800, immutable", extra: { "x-content-type-options": "nosniff" } });
+    } catch (e) {
+      return storageFail(e, "Couldn't make a preview of this document — download it instead");
+    }
+  }
   try {
     return await serveDriveFile(req.headers.get("range"), {
       fileId: att.drive_file_id,
@@ -53,6 +63,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (att.uploaded_by !== u.uid && u.role !== "admin") return fail("You can only remove files you added", 403);
   try {
     await deleteFile(att.drive_file_id);
+    if (att.preview_file_id) await deleteFile(att.preview_file_id).catch(() => undefined);
   } catch (e) {
     return storageFail(e, "Couldn't remove the file");
   }

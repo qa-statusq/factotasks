@@ -25,11 +25,22 @@ export function shapeMeeting(r: Record<string, unknown>): Meeting {
   };
 }
 
-export const SERIES_SELECT = "id, name, color, app_ids, app_order, auto_close, created_at";
+export const SERIES_SELECT = "id, name, color, app_ids, app_order, auto_close, recur_weekday, recur_time, created_at";
 export const SERIES_NAME_MAX = 60;
 
 export function shapeSeries(r: Record<string, unknown>): MeetingSeries {
-  return { id: r.id as string, name: r.name as string, color: r.color as string, app_ids: (r.app_ids as string[] | null) ?? [], app_order: (r.app_order as string[] | null) ?? [], auto_close: (r.auto_close as boolean | null) ?? true, created_at: r.created_at as string };
+  return { id: r.id as string, name: r.name as string, color: r.color as string, app_ids: (r.app_ids as string[] | null) ?? [], app_order: (r.app_order as string[] | null) ?? [], auto_close: (r.auto_close as boolean | null) ?? true, recur_weekday: (r.recur_weekday as number | null) ?? null, recur_time: (r.recur_time as string | null) ?? null, created_at: r.created_at as string };
+}
+
+/** (036) The weekly schedule in a create / edit body: both set, or both cleared. */
+export function parseRecur(b: Record<string, unknown>): { recur_weekday: number | null; recur_time: string | null } | { error: string } | null {
+  if (!("recur_weekday" in b) && !("recur_time" in b)) return null;
+  if (b.recur_weekday == null || b.recur_weekday === "") return { recur_weekday: null, recur_time: null };
+  const d = Number(b.recur_weekday);
+  if (!Number.isInteger(d) || d < 1 || d > 7) return { error: "Pick a day of the week" };
+  const t = typeof b.recur_time === "string" ? b.recur_time.trim() : "";
+  if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(t)) return { error: "Pick the meeting time" };
+  return { recur_weekday: d, recur_time: t };
 }
 
 /** "Weekly sync · 21 Oct 2026" — the default title for a new meeting. */

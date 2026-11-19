@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { safeEqual } from "@/lib/password";
 import { runStoreCheck } from "@/lib/store-check";
+import { createScheduledMeetings } from "@/lib/meeting-schedule";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,6 +12,7 @@ export const maxDuration = 60;
  * Bearer <CRON_SECRET>` (see DEPLOY.md). A version that isn't released yet but
  * is already live on Google Play / the App Store is marked released, dated when
  * the store published it. With no version pending, no store is contacted.
+ * It also creates a repeating meeting the day before it is held (lib/meeting-schedule).
  * `?dry=1` reports what it would do and changes nothing.
  */
 export async function GET(req: NextRequest) {
@@ -26,8 +28,13 @@ export async function GET(req: NextRequest) {
     if (lease === false) return NextResponse.json({ ok: true, skipped: "another run is in progress" });
   }
   try {
+    // Repeating meetings: the one due tomorrow is created on the first run of its eve (cheap when none is due).
+    const meetings = dryRun ? null : await createScheduledMeetings().catch((e) => {
+      console.error("[cron] scheduled meetings:", e);
+      return null;
+    });
     const result = await runStoreCheck({ dryRun });
-    return NextResponse.json({ ok: true, dryRun, ...result });
+    return NextResponse.json({ ok: true, dryRun, ...result, meetings_created: meetings?.created.length ?? 0 });
   } catch (e) {
     console.error("[cron] store check:", e);
     return NextResponse.json({ error: "Store check failed" }, { status: 500 });

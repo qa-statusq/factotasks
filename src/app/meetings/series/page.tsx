@@ -20,7 +20,10 @@ import { postJson, deleteJson } from "@/lib/http";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { SHARED_ORDER_ID } from "@/lib/meeting-agenda";
 import { cn } from "@/lib/cn";
-import { IconPresentation, IconPlus, IconTrash, IconBack, IconUsers, IconApps, IconCheck } from "@/components/ui/icons";
+import { IconPresentation, IconPlus, IconTrash, IconBack, IconUsers, IconApps, IconCheck, IconCalendar } from "@/components/ui/icons";
+import { Dropdown } from "@/components/ui/dropdown";
+import { fmtYmd } from "@/lib/time";
+import { WEEKDAYS, addDays, nextOccurrence } from "@/lib/recur";
 import type { AppOverview, MeetingSeries, UserBrief } from "@/lib/types";
 
 type Scope = { app_ids: string[] };
@@ -136,6 +139,9 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
   const [order, setOrder] = useState<string[]>(series?.app_order ?? []);
   const [members, setMembers] = useState<string[]>(series?.member_ids ?? []);
   const [autoClose, setAutoClose] = useState<boolean>(series?.auto_close ?? true);
+  // (036) Repeats weekly: created the day before. Off = null weekday.
+  const [recurDay, setRecurDay] = useState<number | null>(series?.recur_weekday ?? null);
+  const [recurTime, setRecurTime] = useState<string>(series?.recur_time ?? "11:00");
   const [busy, setBusy] = useState(false);
 
   const inScope = apps.filter((a) => a.status !== "archived" && (scope.app_ids.length === 0 || scope.app_ids.includes(a.id)));
@@ -157,12 +163,18 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
     scope.app_ids.join() !== series.app_ids.join() ||
     order.join() !== (series.app_order ?? []).join() ||
     [...members].sort().join() !== [...(series.member_ids ?? [])].sort().join() ||
-    autoClose !== (series.auto_close ?? true);
+    autoClose !== (series.auto_close ?? true) ||
+    recurDay !== (series.recur_weekday ?? null) ||
+    (recurDay !== null && recurTime !== (series.recur_time ?? ""));
 
   async function save() {
     if (busy || !name.trim()) return;
     setBusy(true);
-    const body = { name: name.trim(), app_ids: scope.app_ids, app_order: order, member_ids: picked.map((u) => u.id), auto_close: autoClose };
+    if (recurDay !== null && !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(recurTime)) {
+      toast("Pick the meeting time", "error");
+      return;
+    }
+    const body = { name: name.trim(), app_ids: scope.app_ids, app_order: order, member_ids: picked.map((u) => u.id), auto_close: autoClose, recur_weekday: recurDay, recur_time: recurDay === null ? null : recurTime };
     const r = series ? await postJson<{ series?: { id: string }; error?: string }>(`/api/meeting-series/${series.id}`, body, "PATCH") : await postJson<{ series?: { id: string }; error?: string }>("/api/meeting-series", body);
     setBusy(false);
     if (r.ok) {
@@ -229,6 +241,23 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
         <Switch checked={autoClose} onChange={setAutoClose} label="Close meetings automatically at the end of their day" description="Applies to every meeting of this series unless a meeting is set otherwise on its own page." />
       </Section>
 
+      <Section icon={<IconCalendar size={15} />} title="Repeats" hint="A weekly meeting the panel creates for you, the day before it is held — with its agenda ready.">
+        <Switch checked={recurDay !== null} onChange={(on) => setRecurDay(on ? (recurDay ?? 4) : null)} label="Create this meeting every week" description="The previous meeting closes at the end of its day (see Closing); if it is still open, admins are told instead." />
+        {recurDay !== null && (
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-[12.5px] font-medium text-ink">Every</span>
+              <Dropdown value={String(recurDay)} onChange={(v) => setRecurDay(Number(v))} options={WEEKDAYS.map((d, i) => ({ value: String(i + 1), label: d }))} className="w-40" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[12.5px] font-medium text-ink">At (India time)</span>
+              <Input type="time" value={recurTime} onChange={(e) => setRecurTime(e.target.value)} step={300} className="w-32" required />
+            </label>
+          </div>
+        )}
+        {recurDay !== null && /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(recurTime) && <RecurNext weekday={recurDay} time={recurTime} />}
+      </Section>
+
       <div className="flex flex-wrap items-center gap-2">
         {series && canDelete && (
           <Button variant="secondary" onClick={remove} className="text-red-700 hover:bg-red-50">
@@ -242,5 +271,17 @@ function SeriesForm({ series, apps, users, canDelete, onSaved, onDeleted }: { se
         </Button>
       </div>
     </div>
+  );
+}
+
+/** "Next: Thursday 26 Nov, 11:00 — created on Wednesday 25 Nov." */
+function RecurNext({ weekday, time }: { weekday: number; time: string }) {
+  const day = nextOccurrence(weekday, time);
+  const eve = addDays(day, -1);
+  const fmt = (ymd: string) => fmtYmd(ymd, { weekday: true, year: false });
+  return (
+    <p className="mt-2.5 text-[12.5px] text-ink-muted">
+      Next meeting <b className="font-semibold text-ink">{fmt(day)}, {time}</b> — created on {fmt(eve)}.
+    </p>
   );
 }

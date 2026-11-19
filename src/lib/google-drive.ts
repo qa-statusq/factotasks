@@ -239,6 +239,34 @@ export async function findByAppProperty(key: string, value: string): Promise<{ i
   return f ? { id: f.id, name: f.name, size: Number(f.size ?? 0), mimeType: f.mimeType } : null;
 }
 
+/** A file's size in bytes (for answering ranges of a file the panel did not record). */
+export async function fileSize(fileId: string): Promise<number> {
+  const r = await fetch(`${DRIVE}/files/${encodeURIComponent(fileId)}?supportsAllDrives=true&fields=size`, { headers: await authHeaders() });
+  if (!r.ok) throw await driveErr(r, "Reading the file");
+  return Number(((await r.json()) as { size?: string }).size ?? 0);
+}
+
+/**
+ * A Word / Excel / PowerPoint file as a PDF, made by Google itself: copy it as a
+ * Google document (the conversion), export that as PDF, store the PDF, and delete
+ * the converted copy for good. Returns the stored PDF. Google exports at most
+ * 10 MB of PDF; a bigger document fails here and is offered as a download instead.
+ */
+export async function convertToPdf(fileId: string, googleType: string, name: string, parentId: string): Promise<{ id: string; size: number }> {
+  const c = await fetch(`${DRIVE}/files/${encodeURIComponent(fileId)}/copy?supportsAllDrives=true&fields=id`, { method: "POST", headers: await authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ name: `${name} (converting)`, mimeType: googleType, parents: [parentId] }) });
+  if (!c.ok) throw await driveErr(c, "Converting the document");
+  const copyId = ((await c.json()) as { id: string }).id;
+  try {
+    const e = await fetch(`${DRIVE}/files/${encodeURIComponent(copyId)}/export?mimeType=application/pdf`, { headers: await authHeaders() });
+    if (!e.ok) throw await driveErr(e, "Making the preview");
+    const pdf = new Uint8Array(await e.arrayBuffer());
+    const id = await uploadBytes(`${name}.pdf`, "application/pdf", pdf, parentId);
+    return { id, size: pdf.length };
+  } finally {
+    await deleteFile(copyId).catch(() => undefined);
+  }
+}
+
 /** Give one e-mail address read access; Google e-mails the invitation (with the message). Returns the permission id. */
 export async function shareFile(fileId: string, email: string, message: string | null): Promise<string> {
   const q = new URLSearchParams({ supportsAllDrives: "true", sendNotificationEmail: "true", fields: "id" });

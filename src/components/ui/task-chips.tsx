@@ -185,7 +185,25 @@ export function LabelChip({ label, className, onRemove }: { label: string; class
  * `compact` drops the names when the task spans more than two apps (the
  * tooltip still carries them). A task without targets is a general task.
  */
-export function TargetChips({ targets, max = Infinity, compact, className }: { targets?: TaskTarget[]; max?: number; compact?: boolean; className?: string }) {
+export function TargetChips({ targets, general, max = Infinity, compact, className }: { targets?: TaskTarget[]; general?: AppLite[]; max?: number; compact?: boolean; className?: string }) {
+  // A general task about apps: one pill per app, no platforms (nothing is released), marked General.
+  if (!targets?.length && general?.length) {
+    const shown = general.slice(0, max);
+    return (
+      <span className={cn("inline-flex flex-wrap items-center gap-1", className)}>
+        <span className={cn("inline-flex items-center gap-1 rounded-md bg-canvas px-1.5 py-[1px] text-[11px] font-semibold text-ink-subtle ring-1 ring-inset ring-line/80")} title="General task — about these apps, not released per platform">
+          <GeneralTile className="h-3.5 w-3.5 rounded-[3px] text-[6px]" /> General
+        </span>
+        {shown.map((a) => (
+          <span key={a.id} className={cn("inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-md bg-canvas py-[1px] pl-[3px] pr-1.5 text-[11.5px] font-medium text-ink-muted ring-1 ring-inset ring-line/80", compact && "text-[11px]")} title={`${a.name} · general task`}>
+            <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} androidIconUrl={a.icon_android_url} iosIconUrl={a.icon_ios_url} className="h-4 w-4 rounded-[4px] text-[7px]" />
+            <span className="max-w-[9rem] truncate">{a.name}</span>
+          </span>
+        ))}
+        {general.length > shown.length && <span className="text-[11px] text-ink-subtle">+{general.length - shown.length}</span>}
+      </span>
+    );
+  }
   if (!targets?.length) return <AppChip app={null} size="xs" className={className} />;
   const byApp = new Map<string, { app: AppLite; items: TaskTarget[] }>();
   for (const t of targets) {

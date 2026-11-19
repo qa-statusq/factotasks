@@ -35,6 +35,8 @@ export function prettyYmd(k: string, opts: { weekday?: boolean; year?: boolean }
 }
 /** Now in IST as YYYY-MM-DDTHH:MM (datetime-local value). */
 export const istNowLocal = () => new Date(Date.now() + IST_MS).toISOString().slice(0, 16);
+/** ISO instant → its India wall clock as YYYY-MM-DDTHH:MM (datetime-local value). */
+export const isoToIstLocal = (iso: string) => (iso && !Number.isNaN(Date.parse(iso)) ? new Date(Date.parse(iso) + IST_MS).toISOString().slice(0, 16) : "");
 /** datetime-local (IST wall clock) → ISO instant. */
 export const istLocalToIso = (v: string) => (v ? new Date(Date.parse(`${v}:00Z`) - IST_MS).toISOString() : "");
 

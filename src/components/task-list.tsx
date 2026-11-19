@@ -73,8 +73,8 @@ export const TaskRow = memo(function TaskRow({ task, showApp = true, showDescrip
           {showDescription && task.description?.trim() && <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap break-words pl-[22px] text-[12px] leading-snug text-ink-muted">{task.description.trim()}</p>}
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-[22px] text-[11.5px] text-ink-subtle">
             <span className="whitespace-nowrap tabular-nums">{taskRef(task.number)}</span>
-            {showApp || (task.targets?.length ?? 0) > 1 ? (
-              <TargetChips targets={task.targets} compact />
+            {showApp || (task.targets?.length ?? 0) > 1 || (task.general_apps?.length ?? 0) > 0 ? (
+              <TargetChips targets={task.targets} general={task.general_apps} compact />
             ) : (
               <PlatformBadge platform={task.platform} label={false} className="px-1 py-0 ring-0 bg-transparent" />
             )}

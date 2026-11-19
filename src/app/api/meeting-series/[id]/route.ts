@@ -4,7 +4,7 @@ import { getSupabase } from "@/lib/supabase";
 import { ok, fail, serverError, readJsonObject } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUniqueViolation, isUuid, parseUuidList } from "@/lib/validate";
-import { SERIES_NAME_MAX } from "@/lib/meetings";
+import { SERIES_NAME_MAX, parseRecur } from "@/lib/meetings";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.app_order = ids;
   }
   if ("auto_close" in b) patch.auto_close = b.auto_close === true;
+  const recur = parseRecur(b);
+  if (recur && "error" in recur) return fail(recur.error);
+  if (recur) Object.assign(patch, recur);
   let memberIds: string[] | null = null;
   if ("member_ids" in b) {
     memberIds = parseUuidList(b.member_ids, 100);

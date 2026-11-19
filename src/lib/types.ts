@@ -72,6 +72,8 @@ export interface TaskCard {
   series: { id: string; name: string; color: string } | null;
   /** Every app × platform the task must land on; empty = general task. */
   targets: TaskTarget[];
+  /** (036) A general task's apps — no platform, never released (empty for app tasks). */
+  general_apps?: AppLite[];
   release_progress: { released: number; total: number };
   assignees: UserBrief[];
   created_by: UserBrief | null;
@@ -272,6 +274,9 @@ export interface MeetingSeries {
   scoped?: boolean;
   /** (021) Meetings of the series close by themselves after their day. */
   auto_close?: boolean;
+  /** (036) Repeats weekly: 1 = Monday … 7 = Sunday (null = no), at this India time ('HH:MM'). Created the day before. */
+  recur_weekday?: number | null;
+  recur_time?: string | null;
   /** (021) Team members who take part (admins only see this). */
   member_ids?: string[];
   created_at?: string;

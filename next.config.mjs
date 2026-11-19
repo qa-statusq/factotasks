@@ -50,6 +50,11 @@ const nextConfig = {
         source: "/brand/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
       },
+      // The PDF.js runtime (scripts/copy-pdfjs.mjs): public library files, stable per version.
+      {
+        source: "/pdfjs/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+      },
       // The PWA manifest + offline page: short cache, revalidated in the background.
       {
         source: "/manifest.webmanifest",

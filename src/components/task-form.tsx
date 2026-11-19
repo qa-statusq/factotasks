@@ -30,8 +30,10 @@ export interface TargetRef {
 export interface TaskFormValues {
   title: string;
   description: string;
-  /** Empty = general task (no app). */
+  /** Empty = general task. */
   targets: TargetRef[];
+  /** A general task's apps — no platform, never released (empty for app tasks). */
+  general_app_ids: string[];
   type: TaskType;
   priority: Priority;
   assignee_ids: string[];
@@ -54,7 +56,7 @@ const PRIORITY_OPTIONS = PRIORITIES.map((p) => ({ value: p, label: PRIORITY_META
  * removable chips, a search box, "all Android / all iOS" shortcuts, and a
  * scrolling list with an Android and an iOS toggle per app.
  */
-function TargetPicker({ apps, value, onChange }: { apps: AppOverview[]; value: TargetRef[]; onChange: (v: TargetRef[]) => void }) {
+function TargetPicker({ apps, value, onChange, general, onGeneral }: { apps: AppOverview[]; value: TargetRef[]; onChange: (v: TargetRef[]) => void; general: string[]; onGeneral: (ids: string[]) => void }) {
   const [mode, setMode] = useState<"general" | "app">(value.length ? "app" : "general");
   const [q, setQ] = useState("");
   const has = (appId: string, platform: "android" | "ios") => value.some((t) => t.app_id === appId && t.platform === platform);
@@ -78,7 +80,9 @@ function TargetPicker({ apps, value, onChange }: { apps: AppOverview[]; value: T
         value={mode}
         onChange={(m) => {
           setMode(m);
+          // One or the other: switching clears what the other kind had picked.
           if (m === "general") onChange([]);
+          else onGeneral([]);
         }}
         options={[
           { value: "general", label: "General task" },
@@ -88,7 +92,7 @@ function TargetPicker({ apps, value, onChange }: { apps: AppOverview[]; value: T
         className="self-start"
       />
       {mode === "general" ? (
-        <p className="text-[12.5px] text-ink-subtle">Not tied to any app: process work, documentation, store accounts, anything team-wide. It reaches a meeting only when attached to a meeting series or added to one by hand.</p>
+        <GeneralAppsPicker apps={live} value={general} onChange={onGeneral} />
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface">
           {/* Summary line: fixed height, so ticking an app never pushes the list down */}
@@ -156,6 +160,68 @@ function TargetPicker({ apps, value, onChange }: { apps: AppOverview[]; value: T
 }
 
 /**
+ * A general task's apps: names only — no platforms, nothing to release. None = a
+ * team-wide task (the first slide of a meeting); one app = that app's tasks; several =
+ * "Across apps". Members of those apps see it and their meetings carry it.
+ */
+function GeneralAppsPicker({ apps, value, onChange }: { apps: AppOverview[]; value: string[]; onChange: (ids: string[]) => void }) {
+  const [q, setQ] = useState("");
+  const live = apps.filter((a) => a.status !== "archived" || value.includes(a.id));
+  const needle = q.trim().toLowerCase();
+  const list = needle ? live.filter((a) => a.name.toLowerCase().includes(needle)) : live;
+  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  const picked = live.filter((a) => value.includes(a.id));
+  return (
+    <div className="overflow-hidden rounded-xl border border-line bg-surface">
+      <div className="flex min-h-9 items-center gap-2 border-b border-line/70 bg-canvas/60 px-3 py-1.5 text-[12px]">
+        {picked.length === 0 ? (
+          <span className="text-ink-subtle">No app — a team-wide task. Or tick the apps it is about.</span>
+        ) : (
+          <>
+            <span className="font-medium text-ink">
+              About {picked.length} app{picked.length === 1 ? "" : "s"}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-ink-muted">{picked.map((a) => a.name).join(", ")}</span>
+            <button type="button" onClick={() => onChange([])} className="ml-auto shrink-0 text-[11.5px] font-medium text-ink-subtle hover:text-ink">
+              Clear
+            </button>
+          </>
+        )}
+      </div>
+      {live.length > 6 && (
+        <div className="px-3 pt-2">
+          <div className="relative">
+            <IconSearch size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-subtle" />
+            <input data-nested-input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search apps" className={cn(controlClass, "h-8 pl-7 text-[12.5px]")} aria-label="Search apps" />
+          </div>
+        </div>
+      )}
+      {live.length === 0 ? (
+        <p className="px-3 py-3 text-[13px] text-ink-subtle">No apps yet.</p>
+      ) : list.length === 0 ? (
+        <p className="px-3 py-3 text-[13px] text-ink-subtle">No app matches.</p>
+      ) : (
+        <ul className="mt-1 max-h-48 divide-y divide-line/60 overflow-y-auto border-t border-line/70">
+          {list.map((a) => {
+            const on = value.includes(a.id);
+            return (
+              <li key={a.id}>
+                <button type="button" onClick={() => toggle(a.id)} aria-pressed={on} className={cn("flex w-full items-center gap-2.5 px-3 py-1.5 text-left", on && "bg-emerald-50/40")}>
+                  <span className={cn("flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] ring-1 ring-inset", on ? "bg-emerald-600 text-white ring-emerald-600" : "bg-surface ring-line")}>{on && <IconCheck size={12} />}</span>
+                  <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-6 w-6 rounded-md text-[9px]" />
+                  <span className="truncate text-[13px] font-medium text-ink">{a.name}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="border-t border-line/70 px-3 py-2 text-[11.5px] text-ink-subtle">Not released per platform. No app: shown first in a meeting. One app: with that app&rsquo;s tasks. Several: under &ldquo;Across apps&rdquo;.</p>
+    </div>
+  );
+}
+
+/**
  * The one task form, used by the global composer (create) and the task page
  * (edit). `onSubmit` returns an error message to show, or null on success;
  * the caller owns navigation / cache invalidation / toasts.
@@ -187,6 +253,7 @@ export function TaskFormSheet({
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [rawTargets, setTargets] = useState<TargetRef[]>(initial?.targets ?? []);
+  const [generalApps, setGeneralApps] = useState<string[]>(initial?.general_app_ids ?? []);
   // Only platforms the app really has: a form opened with an app pre-selected (a meeting's or
   // an app page's "New task") may name both, and the server refuses a platform the app lacks.
   const targets = useMemo(
@@ -207,13 +274,22 @@ export function TaskFormSheet({
     },
     [allUsers, apps]
   );
-  const users = useMemo(() => eligibleFor(targets), [eligibleFor, targets]);
-  const targetAppNames = useMemo(() => apps.filter((a) => targets.some((t) => t.app_id === a.id)).map((a) => a.name), [apps, targets]);
+  // The apps the task is on: where it ships, or a general task's apps (same people rule for both).
+  const onApps = useMemo<TargetRef[]>(() => (targets.length ? targets : generalApps.map((app_id) => ({ app_id, platform: "android" as const }))), [targets, generalApps]);
+  const users = useMemo(() => eligibleFor(onApps), [eligibleFor, onApps]);
+  const targetAppNames = useMemo(() => apps.filter((a) => onApps.some((t) => t.app_id === a.id)).map((a) => a.name), [apps, onApps]);
+  const prune = (on: TargetRef[]) => {
+    if (!usersData || !appsData) return; // lists still loading: nothing to prune against yet
+    const ok = new Set(eligibleFor(on).map((u) => u.id));
+    setAssignees((a) => a.filter((id) => ok.has(id)));
+  };
   const changeTargets = (t: TargetRef[]) => {
     setTargets(t);
-    if (!usersData || !appsData) return; // lists still loading: nothing to prune against yet
-    const ok = new Set(eligibleFor(t).map((u) => u.id));
-    setAssignees((a) => a.filter((id) => ok.has(id)));
+    prune(t.length ? t : generalApps.map((app_id) => ({ app_id, platform: "android" as const })));
+  };
+  const changeGeneral = (ids: string[]) => {
+    setGeneralApps(ids);
+    prune(targets.length ? targets : ids.map((app_id) => ({ app_id, platform: "android" as const })));
   };
   const [due, setDue] = useState(initial?.due_date ?? "");
   const [labels, setLabels] = useState<string[]>(initial?.labels ?? []);
@@ -264,6 +340,7 @@ export function TaskFormSheet({
       title: t,
       description,
       targets,
+      general_app_ids: targets.length ? [] : generalApps,
       type,
       priority,
       assignee_ids: assignees,
@@ -278,6 +355,7 @@ export function TaskFormSheet({
   // carried over to the next task (closing then asks nothing unless something new was typed).
   const [base, setBase] = useState(() => ({
     targets: initial?.targets ?? [],
+    general: initial?.general_app_ids ?? [],
     type: initial?.type ?? "feature",
     priority: initial?.priority ?? "medium",
     assignees: initial?.assignee_ids ?? [],
@@ -292,6 +370,7 @@ export function TaskFormSheet({
     !same(title, base.title) ||
     !same(description, base.description) ||
     !same(rawTargets.map((t) => `${t.app_id}:${t.platform}`), base.targets.map((t) => `${t.app_id}:${t.platform}`)) ||
+    !same(generalApps, base.general) ||
     type !== base.type ||
     priority !== base.priority ||
     !same(assignees, base.assignees) ||
@@ -320,7 +399,7 @@ export function TaskFormSheet({
       setTitle("");
       setDescription("");
       setLabelDraft("");
-      setBase({ targets: rawTargets, type, priority, assignees, due, labels: values.labels, estimate, seriesId, title: "", description: "" });
+      setBase({ targets: rawTargets, general: generalApps, type, priority, assignees, due, labels: values.labels, estimate, seriesId, title: "", description: "" });
       setLabels(values.labels);
       setBusy(false);
       titleRef.current?.focus();
@@ -381,11 +460,11 @@ export function TaskFormSheet({
         </Field>
 
         <Field label="Where it ships">
-          {appsData ? <TargetPicker apps={apps} value={targets} onChange={changeTargets} /> : appsErr ? <LoadError title="Couldn't load the apps" onRetry={appsRetry} /> : <div className={cn(controlClass, "flex h-10 items-center gap-2 text-ink-subtle")}><Spinner className="h-3.5 w-3.5" /> Loading apps…</div>}
+          {appsData ? <TargetPicker apps={apps} value={targets} onChange={changeTargets} general={generalApps} onGeneral={changeGeneral} /> : appsErr ? <LoadError title="Couldn't load the apps" onRetry={appsRetry} /> : <div className={cn(controlClass, "flex h-10 items-center gap-2 text-ink-subtle")}><Spinner className="h-3.5 w-3.5" /> Loading apps…</div>}
         </Field>
 
         {showSeries && (
-          <Field label="Meeting" hint={targets.length ? "Optional: app tasks already reach the meetings that cover their app." : "A general task only reaches a meeting when attached here. It then shows on that series' meetings until it's done."}>
+          <Field label="Meeting" hint={onApps.length ? "Optional: tasks on apps already reach the meetings that cover their apps." : "A team-wide task reaches a meeting only when attached here. It then shows on that series' meetings until it's done."}>
             <Dropdown value={seriesId} onChange={setSeriesId} options={seriesOptions} />
           </Field>
         )}
@@ -400,8 +479,8 @@ export function TaskFormSheet({
         </div>
 
         <Field label="Assignees">
-          {!usersData && usersErr ? <LoadError title="Couldn't load teammates" onRetry={usersRetry} /> : <PeoplePicker users={users} value={assignees} onChange={setAssignees} max={LIMITS.assigneesPerTask} placeholder={!usersData ? "Loading teammates…" : targets.length && !users.length ? "No one is on this app yet" : "Assign teammates…"} />}
-          {targets.length > 0 && <p className="text-[11.5px] text-ink-subtle">Members of {targetAppNames.join(" / ") || "the chosen app"} only. An admin adds people from the app&rsquo;s Members tab.</p>}
+          {!usersData && usersErr ? <LoadError title="Couldn't load teammates" onRetry={usersRetry} /> : <PeoplePicker users={users} value={assignees} onChange={setAssignees} max={LIMITS.assigneesPerTask} placeholder={!usersData ? "Loading teammates…" : onApps.length && !users.length ? "No one is on this app yet" : "Assign teammates…"} />}
+          {onApps.length > 0 && <p className="text-[11.5px] text-ink-subtle">Members of {targetAppNames.join(" / ") || "the chosen app"} only. An admin adds people from the app&rsquo;s Members tab.</p>}
           {me && !assignees.includes(me.id) && users.some((u) => u.id === me.id) && (
             <button type="button" onClick={() => setAssignees((a) => [...a, me.id])} className="self-start text-xs font-medium text-brand-700 hover:text-brand-800">
               + Assign to me

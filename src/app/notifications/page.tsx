@@ -39,6 +39,7 @@ const KIND_META: Record<string, { icon: React.ReactNode; cls: string }> = {
   "release.requested": { icon: <IconRocket size={15} />, cls: "bg-amber-50 text-amber-700 ring-amber-200" },
   "release.rejected": { icon: <IconXCircle size={15} />, cls: "bg-red-50 text-red-600 ring-red-200" },
   "release.store_ahead": { icon: <IconRocket size={15} />, cls: "bg-sky-50 text-sky-700 ring-sky-200" },
+  "meeting.schedule": { icon: <IconPresentation size={15} />, cls: "bg-amber-50 text-amber-700 ring-amber-200" },
 };
 const FALLBACK_META = { icon: <IconBell size={15} />, cls: "bg-canvas text-ink-muted ring-line" };
 

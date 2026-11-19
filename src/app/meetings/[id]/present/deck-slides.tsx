@@ -490,7 +490,27 @@ function AppHint({ name, children }: { name: string; children: React.ReactNode }
   );
 }
 
+/** "General" on a task that is about apps but not released per platform. */
+function GeneralMark() {
+  return <span className="shrink-0 rounded-full bg-canvas px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] font-semibold text-ink-muted ring-1 ring-inset ring-line" title="General task — not released per platform">General</span>;
+}
+
 function DeckTargets({ t, currentApp }: { t: TaskCard; currentApp?: string }) {
+  const general = !(t.targets?.length) ? t.general_apps ?? [] : [];
+  if (general.length) {
+    if (currentApp) return <GeneralMark />;
+    return (
+      <span className="mt-[0.5cqw] flex flex-wrap items-center gap-x-[1.2cqw] gap-y-[0.5cqw]">
+        <GeneralMark />
+        {general.map((app) => (
+          <span key={app.id} className="inline-flex items-center gap-[0.5cqw]" title={`${app.name}: general task`}>
+            <AppTile name={app.name} color={app.color} iconUrl={app.icon_url} className="h-[2.1cqw] w-[2.1cqw] rounded-[0.5cqw] text-[0.85cqw]" />
+            <span className="text-[1.05cqw] font-medium text-ink-muted">{app.name}</span>
+          </span>
+        ))}
+      </span>
+    );
+  }
   const rows = targetMatrix(t).filter((x) => !currentApp || x.app.id === currentApp);
   if (!rows.length) return null;
   const marks = (items: TaskCard["targets"]) => (
@@ -559,6 +579,7 @@ function TaskTable({
             const desc = t.description?.trim();
             const due = dueInfo(t.due_date, t.status);
             const appRows = showApp ? targetMatrix(t) : [];
+            const generalApps = showApp && !appRows.length ? t.general_apps ?? [] : [];
             return (
               <tr key={t.id} className="border-b border-line/70 last:border-b-0">
                 <td className={cn(TD, "whitespace-nowrap tabular-nums text-ink-subtle")}>{taskRef(t.number)}</td>
@@ -576,6 +597,15 @@ function TaskTable({
                             ))}
                           </span>
                         ))
+                      ) : generalApps.length ? (
+                        <span className="inline-flex flex-wrap items-center gap-[0.4cqw]">
+                          {generalApps.map((a) => (
+                            <AppHint key={a.id} name={a.name}>
+                              <AppTile name={a.name} color={a.color} iconUrl={a.icon_url} className="h-[2.4cqw] w-[2.4cqw] rounded-[0.55cqw] text-[1cqw]" />
+                            </AppHint>
+                          ))}
+                          <span className="text-[1.05cqw] text-ink-subtle">General</span>
+                        </span>
                       ) : (
                         <span className="text-[1.15cqw] text-ink-subtle">General</span>
                       )}

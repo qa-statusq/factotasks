@@ -5,7 +5,7 @@ import { ok, fail, serverError, readJsonObject, memberJson } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { taskRef } from "@/lib/domain";
-import { taskPatch, validateTaskRefs, syncTargets, loadOwnership, loadCard, involved } from "@/lib/tasks";
+import { taskPatch, validateTaskRefs, syncTargets, loadOwnership, loadCard, involved, syncGeneralApps } from "@/lib/tasks";
 import { canSeeTask, visibleAppIds } from "@/lib/visibility";
 import { deleteFile } from "@/lib/google-drive";
 import { canApprove, canChangeStatus, canDeleteTask, canEditTask } from "@/lib/task-access";
@@ -138,12 +138,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (refErr) return fail(refErr);
 
   const sb = getSupabase();
-  const { targets, ...cols } = v.patch;
+  const { targets, general_app_ids, ...cols } = v.patch;
   if (Object.keys(cols).length) {
     const { error } = await sb.from("tasks").update(cols).eq("id", id);
     if (error) return serverError(error);
   }
+  // Becoming an app task clears its general apps; becoming a general task about apps clears its targets.
   if (targets) await syncTargets(id, targets);
+  if (general_app_ids) await syncGeneralApps(id, targets?.length ? [] : general_app_ids);
+  else if (targets?.length) await syncGeneralApps(id, []);
+  if (general_app_ids?.length && !targets) await syncTargets(id, []);
   let added: string[] = [];
   if (v.assignees) {
     const next = new Set(v.assignees);
@@ -177,9 +181,12 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!canDeleteTask(u, own)) return fail("Only an admin can delete a task once work has started", 403);
   // Attachments in storage go first (the DB rows cascade with the task).
   const sb = getSupabase();
-  const { data: files, error: fErr } = await sb.from("task_attachments").select("storage_path, drive_file_id").eq("task_id", id);
+  const { data: files, error: fErr } = await sb.from("task_attachments").select("storage_path, drive_file_id, preview_file_id").eq("task_id", id);
   if (fErr) return serverError(fErr);
-  for (const f of (files ?? []) as { drive_file_id?: string | null }[]) if (f.drive_file_id) await deleteFile(f.drive_file_id).catch(() => undefined);
+  for (const f of (files ?? []) as { drive_file_id?: string | null; preview_file_id?: string | null }[]) {
+    if (f.drive_file_id) await deleteFile(f.drive_file_id).catch(() => undefined);
+    if (f.preview_file_id) await deleteFile(f.preview_file_id).catch(() => undefined);
+  }
   if (files?.length) {
     const { error: sErr } = await sb.storage.from("attachments").remove(files.map((f) => f.storage_path as string));
     if (sErr) console.error("[tasks] attachment cleanup failed:", sErr);

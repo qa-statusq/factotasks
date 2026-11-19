@@ -7,6 +7,7 @@ import { isUuid } from "@/lib/validate";
 import { canSeeTask } from "@/lib/visibility";
 import { deleteFile } from "@/lib/google-drive";
 import { serveDriveFile } from "@/lib/serve-file";
+import { isOfficeDoc, officePreview } from "@/lib/doc-preview";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,8 @@ const SIGNED_URL_TTL = 600; // seconds
 
 async function load(taskId: string, attId: string) {
   const sb = getSupabase();
-  const { data, error } = await sb.from("task_attachments").select("id, task_id, uploaded_by, file_name, mime, size_bytes, storage_path, drive_file_id").eq("id", attId).eq("task_id", taskId).maybeSingle();
-  return { att: data as (Record<string, unknown> & { drive_file_id?: string | null }) | null, error };
+  const { data, error } = await sb.from("task_attachments").select("id, task_id, uploaded_by, file_name, mime, size_bytes, storage_path, drive_file_id, preview_file_id").eq("id", attId).eq("task_id", taskId).maybeSingle();
+  return { att: data as (Record<string, unknown> & { drive_file_id?: string | null; preview_file_id?: string | null }) | null, error };
 }
 
 
@@ -37,6 +38,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // SVG can carry scripts: it is always served as a download, never rendered
   // from the storage origin.
   const asDownload = !!sp.get("download") || att.mime === "image/svg+xml";
+  // `?preview=1` on a Word / Excel / PowerPoint file: its PDF (made by Google once, then kept).
+  if (sp.get("preview") && att.drive_file_id && isOfficeDoc(att.mime as string)) {
+    try {
+      const pv = await officePreview("task_attachments", { id: att.id as string, mime: att.mime as string, file_name: att.file_name as string, drive_file_id: att.drive_file_id, preview_file_id: att.preview_file_id });
+      return await serveDriveFile(req.headers.get("range"), { fileId: pv.id, size: pv.size, mime: "application/pdf", name: `${(att.file_name as string).replace(/\.[^.]+$/, "")}.pdf`, cacheControl: "private, max-age=604800, immutable", extra: { "x-content-type-options": "nosniff" } });
+    } catch (e) {
+      return storageFail(e, "Couldn't make a preview of this document — download it instead");
+    }
+  }
   if (att.drive_file_id) {
     // On the Shared Drive: streamed through the panel by byte range, in pieces of at most 16 MiB (lib/serve-file).
     if (sp.get("json")) return NextResponse.json({ url: `/api/tasks/${id}/attachments/${attId}${asDownload ? "?download=1" : ""}`, expires_in: null });
@@ -94,6 +104,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (att.drive_file_id) {
     try {
       await deleteFile(att.drive_file_id as string);
+      if (att.preview_file_id) await deleteFile(att.preview_file_id).catch(() => undefined);
     } catch (e) {
       return storageFail(e, "Couldn't remove the file");
     }

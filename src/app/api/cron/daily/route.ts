@@ -6,6 +6,7 @@ import { notifyUsers, purgeOldNotifications } from "@/lib/notify";
 import { istDayStartUtc, istToday } from "@/lib/ist";
 import { taskRef } from "@/lib/domain";
 import { closeOverdueMeetings } from "@/lib/series-access";
+import { createScheduledMeetings } from "@/lib/meeting-schedule";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -29,6 +30,11 @@ export async function GET(req: NextRequest) {
   if (lease === false) return NextResponse.json({ ok: true, skipped: "another run is in progress" });
   const today = istToday();
   await closeOverdueMeetings(true);
+  // Repeating meetings due tomorrow are created now (the store check, every 30 minutes, does it too).
+  const scheduled = await createScheduledMeetings().catch((e) => {
+    console.error("[cron] scheduled meetings:", e);
+    return { created: [], skipped: [] };
+  });
   const tomorrow = new Date(Date.parse(today) + 86_400_000).toISOString().slice(0, 10);
 
   // Open tasks due tomorrow or already overdue, with their assignees.
@@ -77,5 +83,5 @@ export async function GET(req: NextRequest) {
   const staleSessions = new Date(Date.now() - 30 * 86_400_000).toISOString();
   await Promise.all([purgeOldActivity(90), purgeOldNotifications(60), sb.from("user_sessions").delete().lt("created_at", staleSessions)]);
   await logActivity({ action: "cron.daily", actor: { email: "system" }, summary: `Daily job: ${reminders} due-date reminder(s), old activity/notifications trimmed` });
-  return NextResponse.json({ ok: true, reminders });
+  return NextResponse.json({ ok: true, reminders, meetings_created: scheduled.created.length });
 }

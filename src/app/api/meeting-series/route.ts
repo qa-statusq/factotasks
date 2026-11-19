@@ -5,7 +5,7 @@ import { fail, serverError, readJsonObject } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { cleanLine, isUniqueViolation, parseUuidList } from "@/lib/validate";
 import { pickDistinctColor, SERIES_COLORS } from "@/lib/colors";
-import { SERIES_SELECT, shapeSeries, SERIES_NAME_MAX, scopeForMember } from "@/lib/meetings";
+import { SERIES_SELECT, shapeSeries, SERIES_NAME_MAX, scopeForMember, parseRecur } from "@/lib/meetings";
 import { memberSeriesIds } from "@/lib/series-access";
 import type { MeetingSeries } from "@/lib/types";
 import { visibleAppIds } from "@/lib/visibility";
@@ -61,13 +61,15 @@ export async function POST(req: NextRequest) {
   const wanted = b.member_ids === undefined ? [] : parseUuidList(b.member_ids, 100);
   if (wanted === null) return fail("Invalid people list");
   const auto_close = b.auto_close === undefined ? true : b.auto_close === true;
+  const recur = parseRecur(b);
+  if (recur && "error" in recur) return fail(recur.error);
   const sb = getSupabase();
   // Only real teammates can take part; admins run every series already.
   const { data: people } = wanted.length ? await sb.from("users").select("id").in("id", wanted).eq("role", "member") : { data: [] as { id: string }[] };
   const member_ids = (people ?? []).map((x) => x.id as string);
   const { data: existing } = await sb.from("meeting_series").select("color");
   const color = pickDistinctColor((existing || []).map((r) => r.color as string), SERIES_COLORS);
-  const { data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, app_order, auto_close, created_by: u.uid }).select(SERIES_SELECT).single();
+  const { data, error } = await sb.from("meeting_series").insert({ name, color, app_ids, app_order, auto_close, ...(recur ?? {}), created_by: u.uid }).select(SERIES_SELECT).single();
   if (error) return isUniqueViolation(error) ? fail("A series with that name already exists", 409) : serverError(error);
   const s = shapeSeries(data as Record<string, unknown>);
   if (member_ids.length) {

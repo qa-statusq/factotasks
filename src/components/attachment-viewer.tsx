@@ -6,6 +6,7 @@ import { Spinner } from "@/components/ui/misc";
 import { DownloadButton } from "@/components/ui/download-button";
 import { useModalChrome } from "@/components/ui/use-modal-chrome";
 import { ZoomableImage, type ZoomHandle } from "@/components/zoom-image";
+import { PdfDocument } from "@/components/pdf-document";
 import { fmtBytes } from "@/lib/format";
 import { fetchPieces } from "@/lib/fetch-pieces";
 import { useLatest } from "@/lib/use-latest";
@@ -13,16 +14,19 @@ import { cn } from "@/lib/cn";
 import { IconFile, IconImage, IconMic, IconChevronLeft, IconChevronRight, IconX, IconZoomIn, IconZoomOut, IconMaximize, IconMinimize } from "@/components/ui/icons";
 import type { TaskAttachment } from "@/lib/types";
 
-export type Kind = "image" | "pdf" | "video" | "audio" | "text" | "other";
+export type Kind = "image" | "pdf" | "office" | "video" | "audio" | "text" | "other";
+/** Word, Excel and PowerPoint: shown as the PDF Google makes of them (see lib/doc-preview). */
+const OFFICE = /^application\/(vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|msword|vnd\.ms-excel|vnd\.ms-powerpoint)$/;
 export function kindOf(mime: string, name: string): Kind {
   if (/^image\/(png|jpeg|webp|gif)$/.test(mime)) return "image";
   if (mime === "application/pdf") return "pdf";
+  if (OFFICE.test(mime)) return "office";
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
   if (mime.startsWith("text/") || mime === "application/json" || /\.(md|log|txt|csv|json)$/i.test(name)) return "text";
   return "other";
 }
-const KIND_LABEL: Record<Kind, string> = { image: "image", pdf: "PDF", video: "video", audio: "audio", text: "text", other: "file" };
+const KIND_LABEL: Record<Kind, string> = { image: "image", pdf: "PDF", office: "document", video: "video", audio: "audio", text: "text", other: "file" };
 export function fileLabel(a: TaskAttachment): string {
   const ext = a.file_name.split(".").pop()?.toUpperCase();
   if (/apk|aab|ipa/i.test(ext ?? "")) return `${ext} build`;
@@ -256,6 +260,7 @@ function FileView({ a, src, zoomRef, onZoom, onSwipe }: { a: TaskAttachment; src
     <>
       {kind === "image" && <ImageView src={src} a={a} zoomRef={zoomRef} onZoom={onZoom} onSwipe={onSwipe} />}
       {kind === "pdf" && <PdfView src={src} a={a} />}
+      {kind === "office" && <PdfView src={`${src}?preview=1`} a={a} preparing />}
       {kind === "video" && <VideoView src={src} a={a} />}
       {kind === "audio" && (
         <div className="flex h-full flex-col items-center justify-center gap-5 px-6">
@@ -287,12 +292,13 @@ function FileView({ a, src, zoomRef, onZoom, onSwipe }: { a: TaskAttachment; src
  */
 function useFileBytes(src: string) {
   const [state, setState] = useState<{ url: string | null; loaded: number; total: number; error: boolean }>({ url: null, loaded: 0, total: 0, error: false });
+  const [blob, setBlob] = useState<Blob | null>(null);
   useEffect(() => {
     const ctrl = new AbortController();
     let url: string | null = null;
     let shown = 0;
     // `proxy=1`: an old file kept in the bucket comes through the panel too (same origin, by range).
-    fetchPieces(`${src}?proxy=1`, {
+    fetchPieces(`${src}${src.includes("?") ? "&" : "?"}proxy=1`, {
       signal: ctrl.signal,
       onProgress: (loaded, total) => {
         // Repaint the ring at most every ~3%.
@@ -302,9 +308,10 @@ function useFileBytes(src: string) {
         }
       },
     })
-      .then((blob) => {
-        url = URL.createObjectURL(blob);
-        setState({ url, loaded: blob.size, total: blob.size, error: false });
+      .then((b) => {
+        url = URL.createObjectURL(b);
+        setBlob(b);
+        setState({ url, loaded: b.size, total: b.size, error: false });
       })
       .catch(() => {
         if (!ctrl.signal.aborted) setState((st) => ({ ...st, error: true }));
@@ -314,7 +321,7 @@ function useFileBytes(src: string) {
       if (url) URL.revokeObjectURL(url);
     };
   }, [src]);
-  return state;
+  return { ...state, blob };
 }
 
 /** The loading card: a progress ring (or a spinning arc while the size is unknown), the name and the bytes so far. */
@@ -352,15 +359,17 @@ function ImageView({ src, a, zoomRef, onZoom, onSwipe }: { src: string; a: TaskA
   return f.error ? <LoadFailed src={src} a={a} /> : <FileLoading a={a} loaded={f.loaded} total={f.total} />;
 }
 
-function PdfView({ src, a }: { src: string; a: TaskAttachment }) {
+function PdfView({ src, a, preparing }: { src: string; a: TaskAttachment; preparing?: boolean }) {
   const f = useFileBytes(src);
-  // The browser's own PDF viewer: its zoom, pages and search work inside.
-  return f.url ? (
-    <div className="h-full px-0 pb-0 sm:px-4 sm:pb-4">
-      <iframe src={f.url} title={a.file_name} className="h-full w-full bg-white sm:rounded-lg" />
+  // Drawn by PDF.js (lib: components/pdf-document) — works the same on phones, where a browser can't show a PDF in a page.
+  if (f.blob) return <PdfDocument data={f.blob} name={a.file_name} />;
+  if (f.error) return <LoadFailed src={src.replace(/\?preview=1$/, "")} a={a} />;
+  // A document opened for the first time is converted first (a few seconds): say so instead of "Preparing 7 KB".
+  return preparing && !f.loaded ? (
+    <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-[12.5px] text-white/70" role="status">
+      <Spinner />
+      Preparing a preview of {a.file_name}…
     </div>
-  ) : f.error ? (
-    <LoadFailed src={src} a={a} />
   ) : (
     <FileLoading a={a} loaded={f.loaded} total={f.total} />
   );

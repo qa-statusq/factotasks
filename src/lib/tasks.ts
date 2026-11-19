@@ -20,6 +20,8 @@ interface TaskPatch {
   series_id?: string | null;
   /** Where it ships. "both" expands to the platforms the app has (validateTaskRefs). */
   targets?: { app_id: string; platform: "android" | "ios" | "both" }[];
+  /** (036) A general task's apps — no platform, never released. Exclusive with `targets`. */
+  general_app_ids?: string[];
 }
 
 /** Validate the editable task fields. `partial` = only keys present in `b`.
@@ -85,6 +87,13 @@ export function taskPatch(
     }
     patch.targets = out;
   }
+  if (has("general_app_ids") && b.general_app_ids !== undefined) {
+    const ids = parseUuidList(b.general_app_ids ?? [], 60);
+    if (!ids) return { error: "Invalid apps for the general task" };
+    patch.general_app_ids = [...new Set(ids.map((x) => x.toLowerCase()))];
+  }
+  // One or the other: an app task ships per platform (and is released); a general task is only about apps.
+  if (patch.targets?.length && patch.general_app_ids?.length) return { error: "A task either ships on apps (tracked by release) or is a general task — not both" };
   return { patch, assignees };
 }
 
@@ -94,24 +103,46 @@ export function taskPatch(
  * is the task being edited, so unchanged targets / assignees are checked too. */
 export async function validateTaskRefs(p: TaskPatch, assignees: string[] | undefined, current?: { id: string }, allowedApps?: string[] | null): Promise<string | null> {
   if (p.targets && allowedApps && p.targets.some((t) => !allowedApps.includes(t.app_id))) return "You can only put tasks on apps you belong to";
+  if (p.general_app_ids && allowedApps && p.general_app_ids.some((id) => !allowedApps.includes(id))) return "You can only put tasks on apps you belong to";
   const sb = getSupabase();
   if (p.series_id) {
     const { data: ms } = await sb.from("meeting_series").select("id").eq("id", p.series_id).maybeSingle();
     if (!ms) return "That meeting series no longer exists";
   }
-  if (!p.targets && !assignees) return null;
+  if (!p.targets && !p.general_app_ids && !assignees) return null;
+  if (p.general_app_ids && allowedApps && current) {
+    // A member edits only their part: a general task's apps they are not on stay linked.
+    const { data: keep } = await sb.from("task_general_apps").select("app_id").eq("task_id", current.id);
+    for (const g of keep || []) if (!allowedApps.includes(g.app_id as string) && !p.general_app_ids.includes(g.app_id as string)) p.general_app_ids.push(g.app_id as string);
+  }
+  if (p.general_app_ids?.length) {
+    const { data: ga } = await sb.from("apps").select("id, name, status").in("id", p.general_app_ids);
+    if ((ga || []).length !== p.general_app_ids.length) return "App not found";
+    const { data: linked } = current ? await sb.from("task_general_apps").select("app_id").eq("task_id", current.id) : { data: [] as { app_id: string }[] };
+    const was = new Set((linked || []).map((r) => r.app_id as string));
+    const archived = (ga || []).find((a) => a.status === "archived" && !was.has(a.id as string));
+    if (archived) return `${archived.name} is archived — un-archive it first`;
+  }
   if (p.targets && allowedApps && current) {
     // A member edits only their part of a multi-app task: targets on apps
     // they are not on stay exactly as they are.
     const { data: keep } = await sb.from("task_targets").select("app_id, platform").eq("task_id", current.id);
     for (const t of keep || []) if (!allowedApps.includes(t.app_id as string)) p.targets.push({ app_id: t.app_id as string, platform: t.platform as "android" | "ios" });
   }
-  // The app ids the task will target after this change.
+  // The apps the task will be on after this change: where it ships, or a general task's apps.
   let ids: string[];
-  if (p.targets) ids = [...new Set(p.targets.map((t) => t.app_id))];
-  else {
-    const { data } = await sb.from("task_targets").select("app_id").eq("task_id", current?.id ?? "");
-    ids = [...new Set((data || []).map((r) => r.app_id as string))];
+  if (p.targets?.length) ids = [...new Set(p.targets.map((t) => t.app_id))];
+  else if (p.general_app_ids?.length) ids = [...p.general_app_ids];
+  else if (p.targets || p.general_app_ids) {
+    // One side cleared: whatever the other side keeps (an edit that changes only one of them).
+    const [{ data: tg }, { data: ga }] = await Promise.all([
+      p.targets ? Promise.resolve({ data: [] as { app_id: string }[] }) : sb.from("task_targets").select("app_id").eq("task_id", current?.id ?? NIL),
+      p.general_app_ids ? Promise.resolve({ data: [] as { app_id: string }[] }) : sb.from("task_general_apps").select("app_id").eq("task_id", current?.id ?? NIL),
+    ]);
+    ids = [...new Set([...(tg || []), ...(ga || [])].map((r) => r.app_id as string))];
+  } else {
+    const [{ data: tg }, { data: ga }] = await Promise.all([sb.from("task_targets").select("app_id").eq("task_id", current?.id ?? NIL), sb.from("task_general_apps").select("app_id").eq("task_id", current?.id ?? NIL)]);
+    ids = [...new Set([...(tg || []), ...(ga || [])].map((r) => r.app_id as string))];
   }
   if (ids.length) {
     // Who will be assigned after this change.
@@ -156,6 +187,20 @@ export async function validateTaskRefs(p: TaskPatch, assignees: string[] | undef
   }
   p.targets = out;
   return null;
+}
+
+const NIL = "00000000-0000-0000-0000-000000000000";
+
+/** (036) Make a general task's apps exactly `ids` (the trigger keeps tasks.app_ids in step). */
+export async function syncGeneralApps(taskId: string, ids: string[], fresh = false): Promise<void> {
+  const sb = getSupabase();
+  const { data: cur } = fresh ? { data: [] as { app_id: string }[] } : await sb.from("task_general_apps").select("app_id").eq("task_id", taskId);
+  const have = new Set((cur || []).map((r) => r.app_id as string));
+  const want = new Set(ids);
+  const gone = [...have].filter((x) => !want.has(x));
+  const add = ids.filter((x) => !have.has(x));
+  if (gone.length) await sb.from("task_general_apps").delete().eq("task_id", taskId).in("app_id", gone);
+  if (add.length) await sb.from("task_general_apps").upsert(add.map((app_id) => ({ task_id: taskId, app_id })), { onConflict: "task_id,app_id", ignoreDuplicates: true });
 }
 
 /**

@@ -10,7 +10,7 @@ import { visibleAppIds, NONE_ID } from "@/lib/visibility";
 import { istToday } from "@/lib/ist";
 import { canAccessMeeting, canAccessSeries } from "@/lib/series-access";
 import { rateLimited } from "@/lib/rate-limit";
-import { taskPatch, validateTaskRefs, syncTargets, linkTargetToRelease, loadCard } from "@/lib/tasks";
+import { taskPatch, validateTaskRefs, syncTargets, linkTargetToRelease, loadCard, syncGeneralApps } from "@/lib/tasks";
 import { notifyUsers } from "@/lib/notify";
 import { displayName } from "@/lib/name";
 import type { TaskCard } from "@/lib/types";
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   const appParam = sp.get("app");
   const platformParam = oneOf(sp.get("platform"), ["android", "ios"] as const);
   const releaseParam = sp.get("release");
-  const needTargets = isUuid(appParam) || !!platformParam || isUuid(releaseParam);
+  const needTargets = !!platformParam || isUuid(releaseParam);
   const SELECT: string = ["task_card, updated_at, created_at, id, number", assigneeId ? "task_assignees!inner(user_id)" : "", needTargets ? "task_targets!inner(app_id, platform, release_id)" : ""].filter(Boolean).join(", ");
   let q = sb.from("tasks").select(SELECT);
 
@@ -84,8 +84,10 @@ export async function GET(req: NextRequest) {
   // ---- who / what ----
   if (assigneeId) q = q.eq("task_assignees.user_id", assigneeId);
   if (assignee === "none") q = q.eq("assignee_ids", "{}");
-  if (appParam === "general") q = q.is("app_id", null);
-  else if (isUuid(appParam)) q = q.eq("task_targets.app_id", appParam!.toLowerCase());
+  // An app: every task on it (where it ships, or a general task about it); with a platform or
+  // version filter only the ones that ship there. "general": tasks on no app at all.
+  if (appParam === "general") q = q.eq("app_ids", "{}");
+  else if (isUuid(appParam)) q = needTargets && (platformParam || isUuid(releaseParam)) ? q.eq("task_targets.app_id", appParam!.toLowerCase()) : q.contains("app_ids", [appParam!.toLowerCase()]);
   if (isUuid(releaseParam)) q = q.eq("task_targets.release_id", releaseParam!.toLowerCase());
   // Meeting-wise: everything on that meeting's agenda (pending, done in its
   // window, awaiting approval, pinned), resolved through the same pack the
@@ -193,7 +195,7 @@ export async function POST(req: NextRequest) {
   if (refErr) return fail(refErr);
 
   const sb = getSupabase();
-  const { targets, ...cols } = v.patch;
+  const { targets, general_app_ids, ...cols } = v.patch;
   const { data: row, error } = await sb
     .from("tasks")
     .insert({ ...cols, created_by: u.uid })
@@ -201,8 +203,9 @@ export async function POST(req: NextRequest) {
     .single();
   if (error) return serverError(error);
   const assignees = v.assignees ?? [];
-  const [, aRes] = await Promise.all([
+  const [, , aRes] = await Promise.all([
     syncTargets(row.id, targets ?? [], true),
+    general_app_ids?.length && !targets?.length ? syncGeneralApps(row.id, general_app_ids, true) : Promise.resolve(),
     assignees.length ? sb.from("task_assignees").upsert(assignees.map((id) => ({ task_id: row.id, user_id: id, assigned_by: u.uid })), { onConflict: "task_id,user_id", ignoreDuplicates: true }) : Promise.resolve({ error: null }),
   ]);
   if (aRes.error) return serverError(aRes.error);
