@@ -554,7 +554,7 @@ function TaskTable({
 }) {
   return (
     <div className={PANEL_SCROLL} data-deck-scroll>
-      <table className="w-full border-collapse">
+      <table className="w-full table-fixed border-collapse">
         <colgroup>
           <col style={{ width: "6%" }} />
           {showApp && <col style={{ width: "14%" }} />}
@@ -712,7 +712,7 @@ function ReleaseCards({ releases, labels }: { releases: Release[]; labels: Map<s
 function MinutesTable({ notes, labels }: { notes: MeetingNote[]; labels: Map<string, string> }) {
   return (
     <div className={PANEL_SCROLL} data-deck-scroll>
-      <table className="w-full border-collapse">
+      <table className="w-full table-fixed border-collapse">
         <colgroup>
           <col style={{ width: "13%" }} />
           <col style={{ width: "30%" }} />
@@ -823,7 +823,7 @@ function AttachmentsTable({ items, labels }: { items: DeckFileItem[]; labels: Ma
   const ctx = useContext(DeckTaskContext);
   return (
     <div className={PANEL_SCROLL} data-deck-scroll>
-      <table className="w-full border-collapse">
+      <table className="w-full table-fixed border-collapse">
         <colgroup>
           <col style={{ width: "5%" }} />
           <col />
@@ -848,7 +848,7 @@ function AttachmentsTable({ items, labels }: { items: DeckFileItem[]; labels: Ma
                 <td className={TD}>
                   <button type="button" onClick={() => ctx?.openFile?.(it.id)} className="deck-chrome block max-w-full text-left">
                     <span className="block break-words font-medium text-ink hover:underline">{it.title}</span>
-                    {it.note && <span className="mt-[0.2cqw] block truncate text-[0.95cqw] text-ink-subtle" data-nowrap>{names}</span>}
+                    {it.note && <span className="mt-[0.2cqw] line-clamp-2 block break-words text-[0.95cqw] text-ink-subtle" title={names}>{names}</span>}
                   </button>
                 </td>
                 <td className={cn(TD, "text-ink-muted")}>{by ? ownerText([by], labels) : "—"}</td>

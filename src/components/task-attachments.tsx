@@ -196,11 +196,12 @@ function useAttachmentUpload<T extends TaskAttachment>({ base, max, count, cache
   }
 
   const busy = uploading.some((u) => u.phase === "waiting" || u.phase === "sending" || u.phase === "saving");
-  return { uploading, upload, busy };
+  const dismiss = (i: number) => setUploading((cur) => cur.filter((_, j) => j !== i));
+  return { uploading, upload, busy, dismiss };
 }
 
-/** The progress rows under a files card while a batch goes up. */
-function UploadRows({ uploading }: { uploading: UploadRow[] }) {
+/** The progress rows under a files card while a batch goes up. A failure says why on its own line (it wraps inside the card) and can be dismissed. */
+function UploadRows({ uploading, onDismiss }: { uploading: UploadRow[]; onDismiss: (i: number) => void }) {
   if (!uploading.length) return null;
   return (
     <ul className="border-t border-line/80 px-4 py-2 sm:px-5">
@@ -213,8 +214,15 @@ function UploadRows({ uploading }: { uploading: UploadRow[] }) {
             ) : null}
             {u.phase === "done" ? <span className="text-emerald-600">✓</span> : u.phase === "error" ? <IconX size={12} /> : <Spinner className="h-3 w-3" />}
             <span className="min-w-0 flex-1 truncate">{u.name}</span>
-            <span className="shrink-0 tabular-nums">{u.phase === "waiting" ? "Waiting…" : u.phase === "sending" ? `${Math.round(u.progress * 100)}% · ${fmtBytes(u.size)}` : u.phase === "saving" ? "Saving…" : u.phase === "done" ? "Attached" : u.error}</span>
+            {u.phase === "error" ? (
+              <button type="button" onClick={() => onDismiss(i)} className="tap -mr-1 shrink-0 rounded p-0.5 text-red-600/70 hover:text-red-700" aria-label={`Dismiss ${u.name}`} title="Dismiss">
+                <IconX size={13} />
+              </button>
+            ) : (
+              <span className="shrink-0 whitespace-nowrap tabular-nums">{u.phase === "waiting" ? "Waiting…" : u.phase === "sending" ? `${Math.round(u.progress * 100)}% · ${fmtBytes(u.size)}` : u.phase === "saving" ? "Saving…" : "Attached"}</span>
+            )}
           </div>
+          {u.phase === "error" && u.error && <p className={cn("mt-0.5 break-words text-[11.5px] leading-snug text-red-600", u.thumb ? "pl-[52px]" : "pl-5")}>{u.error}</p>}
           {(u.phase === "sending" || u.phase === "saving") && (
             <div className="mt-1 h-1 overflow-hidden rounded-full bg-line/70">
               <div className={cn("h-full rounded-full bg-brand-600 transition-[width] duration-200", u.phase === "saving" && "animate-pulse")} style={{ width: `${Math.max(3, Math.round(u.progress * 100))}%` }} />
@@ -277,7 +285,7 @@ export function AttachmentsCard({ base, items, max, cacheKey, onLanded, limitTex
   const { confirm } = useDialog();
   const { me, isAdmin } = useSession();
   const inputRef = useRef<HTMLInputElement>(null);
-  const { uploading, upload } = useAttachmentUpload<TaskAttachment>({ base, max, count: items.length, cacheKey, onLanded, limitText });
+  const { uploading, upload, dismiss } = useAttachmentUpload<TaskAttachment>({ base, max, count: items.length, cacheKey, onLanded, limitText });
   const [dragging, setDragging] = useState(false);
   // The viewer walks the files in the order they are shown (pictures, then other files).
   const [preview, setPreview] = useState<TaskAttachment | null>(null);
@@ -412,7 +420,7 @@ export function AttachmentsCard({ base, items, max, cacheKey, onLanded, limitTex
         </ul>
       )}
 
-      <UploadRows uploading={uploading} />
+      <UploadRows uploading={uploading} onDismiss={dismiss} />
 
       {preview && (
         <AttachmentViewer items={[...images, ...files]} startId={preview.id} base={base} onClose={() => setPreview(null)} />
@@ -456,7 +464,7 @@ export function MeetingFilesCard({ meetingId }: { meetingId: string }) {
   const [dragging, setDragging] = useState(false);
   const [open, setOpen] = useState<MeetingItem | null>(null);
   const [gone, setGone] = useState<Set<string>>(new Set());
-  const { uploading, upload, busy } = useAttachmentUpload<MeetingFile>({
+  const { uploading, upload, busy, dismiss } = useAttachmentUpload<MeetingFile>({
     base: key,
     max: LIMITS.attachmentsPerMeeting,
     count: files.length,
@@ -598,7 +606,7 @@ export function MeetingFilesCard({ meetingId }: { meetingId: string }) {
         </ul>
       )}
 
-      <UploadRows uploading={uploading} />
+      <UploadRows uploading={uploading} onDismiss={dismiss} />
 
       {open && <AttachmentViewer items={open.files} base={key} onClose={() => setOpen(null)} />}
     </Card>

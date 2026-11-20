@@ -280,11 +280,11 @@ function ReleaseCard({ r, events, showApp, onOpen }: { r: Release; events: Relea
         </div>
         {/* Timeline — folded by default; the header line already says what matters. */}
         <div className="border-t border-line/70 px-4 py-3 md:border-t-0">
-          <button type="button" onClick={() => setShowTimeline((v) => !v)} aria-expanded={showTimeline} className="flex w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-subtle hover:text-ink sm:flex-nowrap">
+          <button type="button" onClick={() => setShowTimeline((v) => !v)} aria-expanded={showTimeline} className="flex w-full flex-wrap items-start gap-x-1.5 gap-y-0.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-subtle hover:text-ink sm:flex-nowrap">
             <IconChevronDown size={13} className={cn("transition-transform", showTimeline ? "rotate-180" : "")} />
             Timeline
             <span className="whitespace-nowrap font-normal normal-case tracking-normal">· {events.length || 1} {events.length === 1 || events.length === 0 ? "entry" : "entries"}</span>
-            {!showTimeline && lastEvent && <span className="w-full truncate pl-[19px] font-normal normal-case tracking-normal text-ink-subtle sm:ml-auto sm:w-auto sm:pl-0">last: {describe(lastEvent)}{SEP}<When iso={lastEvent.created_at} /></span>}
+            {!showTimeline && lastEvent && <span className="line-clamp-2 basis-full break-words pl-[19px] font-normal normal-case tracking-normal text-ink-subtle sm:min-w-0 sm:flex-1 sm:basis-auto sm:pl-0 sm:text-right">last: {describe(lastEvent)}{SEP}<When iso={lastEvent.created_at} /></span>}
           </button>
           {showTimeline && (
           <ol className="mt-2 flex flex-col gap-1.5">
