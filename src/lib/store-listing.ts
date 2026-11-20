@@ -42,7 +42,11 @@ export async function playListing(packageName: string): Promise<StoreListing | n
 
 export async function appStoreListing(bundleId: string): Promise<StoreListing | null> {
   if (!/^[a-zA-Z][\w.-]*$/.test(bundleId)) return null;
-  const json = await storeGet(`https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(bundleId)}&country=in`);
+  // Apple's lookup answers carry `Cache-Control: max-age=86400`, and its CDN keeps each URL for up
+  // to a day per edge: a version released this morning could read as yesterday's until tomorrow
+  // (OLD PF iOS 1.3.1, 20 Nov 2026 — live at 05:47 IST, still "submitted" at 10:11). A per-minute
+  // parameter makes every check ask Apple afresh.
+  const json = await storeGet(`https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(bundleId)}&country=in&_=${Math.floor(Date.now() / 60_000)}`);
   if (!json) return null;
   try {
     const r = (JSON.parse(json) as { results?: { version?: string; currentVersionReleaseDate?: string }[] }).results?.[0];

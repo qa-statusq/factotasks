@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
+    "fflate": "0.8.2",
     "jose": "^6.2.12",
     "next": "^16.4.6",
     "pdfjs-dist": "6.4.299",

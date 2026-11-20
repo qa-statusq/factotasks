@@ -8,29 +8,36 @@ import { useModalChrome } from "@/components/ui/use-modal-chrome";
 import { ZoomableImage, type ZoomHandle } from "@/components/zoom-image";
 import { PdfDocument } from "@/components/pdf-document";
 import { fmtBytes } from "@/lib/format";
-import { fetchPieces } from "@/lib/fetch-pieces";
+import { cachedFile, loadFile, preloadFile, releaseFile } from "@/lib/file-cache";
+import { parseCsv, parseXlsx, type Sheet } from "@/lib/spreadsheet";
+import { SheetView } from "@/components/sheet-view";
 import { useLatest } from "@/lib/use-latest";
 import { cn } from "@/lib/cn";
 import { IconFile, IconImage, IconMic, IconChevronLeft, IconChevronRight, IconX, IconZoomIn, IconZoomOut, IconMaximize, IconMinimize } from "@/components/ui/icons";
 import type { TaskAttachment } from "@/lib/types";
 
-export type Kind = "image" | "pdf" | "office" | "video" | "audio" | "text" | "other";
+export type Kind = "image" | "pdf" | "office" | "sheet" | "video" | "audio" | "text" | "other";
+/** Spreadsheets shown as a grid in the browser (lib/spreadsheet): Excel 2007+ and CSV / TSV. */
+const SHEET = /^(application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|text\/csv|text\/tab-separated-values)$/;
 /** Word, Excel and PowerPoint: shown as the PDF Google makes of them (see lib/doc-preview). */
 const OFFICE = /^application\/(vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|msword|vnd\.ms-excel|vnd\.ms-powerpoint)$/;
 export function kindOf(mime: string, name: string): Kind {
   if (/^image\/(png|jpeg|webp|gif)$/.test(mime)) return "image";
   if (mime === "application/pdf") return "pdf";
+  if (SHEET.test(mime) || (/\.(csv|tsv)$/i.test(name) && mime.startsWith("text/"))) return "sheet";
   if (OFFICE.test(mime)) return "office";
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
   if (mime.startsWith("text/") || mime === "application/json" || /\.(md|log|txt|csv|json)$/i.test(name)) return "text";
   return "other";
 }
-const KIND_LABEL: Record<Kind, string> = { image: "image", pdf: "PDF", office: "document", video: "video", audio: "audio", text: "text", other: "file" };
+const KIND_LABEL: Record<Kind, string> = { image: "image", pdf: "PDF", office: "document", sheet: "spreadsheet", video: "video", audio: "audio", text: "text", other: "file" };
 export function fileLabel(a: TaskAttachment): string {
   const ext = a.file_name.split(".").pop()?.toUpperCase();
   if (/apk|aab|ipa/i.test(ext ?? "")) return `${ext} build`;
-  if (/docx?|xlsx?|pptx?/i.test(ext ?? "")) return `${ext} document`;
+  if (/^(xlsx?|csv|tsv)$/i.test(ext ?? "")) return `${ext} spreadsheet`;
+  if (/^pptx?$/i.test(ext ?? "")) return `${ext} presentation`;
+  if (/^docx?$/i.test(ext ?? "")) return `${ext} document`;
   if (ext === "ZIP") return "archive";
   return KIND_LABEL[kindOf(a.mime, a.file_name)];
 }
@@ -76,15 +83,17 @@ export function AttachmentViewer({ items: maybeItems, startId, base, onClose, em
   };
   useModalChrome(close, rootRef);
 
-  // Next and previous pictures load in the background, so stepping to them is instant.
+  // The files either side come down in the background (into the same cache the viewer reads),
+  // so stepping to them is instant — pictures two ahead too; a document's preview one either side.
   useEffect(() => {
     if (!many) return;
-    for (const d of [1, -1]) {
+    for (const d of [1, -1, 2]) {
       const n = items[(idx + d + items.length) % items.length];
-      if (n && kindOf(n.mime, n.file_name) === "image") {
-        const img = new Image();
-        img.src = `${base}/${n.id}`;
-      }
+      if (!n || n.id === items[idx]?.id) continue;
+      const k = kindOf(n.mime, n.file_name);
+      if (d === 2 && k !== "image") continue;
+      if (k === "image" || k === "pdf" || k === "sheet") preloadFile(`${base}/${n.id}`, n.size_bytes);
+      else if (k === "office") preloadFile(`${base}/${n.id}?preview=1`, 0);
     }
   }, [idx, items, many, base]);
   const step = (d: number) => {
@@ -215,6 +224,8 @@ export function AttachmentViewer({ items: maybeItems, startId, base, onClose, em
         )}
       </div>
 
+      {many && <Filmstrip items={items} idx={Math.min(idx, items.length - 1)} base={base} onPick={(i) => { setIdx(i); setZoom({ scale: 1, atFit: true }); }} />}
+
       {/* Phones: previous / next and zoom at the thumb. */}
       {(many || kind === "image") && (
         <div className="flex shrink-0 items-center justify-center gap-2 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:hidden">
@@ -261,6 +272,7 @@ function FileView({ a, src, zoomRef, onZoom, onSwipe }: { a: TaskAttachment; src
       {kind === "image" && <ImageView src={src} a={a} zoomRef={zoomRef} onZoom={onZoom} onSwipe={onSwipe} />}
       {kind === "pdf" && <PdfView src={src} a={a} />}
       {kind === "office" && <PdfView src={`${src}?preview=1`} a={a} preparing />}
+      {kind === "sheet" && <SheetFile src={src} a={a} />}
       {kind === "video" && <VideoView src={src} a={a} />}
       {kind === "audio" && (
         <div className="flex h-full flex-col items-center justify-center gap-5 px-6">
@@ -287,41 +299,37 @@ function FileView({ a, src, zoomRef, onZoom, onSwipe }: { a: TaskAttachment; src
 
 /**
  * The file's bytes with live progress — a ring with the percentage while it
- * downloads, then the file. Comes down in pieces (see lib/fetch-pieces), so a
- * file of any size opens. Moving on or closing cancels the download.
+ * downloads, then the file. Read through the shared file cache (lib/file-cache):
+ * a file seen before (or preloaded as a neighbour) is there at once, the same
+ * object URL, nothing downloaded or decoded again. Leaving a big file early
+ * cancels its download.
  */
-function useFileBytes(src: string) {
-  const [state, setState] = useState<{ url: string | null; loaded: number; total: number; error: boolean }>({ url: null, loaded: 0, total: 0, error: false });
-  const [blob, setBlob] = useState<Blob | null>(null);
+function useFileBytes(src: string, size = 0) {
+  const [state, setState] = useState<{ url: string | null; blob: Blob | null; loaded: number; total: number; error: boolean }>(() => {
+    const hit = cachedFile(src);
+    return hit ? { url: hit.url, blob: hit.blob, loaded: hit.blob.size, total: hit.blob.size, error: false } : { url: null, blob: null, loaded: 0, total: 0, error: false };
+  });
   useEffect(() => {
-    const ctrl = new AbortController();
-    let url: string | null = null;
+    if (cachedFile(src)) return; // already on screen from the first render
+    let alive = true;
     let shown = 0;
-    // `proxy=1`: an old file kept in the bucket comes through the panel too (same origin, by range).
-    fetchPieces(`${src}${src.includes("?") ? "&" : "?"}proxy=1`, {
-      signal: ctrl.signal,
-      onProgress: (loaded, total) => {
-        // Repaint the ring at most every ~3%.
-        if (!total || loaded - shown > total / 33 || loaded < shown) {
-          shown = loaded;
-          setState((st) => ({ ...st, loaded, total }));
-        }
-      },
-    })
-      .then((b) => {
-        url = URL.createObjectURL(b);
-        setBlob(b);
-        setState({ url, loaded: b.size, total: b.size, error: false });
-      })
-      .catch(() => {
-        if (!ctrl.signal.aborted) setState((st) => ({ ...st, error: true }));
-      });
-    return () => {
-      ctrl.abort();
-      if (url) URL.revokeObjectURL(url);
+    const onProgress = (loaded: number, total: number) => {
+      // Repaint the ring at most every ~3%.
+      if (alive && (!total || loaded - shown > total / 33 || loaded < shown)) {
+        shown = loaded;
+        setState((st) => ({ ...st, loaded, total }));
+      }
     };
-  }, [src]);
-  return { ...state, blob };
+    loadFile(src, size, onProgress).then(
+      ({ blob, url }) => alive && setState({ url, blob, loaded: blob.size, total: blob.size, error: false }),
+      () => alive && setState((st) => ({ ...st, error: true }))
+    );
+    return () => {
+      alive = false;
+      releaseFile(src, onProgress);
+    };
+  }, [src, size]);
+  return state;
 }
 
 /** The loading card: a progress ring (or a spinning arc while the size is unknown), the name and the bytes so far. */
@@ -354,13 +362,14 @@ function LoadFailed({ src, a }: { src: string; a: TaskAttachment }) {
 }
 
 function ImageView({ src, a, zoomRef, onZoom, onSwipe }: { src: string; a: TaskAttachment; zoomRef: React.RefObject<ZoomHandle | null>; onZoom: (scale: number, atFit: boolean) => void; onSwipe?: (d: number) => void }) {
-  const f = useFileBytes(src);
+  const f = useFileBytes(src, a.size_bytes);
   if (f.url) return <ZoomableImage src={f.url} alt={a.file_name} handle={zoomRef} onZoom={onZoom} onSwipe={onSwipe} />;
   return f.error ? <LoadFailed src={src} a={a} /> : <FileLoading a={a} loaded={f.loaded} total={f.total} />;
 }
 
 function PdfView({ src, a, preparing }: { src: string; a: TaskAttachment; preparing?: boolean }) {
-  const f = useFileBytes(src);
+  // A document's preview size isn't known up front (0 = fetch in pieces until the end).
+  const f = useFileBytes(src, preparing ? 0 : a.size_bytes);
   // Drawn by PDF.js (lib: components/pdf-document) — works the same on phones, where a browser can't show a PDF in a page.
   if (f.blob) return <PdfDocument data={f.blob} name={a.file_name} />;
   if (f.error) return <LoadFailed src={src.replace(/\?preview=1$/, "")} a={a} />;
@@ -379,7 +388,7 @@ function TextView({ src, a }: { src: string; a: TaskAttachment }) {
   const [text, setText] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch(`${src}?proxy=1`, { credentials: "same-origin", headers: { Range: "bytes=0-1999999" } })
+    fetch(src, { credentials: "same-origin", headers: { Range: "bytes=0-1999999" } })
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
       .then((t) => {
         if (alive) setText(t.length > 200_000 || a.size_bytes > 2_000_000 ? `${t.slice(0, 200_000)}\n… (only the start is shown — download for the full file)` : t);
@@ -396,6 +405,105 @@ function TextView({ src, a }: { src: string; a: TaskAttachment }) {
   ) : (
     <div className="h-full overflow-auto px-3 pb-4 sm:px-6">
       <pre className="mx-auto max-w-5xl whitespace-pre-wrap break-words rounded-lg bg-white/[0.06] p-4 font-mono text-[12.5px] leading-relaxed text-white/90 ring-1 ring-white/10">{text}</pre>
+    </div>
+  );
+}
+
+/** Parsed spreadsheets by address, so going back to one shows it at once. */
+const parsedSheets = new Map<string, Sheet[]>();
+
+/** A spreadsheet (xlsx / csv) as a grid with sheet tabs; anything it can't read falls back to the document preview. */
+function SheetFile({ src, a }: { src: string; a: TaskAttachment }) {
+  const f = useFileBytes(src, a.size_bytes);
+  const [sheets, setSheets] = useState<Sheet[] | null>(() => parsedSheets.get(src) ?? null);
+  const [bad, setBad] = useState(false);
+  const blob = f.blob;
+  useEffect(() => {
+    if (!blob || parsedSheets.has(src)) return;
+    let alive = true;
+    (async () => {
+      try {
+        const csv = /csv|tab-separated/.test(a.mime) || /\.(csv|tsv)$/i.test(a.file_name);
+        const out = csv ? [parseCsv(await blob.text())] : parseXlsx(new Uint8Array(await blob.arrayBuffer()));
+        parsedSheets.set(src, out);
+        if (alive) setSheets(out);
+      } catch {
+        if (alive) setBad(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [blob, src, a.mime, a.file_name]);
+  if (sheets) return <SheetView sheets={sheets} />;
+  if (bad) return /csv|tab-separated/.test(a.mime) ? <TextView src={src} a={a} /> : <PdfView src={`${src}?preview=1`} a={a} preparing />;
+  if (f.error) return <LoadFailed src={src} a={a} />;
+  return f.blob ? (
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-[12.5px] text-white/70">
+      <Spinner />
+      Opening {a.file_name}
+    </div>
+  ) : (
+    <FileLoading a={a} loaded={f.loaded} total={f.total} />
+  );
+}
+
+/** Colour and label of a file kind, for the film strip's tiles. */
+function tileOf(a: TaskAttachment): { label: string; cls: string } {
+  const ext = (a.file_name.split(".").pop() || "").toUpperCase().slice(0, 4);
+  const k = kindOf(a.mime, a.file_name);
+  if (k === "pdf") return { label: "PDF", cls: "bg-[#c62f2f]" };
+  if (k === "sheet" || /^XLS/.test(ext)) return { label: ext || "XLS", cls: "bg-[#13774a]" };
+  if (/^DOC/.test(ext)) return { label: ext, cls: "bg-[#2b5cb8]" };
+  if (/^PPT/.test(ext)) return { label: ext, cls: "bg-[#c8552b]" };
+  if (k === "video") return { label: ext || "VIDEO", cls: "bg-[#6b3fb8]" };
+  if (k === "audio") return { label: ext || "AUDIO", cls: "bg-[#b8327a]" };
+  if (k === "text") return { label: ext || "TXT", cls: "bg-[#4b5563]" };
+  return { label: ext || "FILE", cls: "bg-[#3f3f3c]" };
+}
+
+/**
+ * Every file of the set as a row of thumbnails under the viewer: pictures as
+ * themselves (the same request as the card's thumbnail — already cached),
+ * other files as a coloured tile with their type. The current one is ringed
+ * and kept in view; a tap or click goes straight to that file.
+ */
+function Filmstrip({ items, idx, base, onPick }: { items: TaskAttachment[]; idx: number; base: string; onPick: (i: number) => void }) {
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = stripRef.current?.querySelector<HTMLElement>(`[data-strip-index="${idx}"]`);
+    el?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }, [idx]);
+  return (
+    <div className="flex shrink-0 justify-center px-2 pt-2 sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div ref={stripRef} role="tablist" aria-label="Files" className="no-scrollbar flex max-w-full gap-1.5 overflow-x-auto px-1 py-1 [scroll-snap-type:x_proximity]">
+        {items.map((it, i) => {
+          const on = i === idx;
+          const pic = kindOf(it.mime, it.file_name) === "image";
+          const t = tileOf(it);
+          return (
+            <button
+              key={it.id}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              aria-label={`${i + 1}: ${it.file_name}`}
+              title={`${i + 1} · ${it.file_name}`}
+              data-strip-index={i}
+              onClick={() => onPick(i)}
+              className={cn("relative h-11 w-11 shrink-0 overflow-hidden rounded-lg transition-[opacity,box-shadow] [scroll-snap-align:center] sm:h-14 sm:w-14", on ? "opacity-100 ring-2 ring-white ring-offset-2 ring-offset-[#0b0b0a]" : "opacity-55 ring-1 ring-white/15 hover:opacity-90")}
+            >
+              {pic ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`${base}/${it.id}`} alt="" loading="lazy" decoding="async" draggable={false} className="h-full w-full object-cover" />
+              ) : (
+                <span className={cn("flex h-full w-full items-center justify-center text-[10px] font-bold tracking-wide text-white", t.cls)}>{t.label}</span>
+              )}
+              <span className="absolute bottom-0 right-0 rounded-tl-md bg-black/65 px-1 text-[9.5px] font-semibold tabular-nums leading-[14px] text-white/90">{i + 1}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

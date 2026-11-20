@@ -422,9 +422,9 @@ function EditMeetingSheet({ title, heldAt, autoClose, seriesName, seriesAutoClos
   const timeChanged = !!when && when !== startWhen;
   const dirty = name.trim() !== title || next !== autoClose || timeChanged;
   const options: { id: "series" | "auto" | "manual"; label: string; hint: string }[] = [
-    { id: "series", label: `Follow the series`, hint: `${seriesName ? `${seriesName} closes its meetings ` : "The series closes meetings "}${seriesAutoClose ? "by themselves at the end of their day" : "only when an admin closes them"}.` },
-    { id: "auto", label: "Close by itself at the end of its day", hint: "The night after the meeting day it closes on its own, so the next meeting starts clean." },
-    { id: "manual", label: "Stay open until closed by hand", hint: "It stays live, whatever the day, until an admin presses Close meeting." },
+    { id: "series", label: `Follow the series — now: ${seriesAutoClose ? "closes by itself" : "stays open until closed"}`, hint: `Uses ${seriesName ? `the ${seriesName} setting` : "the series' setting"} (Meetings → Series → Closing). If that setting changes later, this meeting changes with it.` },
+    { id: "auto", label: "Always close by itself at the end of its day", hint: "This meeting closes on its own the night after its day — even if the series is later set to stay open." },
+    { id: "manual", label: "Always stay open until closed by hand", hint: "This meeting stays live, whatever the day, until an admin presses Close meeting — even if the series closes meetings by itself." },
   ];
   return (
     <Sheet
@@ -453,7 +453,7 @@ function EditMeetingSheet({ title, heldAt, autoClose, seriesName, seriesAutoClos
         </div>
         <fieldset className="flex flex-col gap-1.5">
           <legend className="text-sm font-medium text-ink">Closing</legend>
-          <p className="mb-1 text-xs text-ink-subtle">How this meeting ends. Closing locks the minutes; open tasks carry into the next meeting either way.</p>
+          <p className="mb-1 text-xs text-ink-subtle">How this meeting ends. Closing locks the minutes; open tasks carry into the next meeting either way. The last two options fix it for this meeting alone.</p>
           {options.map((o) => (
             <label key={o.id} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors", rule === o.id ? "border-ink/30 bg-canvas" : "border-line hover:bg-canvas/60")}>
               <input type="radio" name="closing" value={o.id} checked={rule === o.id} onChange={() => setRule(o.id)} className="mt-1 accent-ink" />

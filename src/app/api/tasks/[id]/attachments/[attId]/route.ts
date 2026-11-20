@@ -6,7 +6,7 @@ import { logActivity } from "@/lib/activity";
 import { isUuid } from "@/lib/validate";
 import { canSeeTask } from "@/lib/visibility";
 import { deleteFile } from "@/lib/google-drive";
-import { serveDriveFile } from "@/lib/serve-file";
+import { serveDriveFile, asciiName } from "@/lib/serve-file";
 import { isOfficeDoc, officePreview } from "@/lib/doc-preview";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +21,10 @@ async function load(taskId: string, attId: string) {
 
 
 /**
- * Download / preview. Default: 302 to a short-lived signed URL (works for
- * <a href>, <img src> and <video src> alike — the bucket is private, the URL
- * dies in 10 minutes). `?json=1` returns { url } instead for scripted use.
- * `?download=1` forces a Content-Disposition attachment with the real name.
+ * Download / preview: the bytes through the panel, by range, privately cacheable
+ * (a stored file never changes under its id). `?download=1` saves it with its real
+ * name; `?preview=1` (Word / Excel / PowerPoint) is its PDF; `?json=1` returns a URL
+ * for scripted use.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string; attId: string }> }) {
   const u = await requireAccessUser();
@@ -70,24 +70,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     .createSignedUrl(att.storage_path as string, SIGNED_URL_TTL, asDownload ? { download: att.file_name as string } : undefined);
   if (error || !data?.signedUrl) return serverError(error ?? new Error("no signed url"));
   if (sp.get("json")) return NextResponse.json({ url: data.signedUrl, expires_in: SIGNED_URL_TTL });
-  // `?proxy=1`: the bytes through the panel (same origin), for in-page previews of bucket files.
-  if (sp.get("proxy")) {
-    const up = await fetch(data.signedUrl, { headers: req.headers.get("range") ? { range: req.headers.get("range") as string } : {} });
-    const headers = new Headers();
-    headers.set("content-type", (att.mime as string) || up.headers.get("content-type") || "application/octet-stream");
-    for (const h of ["content-length", "content-range"]) {
-      const v = up.headers.get(h);
-      if (v) headers.set(h, v);
-    }
-    headers.set("cache-control", "private, max-age=600");
-    headers.set("x-content-type-options", "nosniff");
-    return new Response(up.body, { status: up.status, headers });
+  // Older files kept in the bucket (each under 15 MB) come through the panel too, by range — the
+  // same address as everything else, so a thumbnail, the viewer and a preload share one browser cache
+  // entry (and the page's CSP never has to reach the bucket).
+  const up = await fetch(data.signedUrl, { headers: req.headers.get("range") ? { range: req.headers.get("range") as string } : {} });
+  const headers = new Headers();
+  headers.set("content-type", (att.mime as string) || up.headers.get("content-type") || "application/octet-stream");
+  for (const h of ["content-length", "content-range", "accept-ranges"]) {
+    const v = up.headers.get(h);
+    if (v) headers.set(h, v);
   }
-  const res = NextResponse.redirect(data.signedUrl, 302);
-  // Let the browser reuse the redirect for the signed URL's lifetime so an
-  // image grid doesn't re-sign on every re-render.
-  res.headers.set("Cache-Control", `private, max-age=${SIGNED_URL_TTL - 30}`);
-  return res;
+  headers.set("cache-control", "private, max-age=604800, immutable");
+  headers.set("x-content-type-options", "nosniff");
+  const fname = att.file_name as string;
+  headers.set("content-disposition", `${asDownload ? "attachment" : "inline"}; filename="${asciiName(fname)}"; filename*=UTF-8''${encodeURIComponent(fname)}`);
+  return new Response(up.body, { status: up.status, headers });
 }
 
 /** Remove (uploader or admin). Storage first, then the row. */
